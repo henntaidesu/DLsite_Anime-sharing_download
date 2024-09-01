@@ -3,9 +3,11 @@ import sys
 from src.index import Index
 from src.module.create_folder import create_log_folder
 import multiprocessing
+from PyQt5.QtWidgets import QApplication
+from src.QTui.indexUI import MainWindow
 
 
-if __name__ == '__main__':
+def start_CLI():
     multiprocessing.freeze_support()
     flag = create_log_folder()
     if flag is True:
@@ -13,6 +15,17 @@ if __name__ == '__main__':
             Index().index()
     else:
         sys.exit()
+
+
+def start_UI():
+    app = QApplication(sys.argv)
+    window = MainWindow()
+    window.show()
+    app.exec_()
+
+start_UI()
+
+
 
 # worksTableuInWork_stateList
 # -1：已下载
@@ -27,7 +40,7 @@ if __name__ == '__main__':
 # 6：
 # 7：已经更新information表
 # 8：更新information表错误
-# 9：更新information表时作用处于待发布状态
+# 9：
 # 10：この作品は現在販売されていません、
 # 14：未从AS上获取到上传组织URL
 # 15：已获取AS上传组织URL

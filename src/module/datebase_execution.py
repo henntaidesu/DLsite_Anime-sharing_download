@@ -44,27 +44,6 @@ class DateBase:
                 self.print_log.write_log(sql, 'error')
                 return False
 
-    def insert_list(self, sql):
-        try:
-            cursor = self.db.cursor()
-            for i in sql:
-                cursor.execute(sql[i])
-                self.db.commit()
-                cursor.close()
-            self.db.close()
-            return True
-        except Exception as e:
-            err1(e)
-            if "timed out" in str(e):
-                self.print_log.write_log("连接数据库超时", 'error')
-            elif "index.PRIMARY" in str(e):
-                self.print_log.write_log("重复数据", 'warning')
-                return True
-            else:
-                err1(e)
-                self.print_log.write_log(sql, 'error')
-                return False
-
     def update_all(self, sql):
         try:
             cursor = self.db.cursor()

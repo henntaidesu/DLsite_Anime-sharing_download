@@ -90,7 +90,8 @@ def insert_down_url(down_url_set, Id, WorkId, URLState):
 
 def get_work_down_url(URL):
     try:
-        url = f"https://www.anime-sharing.com/threads/{URL}/"
+        url = f"https://www.anime-sharing.com/{URL}/"
+        print(url)
 
         response = requests.get(url)
         html_data = response.text
@@ -103,6 +104,7 @@ def get_work_down_url(URL):
         # L3 = tree.xpath('//span[contains(@class, "bbcode-box")]')
         List = [L1, L2]
         Flag = 0
+        href_list = []
         for i in List:
             span_elements = i
             Flag += 1
@@ -114,9 +116,24 @@ def get_work_down_url(URL):
                     span_text = span.text_content()
                     # 获取span元素内的所有a标签的href属性
                     a_elements = span.xpath(".//a")
-                    href_list = [a.get("href") for a in a_elements]  # 从第二个a标签开始
-                    # print("href内容:", href_list)
-                    return Flag, href_list
+                    for a in a_elements:
+                        url = a.get("href")
+                        try:
+                            if 'katfile' not in url:
+                                continue
+                            else:
+                                href_list.append(url)
+                        except TypeError:
+                            continue
+
+        print(type(href_list))
+
+        href_list = list(set(href_list))
+
+        if href_list == '':
+            return []
+        print(href_list)
+        return href_list
 
     except ExceptionGroup as e:
         err1(e)

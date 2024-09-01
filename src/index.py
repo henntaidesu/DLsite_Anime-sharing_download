@@ -31,7 +31,7 @@ class Index:
             print("7:测试Down URL if Ture")
             print("8:解压文件")
 
-            flag = '9'
+            flag = '4'
 
             if flag == '1':
                 rjnumber_generate()
@@ -47,7 +47,8 @@ class Index:
 
             elif flag == '4':
                 sql = (f"SELECT work_id, work_type FROM works WHERE  work_state in {'7', '14'} "
-                       f"and update_time < '{Time().tow_days_ago()} 00:00:00' LIMIT 5000")
+                       f"and update_time < '{Time().tow_days_ago()} 00:00:00' ")
+
                 self.process.multi_process_as_up_group(sql, get_as_work_upgroup_url)
 
             elif flag == '5':

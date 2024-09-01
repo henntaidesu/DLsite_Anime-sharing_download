@@ -77,23 +77,26 @@ def resolve_short_url(short_url):
 
 
 def katfile(url):
-    url = "https://" + url
-    # print(url)
-    response = requests.get(url)
-    html_data = response.text
-    tree = html.fromstring(html_data)
+    try:
+        # url = "https://" + url
+        # print(url)
+        response = requests.get(url)
+        html_data = response.text
+        tree = html.fromstring(html_data)
 
-    span_elements = tree.xpath('//*[@id="container"]')
-    for span in span_elements:
-        # span_text = span.text_content()
-        a_elements = span.xpath(".//img")
-        href_list = [a.get("src") for a in a_elements]
-        href_list = str(href_list)
-        # print(type(href_list))
-        if "404" in href_list:
-            return False
-        else:
-            return True
+        span_elements = tree.xpath('//*[@id="container"]')
+        for span in span_elements:
+            # span_text = span.text_content()
+            a_elements = span.xpath(".//img")
+            href_list = [a.get("src") for a in a_elements]
+            href_list = str(href_list)
+            # print(type(href_list))
+            if "404" in href_list:
+                return False
+            else:
+                return True
+    except ExceptionGroup as e:
+        print(e)
 
 
 def mexa(url):

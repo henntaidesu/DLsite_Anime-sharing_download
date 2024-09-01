@@ -15,7 +15,7 @@ def file_copy():
         print(rj)
         try:
             print(f'正在复制{rj}')
-            source_folder = f'Y:\\New\\{rj}'
+            source_folder = f'Y:\\Works\\{rj}'
             destination_folder = f'D:\\耳かき\\{rj}'
             # 使用 shutil.copytree() 进行文件夹复制
             shutil.copytree(source_folder, destination_folder)

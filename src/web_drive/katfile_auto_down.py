@@ -10,50 +10,6 @@ from src.module.datebase_execution import DateBase
 from src.module.time import Time
 from src.module.create_folder import create_folder
 
-# def QuerySpecificWork(WorkId):
-#     NowTime = time.time()
-#     datetime_obj = datetime.fromtimestamp(NowTime)
-#     formatted_date = datetime_obj.strftime("%Y-%m-%d %H:%M:%S")
-#     sql = f"SELECT " \
-#           f"AS_work_updata_group.id, " \
-#           f"works_full_information.work_id, " \
-#           f"works.work_name " \
-#           f"FROM " \
-#           f"works_full_information, AS_work_updata_group,works  " \
-#           f"WHERE " \
-#           f"works_full_information.work_id = AS_work_updata_group.work_id  " \
-#           f"AND works.work_id = works_full_information.work_id " \
-#           f"AND works_full_information.work_id = '{WorkId}' " \
-#           f"AND AS_work_updata_group.group_name = 'Shine'  " \
-#           f"GROUP BY " \
-#           f"works.work_name, works_full_information.work_id, AS_work_updata_group.id "
-#     Work = SelectAll(sql)
-#     print(Work)
-#     Work = Work[0]
-#     Id = Work[0]
-#     WorkId = Work[1]
-#     WorkName = Work[2]
-#     sql2 = f"SELECT * FROM AS_work_down_URL WHERE group_table_id = {Id} AND dowm_web_name = 'katfile'"
-#     DownList = SelectAll(sql2)
-#     NewFolder(WorkId)
-#     if len(DownList) < 1:
-#         LogPrint("无数据")
-#     for i in DownList:
-#         url = i[2]
-#         url = 'https://' + url
-#         state = i[3]
-#         if state == 5:
-#             continue
-#         if len(DownList) <= 1:
-#             print(state + '   ' + url)
-#             continue
-#         if 'mp3' in url:
-#             continue
-#         print(state + '   ' + url)
-#
-#     sql2 = f"update works set work_state = '-1' , `updata_time` = '{formatted_date}' where work_id = '{WorkId}'"
-#     flag = UpdataAll(sql2)
-
 logger = Log()
 
 
@@ -119,32 +75,32 @@ def auto_katfile():
         WorkId = Work[1]
         WorkName = Work[2]
         sql2 = f"SELECT * FROM AS_work_down_URL WHERE group_table_id = {Id} AND dowm_web_name = 'katfile'"
-        DownList = DateBase().select_all(sql2)
-        DownurlList = []
+        down_list = DateBase().select_all(sql2)
+        down_url_list = []
         IDList = []
-        UrlIdLsit = []
-        if len(DownList) < 1:
+        url_id_list = []
+        if len(down_list) < 1:
             ("无数据")
-        if len(DownList) == 1:
-            DownListTemp = DownList[0]
+        if len(down_list) == 1:
+            DownListTemp = down_list[0]
             UrlId = DownListTemp[0]
-            UrlIdLsit.append(UrlId)
-            Downurl = DownListTemp[2]
-            DownurlList.append(Downurl)
+            url_id_list.append(UrlId)
+            downurl = DownListTemp[2]
+            down_url_list.append(downurl)
             state = DownListTemp[3]
             if state == '9':
                 now_time = Time().now_time()
                 sql = f"update works set work_state = '22',`update_time`= '{now_time}' where work_id = '{WorkId}'"
                 DateBase().update_all(sql)
                 logger.write_log('AS上有下载连接已失效', 'error')
-                return False, Downurl, WorkId
-            return UrlIdLsit, DownurlList, WorkId
+                return False, downurl, WorkId
+            return url_id_list, down_url_list, WorkId
 
-        for i in DownList:
+        for i in down_list:
             UrlId = i[0]
-            Downurl = i[2]
+            downurl = i[2]
             state = i[3]
-            if 'mp3' in Downurl:
+            if 'mp3' in downurl:
                 continue
             if state == "5":
                 continue
@@ -153,19 +109,19 @@ def auto_katfile():
                 sql2 = f"update works set work_state = '23',`updata_time`='{now_time}' where work_id = '{WorkId}'"
                 DateBase().update_all(sql2)
                 logger.write_log('Katfile的Shine上有部分下载连接已失效', 'error')
-                print(state + '   ' + Downurl)
-                return False, Downurl, WorkId
-            DownurlList.append(Downurl)
+                print(state + '   ' + downurl)
+                return False, downurl, WorkId
+            down_url_list.append(downurl)
             IDList.append(UrlId)
-            print(state + '   ' + Downurl)
-            if len(DownList) == 0:
+            print(state + '   ' + downurl)
+            if len(down_list) == 0:
                 now_time = Time().now_time()
                 sql = f"UPDATE `works`SET `updata_time` = '{now_time}', `work_state` = '-1' WHERE `work_id` = '{WorkId}';"
                 DateBase().update_all(sql)
                 logger.write_log(f"{WorkId}已完成下载", 'info')
 
-                return True, Downurl, WorkId
-        return IDList, DownurlList, WorkId
+                return True, downurl, WorkId
+        return IDList, down_url_list, WorkId
 
     except ExceptionGroup as e:
         logger.write_log(f'{Id}, {WorkId}, {WorkName}', 'error')
