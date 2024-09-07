@@ -4,7 +4,7 @@ from src.index import Index
 from src.module.create_folder import create_log_folder
 import multiprocessing
 from PyQt5.QtWidgets import QApplication
-from src.QTui.indexUI import MainWindow
+from src.QTui.index_UI import IndexWindow
 
 
 def start_CLI():
@@ -19,13 +19,12 @@ def start_CLI():
 
 def start_UI():
     app = QApplication(sys.argv)
-    window = MainWindow()
+    window = IndexWindow()
     window.show()
     app.exec_()
 
+
 start_UI()
-
-
 
 # worksTableuInWork_stateList
 # -1：已下载

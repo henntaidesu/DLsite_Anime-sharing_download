@@ -48,6 +48,13 @@ class ReadConf:
         else:
             return False, proxies
 
+    def setting_proxy(self):
+        if_true = self.config.get('Proxy', 'OpenProxy')
+        host = self.config.get('Proxy', 'host')
+        port = self.config.get('Proxy', 'port')
+        proxy_type = self.config.get('Proxy', 'type')
+        return if_true, host, port, proxy_type
+
     def katfile_cookie(self):
         user = self.config.get('katfile', 'User')
         xfss = self.config.get('katfile', 'xfss')
@@ -57,7 +64,8 @@ class ReadConf:
     def katfile_use(self):
         user = self.config.get('katfile', 'User')
         pass_wd = self.config.get('katfile', 'PassWD')
-        return user, pass_wd
+        xfss = self.config.get('katfile', 'xfss')
+        return user, pass_wd, xfss
 
     def log_level(self):
         level = self.config.get('LogLevel', 'level')
@@ -71,6 +79,39 @@ class ReadConf:
         encoding = self.config.get('encoding', 'encoding')
         return encoding
 
+    def write_katfile_xfss(self, XFSS_code):
+        self.config.set('katfile', 'xfss', XFSS_code)
+        with open('conf.ini', 'w', encoding='utf-8') as configfile:
+            self.config.write(configfile)
+
+    def write_download_path(self, down_path):
+        self.config.set('DownPath', 'DownPath', down_path)
+        with open('conf.ini', 'w', encoding='utf-8') as configfile:
+            self.config.write(configfile)
+
+    def write_proxy(self, address, port):
+        self.config.set('Proxy', 'host', address)
+        self.config.set('Proxy', 'Port', port)
+        with open('conf.ini', 'w', encoding='utf-8') as configfile:
+            self.config.write(configfile)
+
+    def write_proxy_status(self, status):
+        self.config.set('Proxy', 'OpenProxy', status)
+        with open('conf.ini', 'w', encoding='utf-8') as configfile:
+            self.config.write(configfile)
+
+    def write_proxy_type(self, proxy_type):
+        self.config.set('Proxy', 'type', proxy_type)
+        with open('conf.ini', 'w', encoding='utf-8') as configfile:
+            self.config.write(configfile)
+
+    def write_katfile_user(self, user, passwd):
+        self.config.set('katfile', 'user', user)
+        self.config.set('katfile', 'passwd', passwd)
+        with open('conf.ini', 'w', encoding='utf-8') as configfile:
+            self.config.write(configfile)
+
+
 class WriteConf:
 
     def __init__(self):
@@ -79,5 +120,21 @@ class WriteConf:
 
     def katfile_xfss(self, XFSS_code):
         self.config.set('katfile', 'xfss', XFSS_code)
+        with open('conf.ini', 'w', encoding='utf-8') as configfile:
+            self.config.write(configfile)
+
+    def download_path(self, down_path):
+        self.config.set('DownPath', 'DownPath', down_path)
+        with open('conf.ini', 'w', encoding='utf-8') as configfile:
+            self.config.write(configfile)
+
+    def proxy(self, address, port):
+        self.config.set('Proxy', 'host', address)
+        self.config.set('Proxy', 'Port', port)
+        with open('conf.ini', 'w', encoding='utf-8') as configfile:
+            self.config.write(configfile)
+
+    def proxy_status(self, status):
+        self.config.set('Proxy', 'OpenProxy', status)
         with open('conf.ini', 'w', encoding='utf-8') as configfile:
             self.config.write(configfile)
