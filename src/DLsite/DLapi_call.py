@@ -5,7 +5,7 @@ import time
 import json
 import bs4
 from bs4 import BeautifulSoup
-from src.module.conf_operate import ReadConf
+from src.module.conf_operate import Config
 from src.module.log import err1
 from src.module.time import Time
 from src.module.datebase_execution import TrimString
@@ -13,7 +13,7 @@ from src.module.datebase_execution import TrimString
 
 def get_dlsite_work_name(term):
     try:
-        OpenProxy, proxies = ReadConf().proxy()
+        OpenProxy, proxies = Config().read_proxy()
         session = requests.Session()
         if OpenProxy is True:
             session.proxies.update(proxies)  # 将代理配置应用于该Session

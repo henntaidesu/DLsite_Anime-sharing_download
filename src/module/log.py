@@ -1,15 +1,15 @@
 import logging
 import sys
 from src.module.time import Time
-from src.module.conf_operate import ReadConf
+from src.module.conf_operate import Config
 
 
 class Log:
     def __init__(self):
         self.day = Time().today()
         self.logger = self.setup_logger()
-        self.confing = ReadConf()
-        self.log_level = self.confing.log_level()
+        self.confing = Config()
+        self.log_level = self.confing.read_log_level()
 
     def setup_logger(self):
         log_file = f"log/{self.day}.log"

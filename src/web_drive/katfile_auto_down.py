@@ -5,7 +5,7 @@ import os
 import requests
 from tqdm import tqdm
 from src.module.log import Log, err1, err2
-from src.module.conf_operate import ReadConf, WriteConf
+from src.module.conf_operate import Config, WriteConf
 from src.module.datebase_execution import DateBase
 from src.module.time import Time
 from src.module.create_folder import create_folder
@@ -14,7 +14,7 @@ logger = Log()
 
 
 def GETXFSS():
-    user, pass_wd = ReadConf().katfile_use()
+    user, pass_wd = Config().read_katfile_use()
     url = "https://katfile.com/"
 
     headers = {
@@ -41,8 +41,8 @@ def GETXFSS():
         # 提取 'xfss' 的值
         XFSS_code = SetCookie[StartIndex + len('xfss='):EndIndex]
         print("已获取最新Cookie:")
-        WriteConf().katfile_xfss(XFSS_code)
-        return True
+        Config().write_katfile_xfss(XFSS_code)
+        return XFSS_code
     except ExceptionGroup as e:
         err1(e)
         logger.write_log("Katfile账号或密码错误,注意密码连续错误三次以上，需要手动获取Cookie", 'error')
@@ -131,8 +131,8 @@ def auto_katfile():
 def auto_katfile_down():
     try:
         # 设置代理
-        open_proxy, proxy_url = ReadConf().proxy()
-        Cookie = ReadConf().katfile_cookie()
+        open_proxy, proxy_url = Config().read_proxy()
+        Cookie = Config().read_katfile_cookie()
         headers = {
             'Cookie': Cookie,
         }
@@ -161,7 +161,7 @@ def auto_katfile_down():
                 if 'Login' in WebData:
                     print("Cookie错误 开始自动获取Cookie")
                     Flag = GETXFSS()
-                    if Flag is True:
+                    if Flag:
                         print("已获取最新Cookie将开始自动下载")
                         auto_katfile_down()
 

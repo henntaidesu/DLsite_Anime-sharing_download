@@ -58,17 +58,18 @@ class SelectWindown(QMainWindow):
 
         def group_list_item_click(self, item):
             """处理列表中行的点击事件"""
-            url = self.group_list_output.row(item)  # 获取点击的行号
-            self.url_ui_list.clear()  # 清除现有内容
-            # print(f"点击的行号: {url}")  # 输出行号
-            # print(self.url_list[url])
-
-            self.down_url_list = get_work_down_url(self.url_list[url])
-            # print(self.down_url_list)
-            if self.down_url_list:
-                self.ui_url_list(self.down_url_list)
-            else:
+            if self.url_list:
+                url = self.group_list_output.row(item)  # 获取点击的行号
                 self.url_ui_list.clear()  # 清除现有内容
+                # print(f"点击的行号: {url}")  # 输出行号
+                # print(self.url_list[url])
+
+                self.down_url_list = get_work_down_url(self.url_list[url])
+                # print(self.down_url_list)
+                if self.down_url_list:
+                    self.ui_url_list(self.down_url_list)
+                else:
+                    self.url_ui_list.clear()  # 清除现有内容
 
         def exec_test_url_button(self):
             status_list = []
@@ -80,11 +81,11 @@ class SelectWindown(QMainWindow):
             self.ui_url_status_list(status_list)
 
         def show_select_button(self):
+            # 获取输入框的文本
+            text = self.input.text()
             self.group_list_output.clear()
             self.url_ui_status.clear()
             self.url_ui_list.clear()
-            # 获取输入框的文本
-            text = self.input.text()
             if text:
                 self.group_list, self.url_list = as_work_url(text)
                 self.ui_group_list(self.group_list)

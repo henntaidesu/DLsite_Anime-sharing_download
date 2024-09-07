@@ -245,6 +245,19 @@
      <string>KatFile</string>
     </property>
    </widget>
+   <widget class="QPushButton" name="GetKatfileXfssButton">
+    <property name="geometry">
+     <rect>
+      <x>90</x>
+      <y>130</y>
+      <width>61</width>
+      <height>31</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>获取XFSS</string>
+    </property>
+   </widget>
   </widget>
   <widget class="QMenuBar" name="menubar">
    <property name="geometry">

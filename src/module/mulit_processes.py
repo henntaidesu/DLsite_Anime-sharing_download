@@ -1,14 +1,14 @@
 import time
 from src.module.datebase_execution import DateBase
 import multiprocessing
-from src.module.conf_operate import ReadConf
+from src.module.conf_operate import Config
 from src.module.log import Log
 from src.module.log import err1
 
 
 class Process:
     def __init__(self):
-        self.conf = ReadConf()
+        self.conf = Config()
 
     @staticmethod
     def split_list(input_list, num_parts):
@@ -26,7 +26,7 @@ class Process:
 
     def multi_process_as_up_group(self, sql, func):
         try:
-            processes = int(self.conf.processes())
+            processes = int(self.conf.read_processes())
             flag, work_list = DateBase().select_all(sql)
             if len(work_list) == 0:
                 print("已完成获取AS UPGroup")

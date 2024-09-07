@@ -5,7 +5,7 @@ from tqdm import tqdm
 import patoolib
 from src.module.time import Time
 from src.module.datebase_execution import DateBase
-from src.module.conf_operate import ReadConf
+from src.module.conf_operate import Config
 from src.module.log import Log, err1, err2
 
 logger = Log()
@@ -13,7 +13,7 @@ logger = Log()
 
 def rename(work_path):  # 输入一个目录，解决该目录下所有文件名的乱码。
     try:
-        encode = ReadConf().sys_encoding()
+        encode = Config().read_sys_encoding()
         decode = "Shift_JIS"
         CurrentPath = os.getcwd()
         os.chdir(work_path)
@@ -77,7 +77,7 @@ def get_all_archive_files(folder_path):
 
 def unzip(work_id):
     try:
-        folder_path = f"{ReadConf().file_down_path()}\\{work_id}"
+        folder_path = f"{Config().read_file_down_path()}\\{work_id}"
         logger.write_log(f'{work_id} 正在解压', 'info')
         while True:
             # print(folder_path)
@@ -122,7 +122,7 @@ def auto_down_to_unzip(work_id):
     # print(work_id)
     while True:
         # WorkId = 'RJ01018336'
-        folder_path = f"{ReadConf().file_down_path()}\\{work_id}"
+        folder_path = f"{Config().read_file_down_path()}\\{work_id}"
         print(folder_path)
         file_name_list = get_all_archive_files(folder_path)
 

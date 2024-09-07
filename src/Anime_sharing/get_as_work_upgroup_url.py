@@ -4,7 +4,7 @@ import urllib.parse
 from src.module.log import Log, err1, err2
 from src.module.time import Time
 from src.module.datebase_execution import DateBase
-from src.module.conf_operate import ReadConf
+from src.module.conf_operate import Config
 
 logger = Log()
 db = DateBase()
@@ -66,7 +66,7 @@ def get_as_work_upgroup_url(rj_number, i=0):
 def as_work_url(Work_id):
     try:
         # 设置代理
-        OpenProxy, proxy_url = ReadConf().proxy()
+        OpenProxy, proxy_url = Config().read_proxy()
 
         session = requests.Session()  # 创建一个Session对象
         if OpenProxy is True:
@@ -104,6 +104,9 @@ def as_work_url(Work_id):
                         group_list.append(group)
                         url_list.append(url)
         print(group_list)
+        if not group_list:
+            group_list = ['NULL']
+            url_list = None
         return group_list, url_list
 
 

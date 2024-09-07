@@ -3,7 +3,7 @@ import time
 
 from PyQt5.QtWidgets import QMainWindow, QLineEdit, QPushButton, QComboBox
 from PyQt5.uic import loadUi
-from src.module.conf_operate import WriteConf, ReadConf
+from src.module.conf_operate import WriteConf, Config
 
 
 class SettingWindow(QMainWindow):
@@ -26,6 +26,9 @@ class SettingWindow(QMainWindow):
             self.katfile_xfss_save_button = self.findChild(QPushButton, 'KatfileXfssSaveButton')
             self.katfile_xfss_save_button.clicked.connect(self.show_save_XFSS)
 
+            self.get_katfile_xfss_button = self.findChild(QPushButton, 'GetKatfileXfssButton')
+            self.get_katfile_xfss_button.clicked.connect(self.show_get_katfile_xfss_button)
+
             self.proxy_status_choose = self.findChild(QComboBox, 'proxy_status_choose')
             self.set_proxy_status_comboBox()
             self.proxy_status_choose.currentIndexChanged.connect(self.choose_proxy_status)
@@ -38,17 +41,17 @@ class SettingWindow(QMainWindow):
             self.address_banner_text = self.findChild(QLineEdit, 'address_benner')
             self.port_banner_text = self.findChild(QLineEdit, 'port_benner')
             self.katfile_user_banner_text = self.findChild(QLineEdit, 'user_benner')
-            self.passwd_banner_text = self.findChild(QLineEdit, 'passwd_benner')
+            self.katfile_passwd_banner_text = self.findChild(QLineEdit, 'passwd_benner')
             self.XFSS_banner_text = self.findChild(QLineEdit, 'XFSS_benner')
 
-            self.conf = ReadConf()
+            self.conf = Config()
             self.read_conf()
 
         def read_conf(self):
-            path = self.conf.file_down_path()
+            path = self.conf.read_file_down_path()
             self.path_banner_text.setText(path.replace(r'\\', '\\'))
 
-            if_true, host, port, proxy_type = self.conf.setting_proxy()
+            if_true, host, port, proxy_type = self.conf.read_setting_proxy()
             self.address_banner_text.setText(host)
             self.port_banner_text.setText(port)
 
@@ -66,11 +69,14 @@ class SettingWindow(QMainWindow):
                 proxy_type_index = 2
             self.proxy_type_choose.setCurrentIndex(proxy_type_index)
 
-            user, passwd, xfss = self.conf.katfile_use()
+            user, passwd, xfss = self.conf.read_katfile_use()
 
             self.katfile_user_banner_text.setText(user)
-            self.passwd_banner_text.setText(passwd)
+            self.katfile_passwd_banner_text.setText(passwd)
             self.XFSS_banner_text.setText(xfss)
+
+        def show_get_katfile_xfss_button(self):
+            pass
 
         def set_proxy_type_comboBox(self):
             items = ["http", "https", "Socks5"]
@@ -101,7 +107,7 @@ class SettingWindow(QMainWindow):
 
         def show_save_Katfile(self):
             user = self.katfile_user_banner_text.text()
-            passwd = self.passwd_benner_text.text()
+            passwd = self.katfile_passwd_banner_text.text()
             self.conf.write_katfile_user(user, passwd)
 
         def show_save_XFSS(self):

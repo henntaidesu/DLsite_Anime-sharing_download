@@ -1,6 +1,6 @@
 import sys
 from src.module.log import Log
-from src.module.conf_operate import ReadConf
+from src.module.conf_operate import Config
 from src.module.log import err1
 
 
@@ -22,8 +22,8 @@ class DateBase:
     print_log = Log()
 
     def __init__(self):
-        read_db_conf = ReadConf()
-        self.db = read_db_conf.database()
+        read_db_conf = Config()
+        self.db = read_db_conf.read_database()
 
     def insert_all(self, sql):
         try:
