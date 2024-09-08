@@ -6,6 +6,7 @@ class Config:
     config = None
 
     def __init__(self):
+        self.start_type = True
         # 如果配置信息尚未加载，则加载配置文件
         if not Config.config:
             Config.config = self._load_config()
@@ -15,6 +16,11 @@ class Config:
         self.config.read('conf.ini', encoding='utf-8')
         return self.config
 
+    def read_start_type(self):
+        start_type = self.config.get('start_type', 'type')
+        if start_type == 'UI':
+            self.start_type = False
+
     def read_database(self):
         host = self.config.get('database', 'host')
         port = self.config.get('database', 'port')
@@ -22,8 +28,10 @@ class Config:
         user = self.config.get('database', 'user')
         password = self.config.get('database', 'password')
         data_base = self.config.get('database', 'database')
-        db = pymysql.connect(host=host, port=port, user=user, password=password, database=data_base)
-        return db
+        self.read_start_type()
+        if self.start_type:
+            db = pymysql.connect(host=host, port=port, user=user, password=password, database=data_base)
+            return db
 
     def read_file_down_path(self):
         folder_path = self.config.get('DownPath', 'DownPath')
@@ -110,7 +118,6 @@ class Config:
         self.config.set('katfile', 'passwd', passwd)
         with open('conf.ini', 'w', encoding='utf-8') as configfile:
             self.config.write(configfile)
-
 
 
 class WriteConf:

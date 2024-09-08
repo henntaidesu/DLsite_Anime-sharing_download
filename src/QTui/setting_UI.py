@@ -1,9 +1,7 @@
-import sys
-import time
-
 from PyQt5.QtWidgets import QMainWindow, QLineEdit, QPushButton, QComboBox
 from PyQt5.uic import loadUi
 from src.module.conf_operate import WriteConf, Config
+from src.web_drive.katfile_auto_down import GETXFSS
 
 
 class SettingWindow(QMainWindow):
@@ -20,14 +18,14 @@ class SettingWindow(QMainWindow):
             self.proxy_save_button = self.findChild(QPushButton, 'ProxySaveButton')
             self.proxy_save_button.clicked.connect(self.show_save_proxy)
 
-            self.katfile_config_save_button = self.findChild(QPushButton, 'KatfileConfigSaveButton')
-            self.katfile_config_save_button.clicked.connect(self.show_save_Katfile)
-
-            self.katfile_xfss_save_button = self.findChild(QPushButton, 'KatfileXfssSaveButton')
-            self.katfile_xfss_save_button.clicked.connect(self.show_save_XFSS)
-
-            self.get_katfile_xfss_button = self.findChild(QPushButton, 'GetKatfileXfssButton')
-            self.get_katfile_xfss_button.clicked.connect(self.show_get_katfile_xfss_button)
+            # self.katfile_config_save_button = self.findChild(QPushButton, 'KatfileConfigSaveButton')
+            # self.katfile_config_save_button.clicked.connect(self.show_save_Katfile)
+            #
+            # self.katfile_xfss_save_button = self.findChild(QPushButton, 'KatfileXfssSaveButton')
+            # self.katfile_xfss_save_button.clicked.connect(self.show_save_XFSS)
+            #
+            # self.get_katfile_xfss_button = self.findChild(QPushButton, 'GetKatfileXfssButton')
+            # self.get_katfile_xfss_button.clicked.connect(self.show_get_katfile_xfss_button)
 
             self.proxy_status_choose = self.findChild(QComboBox, 'proxy_status_choose')
             self.set_proxy_status_comboBox()
@@ -69,14 +67,15 @@ class SettingWindow(QMainWindow):
                 proxy_type_index = 2
             self.proxy_type_choose.setCurrentIndex(proxy_type_index)
 
-            user, passwd, xfss = self.conf.read_katfile_use()
+            # user, passwd, xfss = self.conf.read_katfile_use()
 
-            self.katfile_user_banner_text.setText(user)
-            self.katfile_passwd_banner_text.setText(passwd)
-            self.XFSS_banner_text.setText(xfss)
+            # self.katfile_user_banner_text.setText(user)
+            # self.katfile_passwd_banner_text.setText(passwd)
+            # self.XFSS_banner_text.setText(xfss)
 
-        def show_get_katfile_xfss_button(self):
-            pass
+        # def show_get_katfile_xfss_button(self):
+        #     XFSS_code = GETXFSS()
+        #     self.XFSS_banner_text.setText(XFSS_code)
 
         def set_proxy_type_comboBox(self):
             items = ["http", "https", "Socks5"]
@@ -105,14 +104,14 @@ class SettingWindow(QMainWindow):
             port = self.port_banner_text.text()
             self.conf.write_proxy(address, port)
 
-        def show_save_Katfile(self):
-            user = self.katfile_user_banner_text.text()
-            passwd = self.katfile_passwd_banner_text.text()
-            self.conf.write_katfile_user(user, passwd)
-
-        def show_save_XFSS(self):
-            XFSS = self.XFSS_banner_text.text()
-            self.conf.write_katfile_xfss(XFSS)
+        # def show_save_Katfile(self):
+        #     user = self.katfile_user_banner_text.text()
+        #     passwd = self.katfile_passwd_banner_text.text()
+        #     self.conf.write_katfile_user(user, passwd)
+        #
+        # def show_save_XFSS(self):
+        #     XFSS = self.XFSS_banner_text.text()
+        #     self.conf.write_katfile_xfss(XFSS)
 
     except Exception as e:
         print(f"数据获取错误: {e}")

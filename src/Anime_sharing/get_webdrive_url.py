@@ -97,7 +97,11 @@ def get_work_down_url(URL):
         html_data = response.text
         tree = html.fromstring(html_data)
 
-        # 使用XPath选择器来获取包含特定class的span元素
+        AS_title = tree.xpath('//h1[@class="p-title-value"]')
+        AS_title = AS_title[0].text_content().strip()
+
+        if len(AS_title) > 40:
+            AS_title = AS_title[:40] + '\n' + AS_title[40:]
 
         L1 = tree.xpath('//span[contains(@class, "bbcode-box-content")]')
         L2 = tree.xpath('//div[contains(@class, "bbWrapper")]')
@@ -132,8 +136,18 @@ def get_work_down_url(URL):
 
         if href_list == '':
             return []
-        print(href_list)
-        return href_list
+
+        not_mp3_list = []
+        if len(href_list) > 1:
+            for href in href_list:
+                if 'mp3' in href:
+                    continue
+                else:
+                    not_mp3_list.append(href)
+            print(href_list)
+            return not_mp3_list, AS_title
+        else:
+            return href_list, AS_title
 
     except ExceptionGroup as e:
         err1(e)

@@ -22,9 +22,11 @@ def create_log_folder():
 
 def create_folder(folder_name):
     folder_path = Config().read_file_down_path()
-
     folder_path = folder_path + folder_name
     # 使用os.makedirs()创建文件夹，如果文件夹已存在则不会引发错误
     os.makedirs(folder_path, exist_ok=True)
     print(f"Folder created at: {folder_path}")
     return folder_path
+
+
+

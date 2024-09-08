@@ -14,11 +14,13 @@ logger = Log()
 
 
 def GETXFSS():
-    user, pass_wd = Config().read_katfile_use()
+    user, pass_wd, xfss = Config().read_katfile_use()
     url = "https://katfile.com/"
 
     headers = {
         'Content-Type': 'application/x-www-form-urlencoded',
+        'user-agent': r'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+        'sec-ch-ua': r'''"Chromium";v="128", "Not;A=Brand";v="24", "Google Chrome";v="128"''',
     }
 
     data = {
@@ -30,9 +32,22 @@ def GETXFSS():
         'password': pass_wd,
         'submit': '',
     }
-    response = requests.post(url, headers=headers, data=data, allow_redirects=False)
+    response = requests.post(url, headers=headers, data=data)
     try:
         data = response.headers
+        print(data)
+
+        cf_headers = {
+            'CF-Cache-Status': data['CF-Cache-Status'],
+            'Report-To': data['Report-To'],
+            'NEL': data['NEL'],
+            'Server': data['Server'],
+        }
+
+        response = requests.post(url, headers=cf_headers, data=data)
+        data = response.headers
+        print(data)
+
         SetCookie = data['Set-Cookie']
         SetCookie = str(SetCookie)
         StartIndex = SetCookie.find('xfss=')
@@ -236,6 +251,107 @@ def auto_katfile_down():
 
         # AutoDowmToUnzip(WorkId)
         # logger.write_log(f"{WorkId}已完成解压", 'info')
+
+    except ExceptionGroup as e:
+        err1(e)
+
+
+def QTUI_katfile_down(download_url_list, WorkId):
+    try:
+        # 设置代理
+        open_proxy, proxy_url = Config().read_proxy()
+        Cookie = Config().read_katfile_cookie()
+        headers = {
+            'Cookie': Cookie,
+        }
+
+        flag = 0
+        flag = int(flag)
+        for i in download_url_list:
+            time.sleep(3)
+
+            flag += 1
+            url = i
+            session = requests.Session()  # 创建一个Session对象
+            if open_proxy is True:
+                session.proxies.update(proxy_url)  # 将代理配置应用于该Session
+
+            response = session.get(url, headers=headers, allow_redirects=False)  # allow_redirects=False不进行重定向
+
+            print("Redirected Code:", response.status_code)
+            if response.status_code == 200:
+                WebData = response.text
+                if 'Login' in WebData:
+                    print("Cookie错误 开始自动获取Cookie")
+                    Flag = GETXFSS()
+                    if Flag:
+                        print("已获取最新Cookie将开始自动下载")
+                        auto_katfile_down()
+
+                elif 'reCAPTCHA' in WebData:
+                    print("请确保改账户为Premium")
+                    print("或者未开启Direct downloads，请前往个人中心开启")
+                    print("https://katfile.com/?op=my_account")
+                    sys.exit()
+            down_path = create_folder(WorkId)
+            os.makedirs(down_path, exist_ok=True)  # 确保下载路径存在
+            if response.is_redirect:
+                # 获取重定向后的 URL
+                redirected_url = response.headers.get('location')
+                print(f'Redirected URL: {redirected_url}')
+
+                ur_lstring = str(redirected_url)
+                last_slash_index = ur_lstring.rfind('/')
+                filename = ur_lstring[last_slash_index + 1:]
+                print("filename:" + filename)
+
+                # 检查本地文件是否存在
+                file_path = os.path.join(down_path, filename)
+                if os.path.exists(file_path):
+                    # 如果文件已存在，获取已下载的文件大小
+                    resume_header = {'Range': 'bytes=%d-' % os.path.getsize(file_path)}
+                    response = session.get(redirected_url, headers=resume_header, stream=True)
+                else:
+                    response = session.get(redirected_url, stream=True)
+
+                download_complete = False
+                while not download_complete:
+
+                    try:
+                        if response.status_code == 416:
+                            print(response.status_code)
+                            print("检查代理设置或删除最近一个下载的文件")
+                            sys.exit()
+                        if response.status_code == 200 or response.status_code == 206:  # 206表示部分内容
+                            total_size = int(response.headers.get('content-length', 0))
+                            block_size = 1024  # 1 KB
+                            progress_bar = tqdm(total=total_size, unit='B', unit_scale=True)
+
+                            with open(file_path, 'ab') as file:  # 使用追加模式打开文件
+                                for data in response.iter_content(block_size):
+                                    progress_bar.update(len(data))
+                                    file.write(data)
+
+                            progress_bar.close()
+                            now_time = Time().now_time()
+                            download_complete = True  # 下载完成
+
+                        else:
+                            # 处理非200和206状态码，可以根据需要进行处理
+                            print(f"Error: {response.status_code}")
+                            time.sleep(3)
+
+                    except requests.exceptions.RequestException as e:
+                        print(f"网络错误: {e}")
+                        time.sleep(3)
+                        auto_katfile_down()
+            else:
+                # 处理非200状态码，可以根据需要进行处理
+                print(f"处理非200状态码，Error: {response.status_code}")
+
+        logger.write_log(f"{WorkId}已完成下载", 'info')
+
+
 
     except ExceptionGroup as e:
         err1(e)

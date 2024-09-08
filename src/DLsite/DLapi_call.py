@@ -356,3 +356,32 @@ def call_works_web_ui(work_id, work_type):
 
     except ExceptionGroup as e:
         err1(e)
+
+
+def get_work_name(work_id):
+    try:
+        OpenProxy, proxies = Config().read_proxy()
+        session = requests.Session()
+        if OpenProxy is True:
+            session.proxies.update(proxies)  # 将代理配置应用于该Session
+
+        site = "adult-jp"
+        touch = 0
+        # 生成新的时间戳
+        timestamp = int(time.time() * 1000)
+        timestamp2 = timestamp + 10
+        # 构建请求的 URL，包括新的时间戳
+        url = f"https://www.dlsite.com/suggest/?term={work_id}&site={site}&time={timestamp}&touch={touch}&_={timestamp2}"
+        # print(url)
+        response = session.get(url)
+        data = json.loads(response.text)
+        works = data.get('work', [])
+        makers = data.get('maker', [])
+        work_list = []
+        maker_list = []
+
+        for work in works:
+            work_name = work.get('work_name', '')
+            return work_name
+    except ExceptionGroup as e:
+        err1(e)
