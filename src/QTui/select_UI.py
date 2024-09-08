@@ -36,6 +36,7 @@ class SelectWindown(QMainWindow):
             self.new_as_title = self.findChild(QLabel, 'New_as_title')
             self.new_dl_title = self.findChild(QLabel, 'New_DL_title')
             self.similarity = self.findChild(QLabel, 'similarity')
+            self.down_path_text = self.findChild(QLineEdit, 'down_path_text')
 
             # 根据你的UI文件中的控件名称
 
@@ -60,9 +61,6 @@ class SelectWindown(QMainWindow):
             from src.web_drive.web_download import download
             download_path = f"{Config().read_file_down_path()}/{self.select_ID}"
             os.makedirs(download_path, exist_ok=True)
-
-            for url in self.down_url_list:
-                download(download_path)
 
         def set_new_as_title(self):
             self.new_as_title.setText(self.AS_title)
@@ -125,7 +123,7 @@ class SelectWindown(QMainWindow):
             self.url_ui_list.clear()
             self.new_as_title.setText('')
             self.new_dl_title.setText('')
-
+            self.down_path_text.setText(f"{Config().read_file_down_path()}/{self.select_ID}".replace('\\\\', '/'))
             if self.select_ID:
                 self.group_list, self.url_list = as_work_url(self.select_ID)
                 self.dl_work_name = get_work_name(self.select_ID)
