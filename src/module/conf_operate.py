@@ -6,7 +6,6 @@ class Config:
     config = None
 
     def __init__(self):
-        self.start_type = True
         # 如果配置信息尚未加载，则加载配置文件
         if not Config.config:
             Config.config = self._load_config()
@@ -18,8 +17,11 @@ class Config:
 
     def read_start_type(self):
         start_type = self.config.get('start_type', 'type')
-        if start_type == 'UI':
-            self.start_type = False
+        if start_type == 'GUI':
+            return True
+        else:
+            return False
+
 
     def read_database(self):
         host = self.config.get('database', 'host')
@@ -28,8 +30,9 @@ class Config:
         user = self.config.get('database', 'user')
         password = self.config.get('database', 'password')
         data_base = self.config.get('database', 'database')
-        self.read_start_type()
-        if self.start_type:
+        open_DB = self.config.get('database', 'open_DB')
+
+        if open_DB == 'True':
             db = pymysql.connect(host=host, port=port, user=user, password=password, database=data_base)
             return db
 

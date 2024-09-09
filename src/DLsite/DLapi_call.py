@@ -7,7 +7,7 @@ import bs4
 from bs4 import BeautifulSoup
 from src.module.conf_operate import Config
 from src.module.log import err1
-from src.module.time import Time
+from src.module.time import Time_a
 from src.module.datebase_execution import TrimString
 
 
@@ -223,7 +223,7 @@ def call_works_web_ui(work_id, work_type):
                     event = event[:64]
 
             if th == "声優":
-                voice_actor = td
+                voice_actor = str(td).replace(' ', '')
                 voice_actor = TrimString(voice_actor)
 
             if th == "シナリオ":
@@ -299,7 +299,7 @@ def call_works_web_ui(work_id, work_type):
                 if len(coupling) > 64:
                     coupling = coupling[:64]
 
-        update_data = Time().now_time()
+        update_data = Time_a().now_time()
 
         # WorkDetails = WebData.find('div', class_="work_parts_area")
         # WorkDetails = WorkDetails.get_text()

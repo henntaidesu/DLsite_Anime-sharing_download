@@ -7,7 +7,7 @@ from tqdm import tqdm
 from src.module.log import Log, err1, err2
 from src.module.conf_operate import Config, WriteConf
 from src.module.datebase_execution import DateBase
-from src.module.time import Time
+from src.module.time import Time_a
 from src.module.create_folder import create_folder
 
 logger = Log()
@@ -104,7 +104,7 @@ def auto_katfile():
             down_url_list.append(downurl)
             state = DownListTemp[3]
             if state == '9':
-                now_time = Time().now_time()
+                now_time = Time_a().now_time()
                 sql = f"update works set work_state = '22',`update_time`= '{now_time}' where work_id = '{WorkId}'"
                 DateBase().update_all(sql)
                 logger.write_log('AS上有下载连接已失效', 'error')
@@ -120,7 +120,7 @@ def auto_katfile():
             if state == "5":
                 continue
             if state == "9":
-                now_time = Time().now_time()
+                now_time = Time_a().now_time()
                 sql2 = f"update works set work_state = '23',`updata_time`='{now_time}' where work_id = '{WorkId}'"
                 DateBase().update_all(sql2)
                 logger.write_log('Katfile的Shine上有部分下载连接已失效', 'error')
@@ -130,7 +130,7 @@ def auto_katfile():
             IDList.append(UrlId)
             print(state + '   ' + downurl)
             if len(down_list) == 0:
-                now_time = Time().now_time()
+                now_time = Time_a().now_time()
                 sql = f"UPDATE `works`SET `updata_time` = '{now_time}', `work_state` = '-1' WHERE `work_id` = '{WorkId}';"
                 DateBase().update_all(sql)
                 logger.write_log(f"{WorkId}已完成下载", 'info')
@@ -225,7 +225,7 @@ def auto_katfile_down():
                                     file.write(data)
 
                             progress_bar.close()
-                            now_time = Time().now_time()
+                            now_time = Time_a().now_time()
                             sql = (f"UPDATE `AS_work_down_URL` SET  `url_state` = '5' ,`updata_time` = '{now_time}' "
                                    f"WHERE `id` = '{UrlId}';")
                             DateBase().update_all(sql)
@@ -244,7 +244,7 @@ def auto_katfile_down():
                 # 处理非200状态码，可以根据需要进行处理
                 print(f"处理非200状态码，Error: {response.status_code}")
 
-        now_time = Time().now_time()
+        now_time = Time_a().now_time()
         sql = f"UPDATE `works`SET `updata_time` = '{now_time}', `work_state` = '-1' WHERE `work_id` = '{WorkId}';"
         DateBase().update_all(sql)
         logger.write_log(f"{WorkId}已完成下载", 'info')
@@ -333,7 +333,7 @@ def QTUI_katfile_down(download_url_list, WorkId):
                                     file.write(data)
 
                             progress_bar.close()
-                            now_time = Time().now_time()
+                            now_time = Time_a().now_time()
                             download_complete = True  # 下载完成
 
                         else:

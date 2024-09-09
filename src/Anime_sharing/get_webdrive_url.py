@@ -1,7 +1,7 @@
 import requests
 from lxml import html
 
-from src.module.time import Time
+from src.module.time import Time_a
 from src.module.datebase_execution import DateBase, TrimString
 from src.module.log import Log, err1, err2
 
@@ -36,10 +36,10 @@ def as_work_down_url(work_list, i=0):
                 else:
                     logger.write_log(f"groupID - {Id} - 作品 - {work_id} - 未获取到下载连接", 'error')
                     sql = (f"UPDATE `AS_work_updata_group` SET  `url_state` = '8', "
-                           f"`update_time` = '{Time().now_time()}' WHERE `id` = {Id};")
+                           f"`update_time` = '{Time_a().now_time()}' WHERE `id` = {Id};")
                     DateBase().update_all(sql)
             except Exception as e:
-                sql = (f"UPDATE `AS_work_updata_group` SET  `url_state` = '8', `update_time` = '{Time().now_time()}'"
+                sql = (f"UPDATE `AS_work_updata_group` SET  `url_state` = '8', `update_time` = '{Time_a().now_time()}'"
                        f" WHERE `id` = {Id};")
                 DateBase().update_all(sql)
                 logger.write_log(f"groupID - {Id} - 作品 - {work_id} - 源HTML错误", 'error')
@@ -55,7 +55,7 @@ def insert_down_url(down_url_set, Id, WorkId, URLState):
     unique_urls = list(set(down_url_set))
     # print(unique_urls)
     for URL in unique_urls:
-        time = Time().now_time()
+        time = Time_a().now_time()
         text = URL
         index = text.find(".")
         WebName = text[:index]
@@ -77,7 +77,7 @@ def insert_down_url(down_url_set, Id, WorkId, URLState):
               f"`update_time`)VALUES ({Id}, '{URL}', '0', '{WebName}', '{time}');"
         DateBase().insert_all(sql)
 
-    sql = (f"UPDATE `AS_work_updata_group` SET  `url_state` = '{URLState}', `update_time` = '{Time().now_time()}"
+    sql = (f"UPDATE `AS_work_updata_group` SET  `url_state` = '{URLState}', `update_time` = '{Time_a().now_time()}"
            f" WHERE `id` = {Id};")
     Flag = DateBase().update_all(sql)
     if Flag is True:

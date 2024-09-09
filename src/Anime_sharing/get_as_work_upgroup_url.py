@@ -2,7 +2,7 @@ import requests
 from lxml import html
 import urllib.parse
 from src.module.log import Log, err1, err2
-from src.module.time import Time
+from src.module.time import Time_a
 from src.module.datebase_execution import DateBase
 from src.module.conf_operate import Config
 

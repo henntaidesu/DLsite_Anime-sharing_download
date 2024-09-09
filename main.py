@@ -1,30 +1,19 @@
 import sys
-
 from src.index import Index
 from src.module.create_folder import create_log_folder
 import multiprocessing
-from PyQt5.QtWidgets import QApplication
-from src.QTui.index_UI import IndexWindow
 
 
-def start_CLI():
+
+if __name__ == '__main__':
     multiprocessing.freeze_support()
     flag = create_log_folder()
     if flag is True:
         while True:
-            Index().index()
+            Index().choose()
     else:
         sys.exit()
 
-
-def start_UI():
-    app = QApplication(sys.argv)
-    window = IndexWindow()
-    window.show()
-    app.exec_()
-
-
-start_UI()
 
 # worksTableuInWork_stateList
 # -1：已下载

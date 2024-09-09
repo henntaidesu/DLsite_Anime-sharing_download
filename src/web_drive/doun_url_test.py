@@ -1,7 +1,7 @@
 import requests
 from lxml import html
 
-from src.module.time import Time
+from src.module.time import Time_a
 from src.module.datebase_execution import DateBase
 from src.module.log import Log
 
@@ -15,7 +15,7 @@ def down_url_test(WorkList):
         Id = i[0]
         URL = i[1]
         DownName = i[2]
-        time = Time().now_time()
+        time = Time_a().now_time()
 
         if DownName == 'katfile':
             Flag = katfile(URL)

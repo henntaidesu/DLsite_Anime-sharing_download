@@ -1,5 +1,5 @@
 import gc
-from src.module.time import Time
+from src.module.time import Time_a
 from src.module.datebase_execution import DateBase
 from src.DLsite.DLapi_call import get_dlsite_work_name
 from src.module.log import Log, err1
@@ -12,7 +12,7 @@ def craw_dlsite_works(work_list, i=0):
         while True:
             if i >= len(work_list):
                 return
-            formatted_date = Time().now_time()
+            formatted_date = Time_a().now_time()
             gc.collect()
             rj_number = work_list[i][0]
             i += 1

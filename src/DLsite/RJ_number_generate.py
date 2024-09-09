@@ -1,7 +1,7 @@
 import sys
 
 from src.module.datebase_execution import DateBase
-from src.module.time import Time
+from src.module.time import Time_a
 import time
 import re
 
@@ -15,13 +15,16 @@ def rjnumber_generate():
     flag = 0
     while True:
         rj_number += 1
+
+        if rj_number > 1260000:
+            break
         Num = rj_number
         new_Num = f"RJ{rj_number:08d}"
         flag += 1
         if flag > 100000:
             break
         print(f"{new_Num} Now: {flag}")
-        sql = f"INSERT INTO `DLsite`.`works`(`work_id`, `insert_time`) VALUES ('{new_Num}','{Time().now_time3()}');"
+        sql = f"INSERT INTO `DLsite`.`works`(`work_id`, `insert_time`) VALUES ('{new_Num}','{Time_a().now_time3()}');"
         DateBase().insert_all(sql)
 
 
@@ -38,5 +41,5 @@ def RjIdGenerateOLD():
             break
         rj_number = RJ + new_Num
         print(f"{rj_number}")
-        sql = f"INSERT INTO `DLsite`.`works`(`work_id`, `insert_time`) VALUES ('{rj_number}','{Time().now_time3()}');"
+        sql = f"INSERT INTO `DLsite`.`works`(`work_id`, `insert_time`) VALUES ('{rj_number}','{Time_a().now_time3()}');"
         DateBase().insert_all(sql)

@@ -1,6 +1,6 @@
 import sys
 
-from src.module.time import Time
+from src.module.time import Time_a
 from src.module.datebase_execution import DateBase
 from src.module.log import Log,err2
 from src.module.create_folder import create_folder

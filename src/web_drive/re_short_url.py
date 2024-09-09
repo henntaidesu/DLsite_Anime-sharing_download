@@ -1,4 +1,4 @@
-from src.module.time import Time
+from src.module.time import Time_a
 from src.module.datebase_execution import DateBase
 from src.module.log import Log
 import requests
@@ -24,7 +24,7 @@ def re_down_table_short_url(work_list, i=0):
 
             i += 1
 
-            time = Time().now_time()
+            time = Time_a().now_time()
             LongURL = resolve_short_url(ShortURL)
             if 'https' in LongURL[:8]:
                 LongURL = LongURL[8:]
