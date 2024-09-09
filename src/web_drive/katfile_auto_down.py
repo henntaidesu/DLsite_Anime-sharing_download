@@ -84,13 +84,13 @@ def auto_katfile():
                f"AND works.work_state = '15'  " \
                f"GROUP BY works.work_name,  works_full_information.work_id, AS_work_updata_group.id " \
                f"Limit 1"
-        Work = DateBase().select_all(sql1)
+        Work = DateBase().select(sql1)
         Work = Work[0]
         Id = Work[0]
         WorkId = Work[1]
         WorkName = Work[2]
         sql2 = f"SELECT * FROM AS_work_down_URL WHERE group_table_id = {Id} AND dowm_web_name = 'katfile'"
-        down_list = DateBase().select_all(sql2)
+        down_list = DateBase().select(sql2)
         down_url_list = []
         IDList = []
         url_id_list = []
@@ -106,7 +106,7 @@ def auto_katfile():
             if state == '9':
                 now_time = Time_a().now_time()
                 sql = f"update works set work_state = '22',`update_time`= '{now_time}' where work_id = '{WorkId}'"
-                DateBase().update_all(sql)
+                DateBase().update(sql)
                 logger.write_log('AS上有下载连接已失效', 'error')
                 return False, downurl, WorkId
             return url_id_list, down_url_list, WorkId
@@ -122,7 +122,7 @@ def auto_katfile():
             if state == "9":
                 now_time = Time_a().now_time()
                 sql2 = f"update works set work_state = '23',`updata_time`='{now_time}' where work_id = '{WorkId}'"
-                DateBase().update_all(sql2)
+                DateBase().update(sql2)
                 logger.write_log('Katfile的Shine上有部分下载连接已失效', 'error')
                 print(state + '   ' + downurl)
                 return False, downurl, WorkId
@@ -132,7 +132,7 @@ def auto_katfile():
             if len(down_list) == 0:
                 now_time = Time_a().now_time()
                 sql = f"UPDATE `works`SET `updata_time` = '{now_time}', `work_state` = '-1' WHERE `work_id` = '{WorkId}';"
-                DateBase().update_all(sql)
+                DateBase().update(sql)
                 logger.write_log(f"{WorkId}已完成下载", 'info')
 
                 return True, downurl, WorkId
@@ -228,7 +228,7 @@ def auto_katfile_down():
                             now_time = Time_a().now_time()
                             sql = (f"UPDATE `AS_work_down_URL` SET  `url_state` = '5' ,`updata_time` = '{now_time}' "
                                    f"WHERE `id` = '{UrlId}';")
-                            DateBase().update_all(sql)
+                            DateBase().update(sql)
                             download_complete = True  # 下载完成
 
                         else:
@@ -246,7 +246,7 @@ def auto_katfile_down():
 
         now_time = Time_a().now_time()
         sql = f"UPDATE `works`SET `updata_time` = '{now_time}', `work_state` = '-1' WHERE `work_id` = '{WorkId}';"
-        DateBase().update_all(sql)
+        DateBase().update(sql)
         logger.write_log(f"{WorkId}已完成下载", 'info')
 
         # AutoDowmToUnzip(WorkId)

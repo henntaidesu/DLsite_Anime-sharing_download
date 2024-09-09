@@ -27,7 +27,7 @@ class Process:
     def multi_process_as_up_group(self, sql, func):
         try:
             processes = int(self.conf.read_processes())
-            flag, work_list = DateBase().select_all(sql)
+            flag, work_list = DateBase().select(sql)
             if len(work_list) == 0:
                 print("已完成获取AS UPGroup")
                 return False

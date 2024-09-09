@@ -22,6 +22,12 @@ class Config:
         else:
             return False
 
+    def open_DB(self):
+        open_DB = self.config.get('database', 'open_DB')
+        if open_DB == 'True':
+            return True
+        else:
+            return False
 
     def read_database(self):
         host = self.config.get('database', 'host')

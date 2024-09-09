@@ -58,7 +58,7 @@ def down_url_test(WorkList):
                 sql = f"UPDATE `AS_work_down_URL` SET  `url_state` = '9', `updata_time` = '{time}' WHERE `id` = {Id};"
             elif Flag is True:
                 sql = f"UPDATE `AS_work_down_URL` SET  `url_state` = '1', `updata_time` = '{time}' WHERE `id` = {Id};"
-        flag = DateBase().update_all(sql)
+        flag = DateBase().update(sql)
 
         if flag is True:
             logger.write_log(f"UPDATE AS_work_down_URL URLStare:{Flag} ID:{Id} DownName:{DownName}", 'info')

@@ -87,7 +87,7 @@ def unzip(work_id):
                 now_time = Time_a().now_time()
                 sql = (f"UPDATE `DLsite`.`works` SET `update_time` = '{now_time}', "
                        f"`work_state` = '-2' WHERE `work_id` = '{work_id}';")
-                DateBase().update_all(sql)
+                DateBase().update(sql)
                 un_flag = rename(folder_path)
                 logger.write_log(f'{work_id} 解压成功', 'info')
                 if un_flag is True:
@@ -129,7 +129,7 @@ def auto_down_to_unzip(work_id):
         if len(file_name_list) == 0:
             now_time = Time_a().now_time()
             sql = f"UPDATE `DLsite`.`works` SET `updata_time` = '{now_time}', `work_state` = '-2' WHERE `work_id` = '{work_id}';"
-            DateBase().update_all(sql)
+            DateBase().update(sql)
             un_flag = rename(folder_path)
             logger.write_log(f'{work_id} 解压成功', 'info')
             if un_flag is True:

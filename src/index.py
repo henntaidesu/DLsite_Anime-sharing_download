@@ -22,12 +22,15 @@ class Index:
             self.open_CLI()
     @staticmethod
     def open_GUI():
-        from PyQt5.QtWidgets import QApplication
-        from src.QTui.index_UI import IndexWindow
-        app = QApplication(sys.argv)
-        window = IndexWindow()
-        window.show()
-        app.exec_()
+        try:
+            from PyQt5.QtWidgets import QApplication
+            from src.QTui.index_UI import IndexWindow
+            app = QApplication(sys.argv)
+            window = IndexWindow()
+            window.show()
+            app.exec_()
+        except ExceptionGroup as e:
+            print(e)
 
     def open_CLI(self):
         while True:
@@ -49,13 +52,12 @@ class Index:
 
             elif flag == '2':
                 from src.DLsite.craw_dlsite_works_name import craw_dlsite_works
+                from src.DLsite.craw_dlsite_infomation import crawl_work_web_information
                 sql = (f"SELECT work_id FROM `works` WHERE work_state is NULL or work_state = '1' "
                        f"and update_time < '{Time_a().tow_days_ago()} 00:00:00'")
-                print(sql)
                 self.process.multi_process_as_up_group(sql, craw_dlsite_works)
 
                 # elif flag == '3':
-                from src.DLsite.craw_dlsite_infomation import crawl_work_web_information
                 sql = f"SELECT work_id, work_type FROM works WHERE work_state in ('2')"
                 self.process.multi_process_as_up_group(sql, crawl_work_web_information)
 

@@ -7,6 +7,7 @@ from src.Anime_sharing.get_webdrive_url import get_work_down_url
 from src.web_drive.doun_url_test import katfile
 from src.DLsite.DLapi_call import get_work_name
 from src.module.conf_operate import Config
+from src.module.datebase_execution import DateBase
 import webbrowser
 import jellyfish
 
@@ -21,6 +22,7 @@ class SelectWindown(QMainWindow):
             self.select_ID = None
             self.dl_work_name = None
             self.AS_title = None
+            self.open_DB = Config().open_DB()
             # 加载 .ui 文件
             loadUi("src/QTui/ui_file/select.ui", self)  # 请替换为你的 .ui 文件的路径
 
@@ -32,12 +34,10 @@ class SelectWindown(QMainWindow):
             self.url_ui_list = self.findChild(QListWidget, 'url_ui_list')
             self.test_down_url_button = self.findChild(QPushButton, 'test_down_url_button')
             self.download_button = self.findChild(QPushButton, 'download_button')
-            # self.work_name_banner_text = self.findChild(QLineEdit, 'select_benner_2')
-            self.new_as_title = self.findChild(QLabel, 'New_as_title')
             self.new_dl_title = self.findChild(QLabel, 'New_DL_title')
             self.similarity = self.findChild(QLabel, 'similarity')
+            # self.in_db_text = self.findChild(QLabel, 'in_db')
             self.down_path_text = self.findChild(QLineEdit, 'down_path_text')
-
             # 根据你的UI文件中的控件名称
 
             # 查询按钮
@@ -118,6 +118,14 @@ class SelectWindown(QMainWindow):
         def show_select_button(self):
             # 获取输入框的文本
             self.select_ID = self.input.text()
+            # if self.open_DB:
+            #     sql = f"SELECT work_state FROM `works` WHERE  work_id = '{self.select_ID}' "
+            #     flag, status = DateBase().select(sql)
+            #     status = int(status[0][0])
+            #     print(status)
+            #     if status < 0:
+            #         self.in_db_text.setText(self, '已入库')
+
             self.group_list_output.clear()
             self.url_ui_status.clear()
             self.url_ui_list.clear()

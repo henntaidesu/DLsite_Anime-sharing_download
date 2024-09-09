@@ -40,7 +40,7 @@ def re_down_table_short_url(work_list, i=0):
                   f"SET `work_down_url` = '{LongURL}', `url_state` = '0', `down_web_name` = '{Name}', " \
                   f"`update_time` = '{time}' WHERE `id` = {Id};"
 
-            Flag = DateBase().update_all(sql)
+            Flag = DateBase().update(sql)
 
             if Flag is True:
                 logger.write_log(f"Update Short ID:{Id} New DownName:{Name}", 'info')

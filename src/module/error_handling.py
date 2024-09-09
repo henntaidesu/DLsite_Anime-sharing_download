@@ -5,7 +5,7 @@ class a:
     @staticmethod
     def aaa():
         sql1 = 'SELECT `1` FROM `DLsite`.`test` where `2` is null'
-        flag, data = DateBase().select_all(sql1)
+        flag, data = DateBase().select(sql1)
         for i in data:
             aaa = i[0]
             rj = aaa[29:]
@@ -18,14 +18,14 @@ class a:
             sql = (f"UPDATE `DLsite`.`test` set `2` = '{rj}', `3` = '{name}' "
                    f"WHERE `1` = '{aaa}'")
 
-            DateBase().update_all(sql)
+            DateBase().update(sql)
 
             print(aaa)
 
     @staticmethod
     def bbb():
         sql = 'SELECT * FROM `DLsite`.`test` where `4` is null'
-        flag, data = DateBase().select_all(sql)
+        flag, data = DateBase().select(sql)
 
         for i in data:
             rj = i[1]
@@ -33,19 +33,19 @@ class a:
             print(f'{rj}   {title}')
 
             sql1 = f"DELETE FROM `DLsite`.`works` WHERE `work_id` = '{rj}';"
-            DateBase().delete_all(sql1)
+            DateBase().delete(sql1)
 
             sql2 = f"SELECT work_id FROM `DLsite`.`works` WHERE `work_name` = '{title}'"
-            flag, bbb = DateBase().select_all(sql2)
+            flag, bbb = DateBase().select(sql2)
             bbb = bbb[0][0]
             print(bbb)
 
             sql3 = f"UPDATE works set `work_id` = '{rj}' WHERE `work_name` = '{title}'"
             print(sql3)
-            DateBase().update_all(sql3)
+            DateBase().update(sql3)
 
             sql4 = f"INSERT INTO `DLsite`.`works`(`work_id`) VALUES ('{bbb}')"
-            DateBase().insert_all(sql4)
+            DateBase().insert(sql4)
 
             sql5 = f"UPDATE `DLsite`.`test` SET `4` = '1' WHERE  `2` = '{rj}' "
-            DateBase().insert_all(sql5)
+            DateBase().insert(sql5)

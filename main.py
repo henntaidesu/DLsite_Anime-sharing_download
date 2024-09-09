@@ -9,8 +9,7 @@ if __name__ == '__main__':
     multiprocessing.freeze_support()
     flag = create_log_folder()
     if flag is True:
-        while True:
-            Index().choose()
+        Index().choose()
     else:
         sys.exit()
 

@@ -25,7 +25,7 @@ class DateBase:
         read_db_conf = Config()
         self.db = read_db_conf.read_database()
 
-    def insert_all(self, sql):
+    def insert(self, sql):
         try:
             cursor = self.db.cursor()
             cursor.execute(sql)
@@ -44,7 +44,7 @@ class DateBase:
                 self.print_log.write_log(sql, 'error')
                 return False
 
-    def update_all(self, sql):
+    def update(self, sql):
         try:
             cursor = self.db.cursor()
             cursor.execute(sql)
@@ -61,7 +61,7 @@ class DateBase:
             if hasattr(self, 'db') and self.db:
                 self.db.close()
 
-    def select_all(self, sql):
+    def select(self, sql):
         try:
             cursor = self.db.cursor()
             cursor.execute(sql)
@@ -77,7 +77,7 @@ class DateBase:
             if hasattr(self, 'db') and self.db:
                 self.db.close()
 
-    def delete_all(self, sql):
+    def delete(self, sql):
         try:
             cursor = self.db.cursor()
             cursor.execute(sql)

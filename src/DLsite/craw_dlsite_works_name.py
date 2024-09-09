@@ -31,7 +31,7 @@ def craw_dlsite_works(work_list, i=0):
             if not Data[0] or not Data[1]:
                 sql = f"UPDATE `works` SET  `work_state` = '1', `update_time` = '{formatted_date}' " \
                       f" WHERE `work_id` = '{rj_number}'"
-                DateBase().insert_all(sql)
+                DateBase().insert(sql)
                 logger.write_log(f"{rj_number} - 接口无返回值", "warning")
 
                 continue
@@ -39,7 +39,7 @@ def craw_dlsite_works(work_list, i=0):
                 logger.write_log(f"{rj_number} - 接口存在重复数据", "error")
                 sql = f"UPDATE `works` SET  `work_state` = '4', `update_time` = '{formatted_date}' " \
                       f" WHERE `work_id` = '{rj_number}'"
-                DateBase().insert_all(sql)
+                DateBase().insert(sql)
                 continue
             else:
                 maker_id = Data[0][0]['work_maker_id']
@@ -80,9 +80,9 @@ def craw_dlsite_works(work_list, i=0):
                 # print(work_workno, "项目作品名称", Data[0][0]['work_work_name'])
                 logger.write_log(f"{work_workno} - 项目作品名称 - {Data[0][0]['work_work_name']}", 'info')
                 # print(sql1)
-                DateBase().insert_all(sql1)
+                DateBase().insert(sql1)
                 sql = f"SELECT maker_id FROM `maker` WHERE maker_id = '{Data[0][0]['work_maker_id']}' "
-                result = DateBase().select_all(sql)
+                result = DateBase().select(sql)
                 if result is True:
                     continue
                 else:
@@ -97,7 +97,7 @@ def craw_dlsite_works(work_list, i=0):
                            f" '{Data[1][0]['maker_age_category']}', " \
                            f"'{Data[1][0]['maker_is_ana']}');"
                     # print(sql)
-                    DateBase().insert_all(sql2)
+                    DateBase().insert(sql2)
 
         # random_float = random.uniform(0, 2)
         # print(random_float)

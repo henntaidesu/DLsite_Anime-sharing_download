@@ -8,7 +8,7 @@ import re
 
 def rjnumber_generate():
     sql = f"SELECT work_id FROM works ORDER BY insert_time desc LIMIT 1;"
-    flag, WorkList = DateBase().select_all(sql)
+    flag, WorkList = DateBase().select(sql)
 
     rj_number = int(str(WorkList[0][0])[2:]) + 1
 
@@ -25,7 +25,7 @@ def rjnumber_generate():
             break
         print(f"{new_Num} Now: {flag}")
         sql = f"INSERT INTO `DLsite`.`works`(`work_id`, `insert_time`) VALUES ('{new_Num}','{Time_a().now_time3()}');"
-        DateBase().insert_all(sql)
+        DateBase().insert(sql)
 
 
 def RjIdGenerateOLD():
@@ -42,4 +42,4 @@ def RjIdGenerateOLD():
         rj_number = RJ + new_Num
         print(f"{rj_number}")
         sql = f"INSERT INTO `DLsite`.`works`(`work_id`, `insert_time`) VALUES ('{rj_number}','{Time_a().now_time3()}');"
-        DateBase().insert_all(sql)
+        DateBase().insert(sql)
