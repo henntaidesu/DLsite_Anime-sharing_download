@@ -195,6 +195,7 @@ class SelectWindown(QMainWindow):
         self.clear_display()
         # 获取输入框的文本
         self.select_ID = self.input.text()
+
         if self.open_DB:
             sql = f"SELECT work_state FROM `works` WHERE  work_id = '{self.select_ID}'"
             flag, self.work_table_status = DateBase().select(sql)
