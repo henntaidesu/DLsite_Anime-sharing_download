@@ -32,7 +32,7 @@ level = error
 
 
 
-![indexUI](img\indexUI.png)
+![indexUI](img/indexUI.png)
 
  
 
@@ -48,14 +48,14 @@ level = error
 
 ### 使用说明
 
-![DLsite_WEB](img\DLsite_WEB.png)
+![DLsite_WEB](img/DLsite_WEB.png)
 
 ``` tex
 比如 需要检索这个作品下载 
 将RJ号复制到此处 点击搜索 
 ```
 
-![SELECT](img\SELECT.png)
+![SELECT](img/SELECT.png)
 
  ``` tex
  点击搜索 因为该作品我已经下载并且入库 所以数据库状态会显示‘已下载’
