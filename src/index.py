@@ -55,11 +55,10 @@ class Index:
                 from src.DLsite.craw_dlsite_infomation import crawl_work_web_information
                 sql = (f"SELECT work_id FROM `works` WHERE work_state is NULL or work_state = '1' "
                        f"and update_time < '{Time_a().tow_days_ago()} 00:00:00'")
-                self.process.multi_process_as_up_group(sql, craw_dlsite_works)
-
+                Process().multi_process_as_up_group(sql, craw_dlsite_works)
                 # elif flag == '3':
                 sql = f"SELECT work_id, work_type FROM works WHERE work_state in ('2')"
-                self.process.multi_process_as_up_group(sql, crawl_work_web_information)
+                Process().multi_process_as_up_group(sql, crawl_work_web_information)
 
             # elif flag == '4':
             #     from src.Anime_sharing.get_as_work_upgroup_url import get_as_work_upgroup_url
@@ -87,19 +86,18 @@ class Index:
             #           f"WHERE url_state = '0' and down_web_name IN {down_name}  limit 10000"
             #     self.process.multi_process_as_up_group(sql, down_url_test)
 
-            elif flag == '8':
+            # elif flag == '8':
 
                 # sql = f"SELECT * FROM `DLsite`.`test_copy1` where `2` is null"
                 # flag, data = DateBase().select_all(sql)
                 # for i in data:
                 # rj = 'RJ01053406'
                 # unzip(rj)
-                pass
 
-            elif flag == '9':
-                file_copy()
+            # elif flag == '9':
+            #     file_copy()
 
             days = 10
             pause_duration = 86400 * days
-            print(f'{days}')
+            print(f'暂停{days}天')
             time.sleep(pause_duration)
