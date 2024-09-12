@@ -29,8 +29,10 @@ class Index:
             window = IndexWindow()
             window.show()
             app.exec_()
-        except ExceptionGroup as e:
-            print(e)
+        except Exception as e:  # 将 ExceptionGroup 改为通用的 Exception
+            print(f"An error occurred: {e}")
+        else:
+            raise ValueError('未知错误')  # 只有在 try 块成功执行后才会抛出这个错误
 
     def open_CLI(self):
         while True:

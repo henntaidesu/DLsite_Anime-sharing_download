@@ -44,8 +44,6 @@ class Log:
     def print_log(self):
         pass
 
-
-
     def write_log(self, text, log_type):
         # 输出不同级别的日志
         if self.log_level == "error":
