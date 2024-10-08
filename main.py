@@ -2,7 +2,11 @@ import sys
 from src.index import Index
 from src.module.create_folder import create_log_folder
 import multiprocessing
-
+import sys
+import asyncio
+from PyQt5.QtWidgets import QApplication
+from qasync import QEventLoop
+from src.QTui.select_UI import SelectWindown
 from src.web_drive.katfile_auto_down import GETXFSS
 
 # GETXFSS()

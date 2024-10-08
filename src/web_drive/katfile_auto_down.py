@@ -20,7 +20,7 @@ def GETXFSS():
     headers = {
         "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
         "accept-encoding": "gzip, deflate, br, zstd",
-         "accept-language": "zh-CN,zh;q=0.9,ja-JP;q=0.8,ja;q=0.7,en;q=0.6,zh-TW;q=0.5",
+        "accept-language": "zh-CN,zh;q=0.9,ja-JP;q=0.8,ja;q=0.7,en;q=0.6,zh-TW;q=0.5",
         "cache-control": "max-age=0",
         # "content-length": "92",
         "content-type": "application/x-www-form-urlencoded",
@@ -44,7 +44,12 @@ def GETXFSS():
         data = response.headers
         print(data)
 
-        cf_headers = {'Date': 'Mon, 07 Oct 2024 05:05:56 GMT', 'Content-Type': 'text/html ; charset=UTF-8', 'Transfer-Encoding': 'chunked', 'Connection': 'keep-alive', 'Expires': 'Sun, 06 Oct 2024 05:05:56 GMT', 'CF-Cache-Status': 'DYNAMIC', 'Report-To': '{"endpoints":[{"url":"https:\\/\\/a.nel.cloudflare.com\\/report\\/v4?s=RDYoYKqLhu00diW3UNCCHMVPLAqMruVFZiwZJVRd0wp6udXQp4NQTIKtGPIItpU9t6ZyScXasbAsLKyff9p3ix%2Byqw%2FS6mI0kqKPlKvMKrMBNhbJWpmW3PFmSbnO"}],"group":"cf-nel","max_age":604800}', 'NEL': '{"success_fraction":0,"report_to":"cf-nel","max_age":604800}', 'Server': 'cloudflare', 'CF-RAY': '8ceb5be4ee3e2623-NRT'}
+        cf_headers = {'Date': 'Mon, 07 Oct 2024 05:05:56 GMT', 'Content-Type': 'text/html ; charset=UTF-8',
+                      'Transfer-Encoding': 'chunked', 'Connection': 'keep-alive',
+                      'Expires': 'Sun, 06 Oct 2024 05:05:56 GMT', 'CF-Cache-Status': 'DYNAMIC',
+                      'Report-To': '{"endpoints":[{"url":"https:\\/\\/a.nel.cloudflare.com\\/report\\/v4?s=RDYoYKqLhu00diW3UNCCHMVPLAqMruVFZiwZJVRd0wp6udXQp4NQTIKtGPIItpU9t6ZyScXasbAsLKyff9p3ix%2Byqw%2FS6mI0kqKPlKvMKrMBNhbJWpmW3PFmSbnO"}],"group":"cf-nel","max_age":604800}',
+                      'NEL': '{"success_fraction":0,"report_to":"cf-nel","max_age":604800}', 'Server': 'cloudflare',
+                      'CF-RAY': '8ceb5be4ee3e2623-NRT'}
         login_data = {
             'op': 'login',
             'token': '',

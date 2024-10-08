@@ -16,6 +16,7 @@ class Index:
         self.process = Process()
 
     def choose(self):
+
         if Config().read_start_type():
             self.open_GUI()
         else:
@@ -26,10 +27,23 @@ class Index:
             try:
                 from PyQt5.QtWidgets import QApplication
                 from src.QTui.index_UI import IndexWindow
+                import sys
+                import asyncio
+                from qasync import QEventLoop
                 app = QApplication(sys.argv)
+                loop = QEventLoop(app)
+                asyncio.set_event_loop(loop)
+
                 window = IndexWindow()
                 window.show()
-                app.exec_()
+
+                with loop:  # 确保 asyncio 和 Qt 的事件循环兼容
+                    loop.run_forever()
+
+                # app = QApplication(sys.argv)
+                # window = IndexWindow()
+                # window.show()
+                # app.exec_()
             except Exception as e:
                 print(f"An error occurred: {e}")
             else:

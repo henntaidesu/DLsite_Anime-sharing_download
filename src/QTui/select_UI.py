@@ -1,3 +1,4 @@
+import asyncio
 import os
 import re
 import sys
@@ -12,12 +13,12 @@ from src.module.datebase_execution import DateBase
 from src.dictionary.db_works import works_status
 from src.DLsite.craw_dlsite_works_name import UI_A_craw_dlsite_works
 from src.DLsite.craw_dlsite_infomation import UI_A_crawl_work_web_information
+from PyQt5.QtCore import QThread, pyqtSignal
 import webbrowser
 import jellyfish
 
 
 class SelectWindown(QMainWindow):
-
     def __init__(self):
         super().__init__()
         self.url_list = []
@@ -121,11 +122,17 @@ class SelectWindown(QMainWindow):
         else:
             self.similarity.setStyleSheet('color: black;')
 
-    def exec_download(self):
+    async def async_exec_download(self):
         from src.web_drive.katfile_auto_down import QTUI_katfile_down
         download_path = f"{Config().read_file_down_path()}\\{self.select_ID}"
         os.makedirs(download_path, exist_ok=True)
-        QTUI_katfile_down(self.down_url_list, self.select_ID)
+        # 使用 await 等待异步的下载协程
+        await asyncio.to_thread(QTUI_katfile_down, self.down_url_list, self.select_ID)
+        print("下载完成")
+
+    def exec_download(self):
+        # 使用 asyncio.create_task 启动异步任务，而不是直接调用协程
+        asyncio.create_task(self.async_exec_download())
 
     def set_new_as_title(self):
         self.new_as_title.setText(self.AS_title)
