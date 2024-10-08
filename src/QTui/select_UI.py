@@ -59,7 +59,7 @@ class SelectWindown(QMainWindow):
         # 下载列表按钮
         self.url_ui_list.itemClicked.connect(self.download_url_item_click)
         # 下载按钮
-        # self.download_button.clicked.connect(self.exec_download)
+        self.download_button.clicked.connect(self.exec_download)
         # 入库按钮
         self.confirm_in_db_button.clicked.connect(self.confirm_in_db_func)
         # 校验按钮
@@ -122,9 +122,10 @@ class SelectWindown(QMainWindow):
             self.similarity.setStyleSheet('color: black;')
 
     def exec_download(self):
-        from src.web_drive.web_download import download
-        download_path = f"{Config().read_file_down_path()}/{self.select_ID}"
+        from src.web_drive.katfile_auto_down import QTUI_katfile_down
+        download_path = f"{Config().read_file_down_path()}\\{self.select_ID}"
         os.makedirs(download_path, exist_ok=True)
+        QTUI_katfile_down(self.down_url_list, self.select_ID)
 
     def set_new_as_title(self):
         self.new_as_title.setText(self.AS_title)

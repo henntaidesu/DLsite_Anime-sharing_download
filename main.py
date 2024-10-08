@@ -3,7 +3,9 @@ from src.index import Index
 from src.module.create_folder import create_log_folder
 import multiprocessing
 
+from src.web_drive.katfile_auto_down import GETXFSS
 
+# GETXFSS()
 
 if __name__ == '__main__':
     multiprocessing.freeze_support()

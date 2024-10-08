@@ -22,17 +22,18 @@ class Index:
             self.open_CLI()
     @staticmethod
     def open_GUI():
-        try:
-            from PyQt5.QtWidgets import QApplication
-            from src.QTui.index_UI import IndexWindow
-            app = QApplication(sys.argv)
-            window = IndexWindow()
-            window.show()
-            app.exec_()
-        except Exception as e:  # 将 ExceptionGroup 改为通用的 Exception
-            print(f"An error occurred: {e}")
-        else:
-            raise ValueError('未知错误')  # 只有在 try 块成功执行后才会抛出这个错误
+        while True:
+            try:
+                from PyQt5.QtWidgets import QApplication
+                from src.QTui.index_UI import IndexWindow
+                app = QApplication(sys.argv)
+                window = IndexWindow()
+                window.show()
+                app.exec_()
+            except Exception as e:
+                print(f"An error occurred: {e}")
+            else:
+                raise ValueError('未知错误')
 
     def open_CLI(self):
         while True:

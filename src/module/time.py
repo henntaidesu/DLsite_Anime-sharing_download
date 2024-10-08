@@ -35,6 +35,12 @@ class Time_a:
         return formatted_date
 
 
+def TT():
+    Time = time.time()
+    datetime_obj = datetime.fromtimestamp(Time)
+    formatted_date = datetime_obj.strftime("%H:%M:%S")
+    return formatted_date
+
 def now_time():
     Time = time.time()
     datetime_obj = datetime.fromtimestamp(Time)
