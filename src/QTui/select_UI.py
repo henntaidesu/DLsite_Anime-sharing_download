@@ -127,7 +127,7 @@ class SelectWindown(QMainWindow):
         download_path = f"{Config().read_file_down_path()}\\{self.select_ID}"
         os.makedirs(download_path, exist_ok=True)
         # 使用 await 等待异步的下载协程
-        await asyncio.to_thread(QTUI_katfile_down, self.down_url_list, self.select_ID)
+        await asyncio.to_thread(QTUI_katfile_down, self.down_url_list, self.select_ID, download_path)
         print("下载完成")
 
     def exec_download(self):

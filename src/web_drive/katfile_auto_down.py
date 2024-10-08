@@ -272,7 +272,7 @@ def auto_katfile_down():
         err1(e)
 
 
-def QTUI_katfile_down(download_url_list, WorkId):
+def QTUI_katfile_down(download_url_list, WorkId, download_path):
     try:
         # 设置代理
         open_proxy, proxy_url = Config().read_proxy()
@@ -309,8 +309,7 @@ def QTUI_katfile_down(download_url_list, WorkId):
                     print("或者未开启Direct downloads，请前往个人中心开启")
                     print("https://katfile.com/?op=my_account")
                     sys.exit()
-            down_path = create_folder(WorkId)
-            os.makedirs(down_path, exist_ok=True)  # 确保下载路径存在
+            os.makedirs(download_path, exist_ok=True)  # 确保下载路径存在
             if response.is_redirect:
                 # 获取重定向后的 URL
                 redirected_url = response.headers.get('location')
@@ -322,7 +321,7 @@ def QTUI_katfile_down(download_url_list, WorkId):
                 print("filename:" + filename)
 
                 # 检查本地文件是否存在
-                file_path = os.path.join(down_path, filename)
+                file_path = os.path.join(download_path, filename)
                 if os.path.exists(file_path):
                     # 如果文件已存在，获取已下载的文件大小
                     resume_header = {'Range': 'bytes=%d-' % os.path.getsize(file_path)}
