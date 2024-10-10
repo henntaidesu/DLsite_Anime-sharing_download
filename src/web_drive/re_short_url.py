@@ -1,5 +1,5 @@
 from src.module.time import Time_a
-from src.module.datebase_execution import DateBase
+from src.module.datebase_execution import MySQLDB
 from src.module.log import Log
 import requests
 
@@ -40,7 +40,7 @@ def re_down_table_short_url(work_list, i=0):
                   f"SET `work_down_url` = '{LongURL}', `url_state` = '0', `down_web_name` = '{Name}', " \
                   f"`update_time` = '{time}' WHERE `id` = {Id};"
 
-            Flag = DateBase().update(sql)
+            Flag = MySQLDB().update(sql)
 
             if Flag is True:
                 logger.write_log(f"Update Short ID:{Id} New DownName:{Name}", 'info')

@@ -2,7 +2,7 @@ import requests
 from lxml import html
 
 from src.module.time import Time_a
-from src.module.datebase_execution import DateBase
+from src.module.datebase_execution import MySQLDB
 from src.module.log import Log
 
 logger = Log()
@@ -58,7 +58,7 @@ def down_url_test(WorkList):
                 sql = f"UPDATE `AS_work_down_URL` SET  `url_state` = '9', `updata_time` = '{time}' WHERE `id` = {Id};"
             elif Flag is True:
                 sql = f"UPDATE `AS_work_down_URL` SET  `url_state` = '1', `updata_time` = '{time}' WHERE `id` = {Id};"
-        flag = DateBase().update(sql)
+        flag = MySQLDB().update(sql)
 
         if flag is True:
             logger.write_log(f"UPDATE AS_work_down_URL URLStare:{Flag} ID:{Id} DownName:{DownName}", 'info')

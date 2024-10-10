@@ -2,6 +2,7 @@ import asyncio
 import os
 import re
 import sys
+import uuid
 from PyQt5.QtWidgets import QMainWindow, QLineEdit, QPushButton, QListWidget, QLabel
 from PyQt5.uic import loadUi
 from src.Anime_sharing.get_as_work_upgroup_url import get_as_work_upgroup_url, as_work_url
@@ -9,13 +10,15 @@ from src.Anime_sharing.get_webdrive_url import get_work_down_url
 from src.web_drive.doun_url_test import katfile
 from src.DLsite.DLapi_call import get_work_name
 from src.module.conf_operate import Config
-from src.module.datebase_execution import DateBase
+from src.module.datebase_execution import MySQLDB
 from src.dictionary.db_works import works_status
 from src.DLsite.craw_dlsite_works_name import UI_A_craw_dlsite_works
 from src.DLsite.craw_dlsite_infomation import UI_A_crawl_work_web_information
 from PyQt5.QtCore import QThread, pyqtSignal
 import webbrowser
 import jellyfish
+from src.web_drive.katfile_auto_down import QTUI_katfile_down
+from src.module.datebase_execution import SQLiteDB
 
 
 class SelectWindown(QMainWindow):
@@ -30,6 +33,8 @@ class SelectWindown(QMainWindow):
         self.work_table_status = None
         self.open_DB = Config().open_DB()
         self.works_status = works_status()
+        self.push_download_list = []
+
         # 加载 .ui 文件
         loadUi("src/QTui/ui_file/select.ui", self)  # 请替换为你的 .ui 文件的路径
 
@@ -52,53 +57,58 @@ class SelectWindown(QMainWindow):
         self.download_check_button = self.findChild(QPushButton, 'download_check')
 
         # 查询按钮
-        self.search_button.clicked.connect(self.show_select_button)
+        # self.search_button.clicked.connect(self.show_select_button)
+        self.search_button.clicked.connect(lambda: asyncio.create_task(self.show_select_button()))
         # 测试连接按钮
-        self.test_down_url_button.clicked.connect(self.exec_test_url_button)
+        # self.test_down_url_button.clicked.connect(self.exec_test_url_button)
+        self.test_down_url_button.clicked.connect(lambda: asyncio.create_task(self.exec_test_url_button()))
         # 上传者列表按钮
         self.group_list_output.itemClicked.connect(self.group_list_item_click)
         # 下载列表按钮
         self.url_ui_list.itemClicked.connect(self.download_url_item_click)
         # 下载按钮
-        self.download_button.clicked.connect(self.exec_download)
+        # self.download_button.clicked.connect(self.exec_download)
+        self.download_button.clicked.connect(lambda: asyncio.create_task(self.exec_download()))
         # 入库按钮
-        self.confirm_in_db_button.clicked.connect(self.confirm_in_db_func)
+        # self.confirm_in_db_button.clicked.connect(self.confirm_in_db_func)
+        self.confirm_in_db_button.clicked.connect(lambda: asyncio.create_task(self.confirm_in_db_func()))
         # 校验按钮
-        self.download_check_button.clicked.connect(self.show_download_check)
+        # self.download_check_button.clicked.connect(self.show_download_check)
+        self.download_check_button.clicked.connect(lambda: asyncio.create_task(self.show_download_check()))
 
         if not self.open_DB:
             self.db_status_text.setText('未开启数据库模式')
 
-    def show_download_check(self):
+    async def show_download_check(self):
         self.clear_display()
         self.select_ID = self.input.text()
 
         if self.open_DB:
             sql = f"SELECT work_state FROM `works` WHERE  work_id = '{self.select_ID}'"
-            flag, self.work_table_status = DateBase().select(sql)
+            flag, self.work_table_status = MySQLDB().select(sql)
             status = self.work_table_status[0][0]
             if status:
                 self.db_status.setText(f'{self.works_status[status]}')
         self.aaa()
 
-    def confirm_in_db_func(self):
+    async def confirm_in_db_func(self):
         if self.open_DB:
             if int(self.work_table_status[0][0]) < 0:
                 pass
             elif self.work_table_status[0][0] in ['0', '1']:
                 UI_A_craw_dlsite_works(self.select_ID)
                 sql = f"SELECT work_type FROM `works` WHERE  work_id = '{self.select_ID}'"
-                flag, data = DateBase().select(sql)
+                flag, data = MySQLDB().select(sql)
                 WorkType = data[0][0]
                 UI_A_crawl_work_web_information(self.select_ID, WorkType)
             elif self.work_table_status[0][0] in ['2']:
                 sql = f"SELECT work_type FROM `works` WHERE  work_id = '{self.select_ID}'"
-                flag, data = DateBase().select(sql)
+                flag, data = MySQLDB().select(sql)
                 WorkType = data[0][0]
                 UI_A_crawl_work_web_information(self.select_ID, WorkType)
             elif int(self.work_table_status[0][0]) > 6:
                 sql = f"UPDATE `DLsite`.`works` SET  `work_state` = '-1' WHERE `work_id` = '{self.select_ID}';"
-                DateBase().update(sql)
+                MySQLDB().update(sql)
 
     def title_similarity(self):
         import jellyfish
@@ -122,17 +132,31 @@ class SelectWindown(QMainWindow):
         else:
             self.similarity.setStyleSheet('color: black;')
 
-    async def async_exec_download(self):
-        from src.web_drive.katfile_auto_down import QTUI_katfile_down
-        download_path = f"{Config().read_file_down_path()}\\{self.select_ID}"
-        os.makedirs(download_path, exist_ok=True)
-        # 使用 await 等待异步的下载协程
-        await asyncio.to_thread(QTUI_katfile_down, self.down_url_list, self.select_ID, download_path)
-        print("下载完成")
+    # async def async_exec_download(self):
+    #     download_path = f"{Config().read_file_down_path()}\\{self.select_ID}"
+    #     os.makedirs(download_path, exist_ok=True)
+    #     # 使用 await 等待异步的下载协程
+    #     await asyncio.to_thread(QTUI_katfile_down, self.down_url_list, self.select_ID, download_path)
+    #     print("下载完成")
 
-    def exec_download(self):
-        # 使用 asyncio.create_task 启动异步任务，而不是直接调用协程
-        asyncio.create_task(self.async_exec_download())
+    async def exec_download(self):
+        # print('下载')
+        # # 初始化 DownloadList
+        # await DownloadList.initialize()
+
+        if self.down_url_list:
+            for i in self.down_url_list:
+                sql = f'''INSERT INTO "main"."download_list" ("UUID", "work_id", "url", "status", "long", "delete")
+                 VALUES ('{uuid.uuid4()}', '{self.select_ID}', '{i}', '0', '1', '1');'''
+                data = {
+                    'RJNumber': f'{self.select_ID}',
+                    'url': i,
+                    'status': True,
+                    'long': 0,
+                    "delete": False
+                }
+                SQLiteDB().insert(sql)
+            self.down_url_list = []
 
     def set_new_as_title(self):
         self.new_as_title.setText(self.AS_title)
@@ -178,7 +202,7 @@ class SelectWindown(QMainWindow):
             down_url = self.down_url_list[down_url_flag]
             webbrowser.open(down_url)
 
-    def exec_test_url_button(self):
+    async def exec_test_url_button(self):
         status_list = []
         for i in self.down_url_list:
             if katfile(i):
@@ -199,14 +223,14 @@ class SelectWindown(QMainWindow):
         self.if_rj_text.setText('DLsite ID：')
         self.db_status_text.setText('')
 
-    def show_select_button(self):
+    async def show_select_button(self):
         self.clear_display()
         # 获取输入框的文本
         self.select_ID = self.input.text()
 
         if self.open_DB:
             sql = f"SELECT work_state FROM `works` WHERE  work_id = '{self.select_ID}'"
-            flag, self.work_table_status = DateBase().select(sql)
+            flag, self.work_table_status = MySQLDB().select(sql)
             status = self.work_table_status[0][0]
             if status:
                 print(status)

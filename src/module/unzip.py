@@ -4,7 +4,7 @@ import time
 from tqdm import tqdm
 import patoolib
 from src.module.time import Time_a
-from src.module.datebase_execution import DateBase
+from src.module.datebase_execution import MySQLDB
 from src.module.conf_operate import Config
 from src.module.log import Log, err1, err2
 
@@ -87,7 +87,7 @@ def unzip(work_id):
                 now_time = Time_a().now_time()
                 sql = (f"UPDATE `DLsite`.`works` SET `update_time` = '{now_time}', "
                        f"`work_state` = '-2' WHERE `work_id` = '{work_id}';")
-                DateBase().update(sql)
+                MySQLDB().update(sql)
                 un_flag = rename(folder_path)
                 logger.write_log(f'{work_id} 解压成功', 'info')
                 if un_flag is True:
@@ -129,7 +129,7 @@ def auto_down_to_unzip(work_id):
         if len(file_name_list) == 0:
             now_time = Time_a().now_time()
             sql = f"UPDATE `DLsite`.`works` SET `updata_time` = '{now_time}', `work_state` = '-2' WHERE `work_id` = '{work_id}';"
-            DateBase().update(sql)
+            MySQLDB().update(sql)
             un_flag = rename(folder_path)
             logger.write_log(f'{work_id} 解压成功', 'info')
             if un_flag is True:

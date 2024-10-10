@@ -1,6 +1,6 @@
 import gc
 from src.module.time import Time_a
-from src.module.datebase_execution import DateBase
+from src.module.datebase_execution import MySQLDB
 from src.DLsite.DLapi_call import get_dlsite_work_name
 from src.module.log import Log, err1
 
@@ -31,7 +31,7 @@ def craw_dlsite_works(work_list, i=0):
             if not Data[0] or not Data[1]:
                 sql = f"UPDATE `works` SET  `work_state` = '1', `update_time` = '{formatted_date}' " \
                       f" WHERE `work_id` = '{rj_number}'"
-                DateBase().insert(sql)
+                MySQLDB().insert(sql)
                 logger.write_log(f"{rj_number} - 接口无返回值", "warning")
 
                 continue
@@ -39,7 +39,7 @@ def craw_dlsite_works(work_list, i=0):
                 logger.write_log(f"{rj_number} - 接口存在重复数据", "error")
                 sql = f"UPDATE `works` SET  `work_state` = '4', `update_time` = '{formatted_date}' " \
                       f" WHERE `work_id` = '{rj_number}'"
-                DateBase().insert(sql)
+                MySQLDB().insert(sql)
                 continue
             else:
                 maker_id = Data[0][0]['work_maker_id']
@@ -80,9 +80,9 @@ def craw_dlsite_works(work_list, i=0):
                 # print(work_workno, "项目作品名称", Data[0][0]['work_work_name'])
                 logger.write_log(f"{work_workno} - 项目作品名称 - {Data[0][0]['work_work_name']}", 'info')
                 # print(sql1)
-                DateBase().insert(sql1)
+                MySQLDB().insert(sql1)
                 sql = f"SELECT maker_id FROM `maker` WHERE maker_id = '{Data[0][0]['work_maker_id']}' "
-                result = DateBase().select(sql)
+                result = MySQLDB().select(sql)
                 if result is True:
                     continue
                 else:
@@ -97,7 +97,7 @@ def craw_dlsite_works(work_list, i=0):
                            f" '{Data[1][0]['maker_age_category']}', " \
                            f"'{Data[1][0]['maker_is_ana']}');"
                     # print(sql)
-                    DateBase().insert(sql2)
+                    MySQLDB().insert(sql2)
 
         # random_float = random.uniform(0, 2)
         # print(random_float)
@@ -129,14 +129,14 @@ def UI_A_craw_dlsite_works(rj_number):
         if not Data[0] or not Data[1]:
             sql = f"UPDATE `works` SET  `work_state` = '1', `update_time` = '{formatted_date}' " \
                   f" WHERE `work_id` = '{rj_number}'"
-            DateBase().insert(sql)
+            MySQLDB().insert(sql)
             logger.write_log(f"{rj_number} - 接口无返回值", "warning")
 
         if Data == "False":
             logger.write_log(f"{rj_number} - 接口存在重复数据", "error")
             sql = f"UPDATE `works` SET  `work_state` = '4', `update_time` = '{formatted_date}' " \
                   f" WHERE `work_id` = '{rj_number}'"
-            DateBase().insert(sql)
+            MySQLDB().insert(sql)
 
         else:
             maker_id = Data[0][0]['work_maker_id']
@@ -177,9 +177,9 @@ def UI_A_craw_dlsite_works(rj_number):
             # print(work_workno, "项目作品名称", Data[0][0]['work_work_name'])
             logger.write_log(f"{work_workno} - 项目作品名称 - {Data[0][0]['work_work_name']}", 'info')
             # print(sql1)
-            DateBase().insert(sql1)
+            MySQLDB().insert(sql1)
             sql = f"SELECT maker_id FROM `maker` WHERE maker_id = '{Data[0][0]['work_maker_id']}' "
-            result = DateBase().select(sql)
+            result = MySQLDB().select(sql)
             if result is True:
                 pass
             else:
@@ -194,7 +194,7 @@ def UI_A_craw_dlsite_works(rj_number):
                        f" '{Data[1][0]['maker_age_category']}', " \
                        f"'{Data[1][0]['maker_is_ana']}');"
                 # print(sql)
-                DateBase().insert(sql2)
+                MySQLDB().insert(sql2)
 
         # random_float = random.uniform(0, 2)
         # print(random_float)

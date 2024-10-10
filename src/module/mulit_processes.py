@@ -1,5 +1,5 @@
 import time
-from src.module.datebase_execution import DateBase
+from src.module.datebase_execution import MySQLDB
 import multiprocessing
 from src.module.conf_operate import Config
 from src.module.log import Log
@@ -27,7 +27,7 @@ class Process:
     def multi_process_as_up_group(self, sql, func):
         try:
             processes = int(self.conf.read_processes())
-            flag, work_list = DateBase().select(sql)
+            flag, work_list = MySQLDB().select(sql)
             if len(work_list) == 0:
                 print("已完成获取AS UPGroup")
                 return False

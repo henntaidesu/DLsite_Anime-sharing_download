@@ -2,7 +2,7 @@ import requests
 from lxml import html
 
 from src.module.time import Time_a
-from src.module.datebase_execution import DateBase, TrimString
+from src.module.datebase_execution import MySQLDB, TrimString
 from src.module.log import Log, err1, err2
 
 logger = Log()
@@ -37,11 +37,11 @@ def as_work_down_url(work_list, i=0):
                     logger.write_log(f"groupID - {Id} - 作品 - {work_id} - 未获取到下载连接", 'error')
                     sql = (f"UPDATE `AS_work_updata_group` SET  `url_state` = '8', "
                            f"`update_time` = '{Time_a().now_time()}' WHERE `id` = {Id};")
-                    DateBase().update(sql)
+                    MySQLDB().update(sql)
             except Exception as e:
                 sql = (f"UPDATE `AS_work_updata_group` SET  `url_state` = '8', `update_time` = '{Time_a().now_time()}'"
                        f" WHERE `id` = {Id};")
-                DateBase().update(sql)
+                MySQLDB().update(sql)
                 logger.write_log(f"groupID - {Id} - 作品 - {work_id} - 源HTML错误", 'error')
                 if type(e).__name__ == 'SSLError' or type(e).__name__ == 'NameError' or type(e).__name__ == 'TypeError':
                     as_work_down_url(work_list, i)
@@ -75,11 +75,11 @@ def insert_down_url(down_url_set, Id, WorkId, URLState):
 
         sql = f"INSERT INTO `AS_work_down_URL` (`group_table_id`, `work_down_url`, `url_state`,`down_web_name`, " \
               f"`update_time`)VALUES ({Id}, '{URL}', '0', '{WebName}', '{time}');"
-        DateBase().insert(sql)
+        MySQLDB().insert(sql)
 
     sql = (f"UPDATE `AS_work_updata_group` SET  `url_state` = '{URLState}', `update_time` = '{Time_a().now_time()}"
            f" WHERE `id` = {Id};")
-    Flag = DateBase().update(sql)
+    Flag = MySQLDB().update(sql)
     if Flag is True:
         LenData = len(unique_urls)  # 使用去重后的集合长度
         logger.write_log(f"已查询到groupID - {Id} - 作品 - {WorkId} - 有{LenData}个下载连接，"

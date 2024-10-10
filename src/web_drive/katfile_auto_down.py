@@ -6,9 +6,10 @@ import requests
 from tqdm import tqdm
 from src.module.log import Log, err1, err2
 from src.module.conf_operate import Config, WriteConf
-from src.module.datebase_execution import DateBase
+from src.module.datebase_execution import MySQLDB
 from src.module.time import Time_a
 from src.module.create_folder import create_folder
+import json
 
 logger = Log()
 
@@ -100,13 +101,13 @@ def auto_katfile():
                f"AND works.work_state = '15'  " \
                f"GROUP BY works.work_name,  works_full_information.work_id, AS_work_updata_group.id " \
                f"Limit 1"
-        Work = DateBase().select(sql1)
+        Work = MySQLDB().select(sql1)
         Work = Work[0]
         Id = Work[0]
         WorkId = Work[1]
         WorkName = Work[2]
         sql2 = f"SELECT * FROM AS_work_down_URL WHERE group_table_id = {Id} AND dowm_web_name = 'katfile'"
-        down_list = DateBase().select(sql2)
+        down_list = MySQLDB().select(sql2)
         down_url_list = []
         IDList = []
         url_id_list = []
@@ -122,7 +123,7 @@ def auto_katfile():
             if state == '9':
                 now_time = Time_a().now_time()
                 sql = f"update works set work_state = '22',`update_time`= '{now_time}' where work_id = '{WorkId}'"
-                DateBase().update(sql)
+                MySQLDB().update(sql)
                 logger.write_log('AS上有下载连接已失效', 'error')
                 return False, downurl, WorkId
             return url_id_list, down_url_list, WorkId
@@ -138,7 +139,7 @@ def auto_katfile():
             if state == "9":
                 now_time = Time_a().now_time()
                 sql2 = f"update works set work_state = '23',`updata_time`='{now_time}' where work_id = '{WorkId}'"
-                DateBase().update(sql2)
+                MySQLDB().update(sql2)
                 logger.write_log('Katfile的Shine上有部分下载连接已失效', 'error')
                 print(state + '   ' + downurl)
                 return False, downurl, WorkId
@@ -148,7 +149,7 @@ def auto_katfile():
             if len(down_list) == 0:
                 now_time = Time_a().now_time()
                 sql = f"UPDATE `works`SET `updata_time` = '{now_time}', `work_state` = '-1' WHERE `work_id` = '{WorkId}';"
-                DateBase().update(sql)
+                MySQLDB().update(sql)
                 logger.write_log(f"{WorkId}已完成下载", 'info')
 
                 return True, downurl, WorkId
@@ -186,7 +187,7 @@ def auto_katfile_down():
 
             response = session.get(url, headers=headers, allow_redirects=False)  # allow_redirects=False不进行重定向
 
-            print("Redirected Code:", response.status_code)
+            print("Redirected Code:", response.status_code, response.text)
             if response.status_code == 200:
                 WebData = response.text
                 if 'Login' in WebData:
@@ -244,7 +245,7 @@ def auto_katfile_down():
                             now_time = Time_a().now_time()
                             sql = (f"UPDATE `AS_work_down_URL` SET  `url_state` = '5' ,`updata_time` = '{now_time}' "
                                    f"WHERE `id` = '{UrlId}';")
-                            DateBase().update(sql)
+                            MySQLDB().update(sql)
                             download_complete = True  # 下载完成
 
                         else:
@@ -262,9 +263,9 @@ def auto_katfile_down():
 
         now_time = Time_a().now_time()
         sql = f"UPDATE `works`SET `updata_time` = '{now_time}', `work_state` = '-1' WHERE `work_id` = '{WorkId}';"
-        DateBase().update(sql)
+        MySQLDB().update(sql)
         logger.write_log(f"{WorkId}已完成下载", 'info')
-
+        QTUI_katfile_down()
         # AutoDowmToUnzip(WorkId)
         # logger.write_log(f"{WorkId}已完成解压", 'info')
 
@@ -272,7 +273,19 @@ def auto_katfile_down():
         err1(e)
 
 
-def QTUI_katfile_down(download_url_list, WorkId, download_path):
+# async def get_download_list():
+#     data = await DownloadList.read_download_list()
+#     true_status_data = {key: value for key, value in data.items() if value["status"]}
+#     print(json.dumps(true_status_data, ensure_ascii=False, indent=4))
+#     not_down_list = []
+#     for key, value in true_status_data.items():
+#         not_down_list.append([key, value["url"], value["RJNumber"]])
+#     return not_down_list
+
+
+def QTUI_katfile_down():
+    from src.module.datebase_execution import SQLiteDB
+    print('auto load')
     try:
         # 设置代理
         open_proxy, proxy_url = Config().read_proxy()
@@ -283,90 +296,104 @@ def QTUI_katfile_down(download_url_list, WorkId, download_path):
 
         flag = 0
         flag = int(flag)
-        for i in download_url_list:
-            time.sleep(3)
 
-            flag += 1
-            url = i
-            session = requests.Session()  # 创建一个Session对象
-            if open_proxy is True:
-                session.proxies.update(proxy_url)  # 将代理配置应用于该Session
+        sql = '''SELECT *,rowid "NAVICAT_ROWID" FROM "main"."download_list" WHERE "status" = '0' LIMIT 0, 1'''
+        flag, data = SQLiteDB().select(sql)
+        if not data:
+            time.sleep(10)
+            QTUI_katfile_down()
 
-            response = session.get(url, headers=headers, allow_redirects=False)  # allow_redirects=False不进行重定向
+        data = data[0]
+        key = data[0]
+        work_id = data[1]
+        url = data[2]
+        print(url)
+        download_path = f"{Config().read_file_down_path()}\\{work_id}"
+        time.sleep(1)
+        session = requests.Session()  # 创建一个Session对象
+        if open_proxy is True:
+            session.proxies.update(proxy_url)  # 将代理配置应用于该Session
 
-            print("Redirected Code:", response.status_code)
-            if response.status_code == 200:
-                WebData = response.text
-                if 'Login' in WebData:
-                    print("Cookie错误 开始自动获取Cookie")
-                    Flag = GETXFSS()
-                    if Flag:
-                        print("已获取最新Cookie将开始自动下载")
-                        auto_katfile_down()
+        response = session.get(url, headers=headers, allow_redirects=False)  # allow_redirects=False不进行重定向
 
-                elif 'reCAPTCHA' in WebData:
-                    print("请确保改账户为Premium")
-                    print("或者未开启Direct downloads，请前往个人中心开启")
-                    print("https://katfile.com/?op=my_account")
-                    sys.exit()
-            os.makedirs(download_path, exist_ok=True)  # 确保下载路径存在
-            if response.is_redirect:
-                # 获取重定向后的 URL
-                redirected_url = response.headers.get('location')
-                print(f'Redirected URL: {redirected_url}')
+        print("Redirected Code:", response.status_code)
+        if response.status_code == 200:
+            WebData = response.text
+            if 'Login' in WebData:
+                print("Cookie错误 开始自动获取Cookie")
+                Flag = GETXFSS()
+                if Flag:
+                    print("已获取最新Cookie将开始自动下载")
+                    auto_katfile_down()
 
-                ur_lstring = str(redirected_url)
-                last_slash_index = ur_lstring.rfind('/')
-                filename = ur_lstring[last_slash_index + 1:]
-                print("filename:" + filename)
+            elif 'reCAPTCHA' in WebData:
+                print("请确保改账户为Premium")
+                print("或者未开启Direct downloads，请前往个人中心开启")
+                print("https://katfile.com/?op=my_account")
+                sys.exit()
+        os.makedirs(download_path, exist_ok=True)  # 确保下载路径存在
+        if response.is_redirect:
+            # 获取重定向后的 URL
+            redirected_url = response.headers.get('location')
+            print(f'Redirected URL: {redirected_url}')
 
-                # 检查本地文件是否存在
-                file_path = os.path.join(download_path, filename)
-                if os.path.exists(file_path):
-                    # 如果文件已存在，获取已下载的文件大小
-                    resume_header = {'Range': 'bytes=%d-' % os.path.getsize(file_path)}
-                    response = session.get(redirected_url, headers=resume_header, stream=True)
-                else:
-                    response = session.get(redirected_url, stream=True)
+            ur_lstring = str(redirected_url)
+            last_slash_index = ur_lstring.rfind('/')
+            filename = ur_lstring[last_slash_index + 1:]
+            print("filename:" + filename)
 
-                download_complete = False
-                while not download_complete:
-
-                    try:
-                        if response.status_code == 416:
-                            print(response.status_code)
-                            print("检查代理设置或删除最近一个下载的文件")
-                            sys.exit()
-                        if response.status_code == 200 or response.status_code == 206:  # 206表示部分内容
-                            total_size = int(response.headers.get('content-length', 0))
-                            block_size = 1024  # 1 KB
-                            progress_bar = tqdm(total=total_size, unit='B', unit_scale=True)
-
-                            with open(file_path, 'ab') as file:  # 使用追加模式打开文件
-                                for data in response.iter_content(block_size):
-                                    progress_bar.update(len(data))
-                                    file.write(data)
-
-                            progress_bar.close()
-                            now_time = Time_a().now_time()
-                            download_complete = True  # 下载完成
-
-                        else:
-                            # 处理非200和206状态码，可以根据需要进行处理
-                            print(f"Error: {response.status_code}")
-                            time.sleep(3)
-
-                    except requests.exceptions.RequestException as e:
-                        print(f"网络错误: {e}")
-                        time.sleep(3)
-                        auto_katfile_down()
+            # 检查本地文件是否存在
+            file_path = os.path.join(download_path, filename)
+            if os.path.exists(file_path):
+                # 如果文件已存在，获取已下载的文件大小
+                resume_header = {'Range': 'bytes=%d-' % os.path.getsize(file_path)}
+                response = session.get(redirected_url, headers=resume_header, stream=True)
             else:
-                # 处理非200状态码，可以根据需要进行处理
-                print(f"处理非200状态码，Error: {response.status_code}")
+                response = session.get(redirected_url, stream=True)
 
-        logger.write_log(f"{WorkId}已完成下载", 'info')
+            download_complete = False
+            while not download_complete:
 
+                try:
+                    if response.status_code == 416:
+                        print(response.status_code)
+                        print("检查代理设置或删除最近一个下载的文件")
+                        sys.exit()
+                    if response.status_code == 200 or response.status_code == 206:  # 206表示部分内容
+                        total_size = int(response.headers.get('content-length', 0))
+                        block_size = 1024  # 1 KB
+                        progress_bar = tqdm(total=total_size, unit='B', unit_scale=True)
 
+                        with open(file_path, 'ab') as file:  # 使用追加模式打开文件
+                            for data in response.iter_content(block_size):
+                                progress_bar.update(len(data))
+                                file.write(data)
+
+                        progress_bar.close()
+                        now_time = Time_a().now_time()
+                        download_complete = True  # 下载完成
+
+                    else:
+                        # 处理非200和206状态码，可以根据需要进行处理
+                        print(f"Error: {response.status_code}")
+                        time.sleep(3)
+
+                except requests.exceptions.RequestException as e:
+                    print(f"网络错误: {e}")
+                    time.sleep(3)
+                    auto_katfile_down()
+        else:
+            # 处理非200状态码，可以根据需要进行处理
+            print(f"处理非200状态码，Error: {response.status_code} 确实账户是否为VIP账户")
+            exit()
+            # sql = f'''UPDATE "main"."download_list" SET "status" = '2' WHERE UUID = '{key}' '''
+            # SQLiteDB().update(sql)
+            # QTUI_katfile_down()
+
+        logger.write_log(f"{work_id}已完成下载", 'info')
+        sql = f'''UPDATE "main"."download_list" SET "status" = '1' WHERE UUID = '{key}' '''
+        SQLiteDB().update(sql)
+        QTUI_katfile_down()
 
     except ExceptionGroup as e:
         err1(e)

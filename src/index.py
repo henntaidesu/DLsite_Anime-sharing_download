@@ -2,10 +2,11 @@ import time
 from src.module.time import Time_a
 from src.module.log import Log, err1
 from src.module.mulit_processes import Process
-from src.module.datebase_execution import DateBase, TrimString
+from src.module.datebase_execution import MySQLDB, TrimString
 from src.module.file_copy import file_copy
 from src.module.unzip import unzip
-
+from src.web_drive.katfile_auto_down import QTUI_katfile_down
+import threading
 from src.module.conf_operate import Config
 import sys
 
@@ -18,9 +19,13 @@ class Index:
     def choose(self):
 
         if Config().read_start_type():
-            self.open_GUI()
+            thread1 = threading.Thread(target=self.open_GUI)
+            thread2 = threading.Thread(target=QTUI_katfile_down)
+            thread1.start()
+            thread2.start()
         else:
             self.open_CLI()
+
     @staticmethod
     def open_GUI():
         while True:

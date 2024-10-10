@@ -3,11 +3,11 @@ from lxml import html
 import urllib.parse
 from src.module.log import Log, err1, err2
 from src.module.time import Time_a
-from src.module.datebase_execution import DateBase
+from src.module.datebase_execution import MySQLDB
 from src.module.conf_operate import Config
 
 logger = Log()
-db = DateBase()
+db = MySQLDB()
 
 
 def get_as_work_upgroup_url(rj_number, i=0):

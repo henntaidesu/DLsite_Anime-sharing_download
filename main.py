@@ -15,9 +15,11 @@ if __name__ == '__main__':
     multiprocessing.freeze_support()
     flag = create_log_folder()
     if flag is True:
-        Index().choose()
+        index_instance = Index()
+        asyncio.run(index_instance.choose())
     else:
         sys.exit()
+
 
 
 # worksTableuInWork_stateList

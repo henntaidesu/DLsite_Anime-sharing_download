@@ -8,7 +8,7 @@ class SettingWindow(QMainWindow):
     try:
         def __init__(self):
             super().__init__()
-            loadUi("src/QTui/ui_file/setting.ui", self)  # 请替换为你的 .ui 文件的路径
+            loadUi("src/QTui/ui_file/setting.ui", self)
             # for child in self.findChildren(QLineEdit):
             #     print(child.objectName())
 
@@ -112,6 +112,9 @@ class SettingWindow(QMainWindow):
         def show_save_XFSS(self):
             XFSS = self.XFSS_banner_text.text()
             self.conf.write_katfile_xfss(XFSS)
+
+        def show_auto_download(self):
+            pass
 
     except Exception as e:
         print(f"数据获取错误: {e}")
