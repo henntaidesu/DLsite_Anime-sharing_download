@@ -5,7 +5,7 @@
 ``` ini
 [database]
 open_db = True
-# 没有数据库 请将其设置为False 否则程序可能无法启动
+# 没有MySQL数据库 请将其设置为False 否则程序可能无法启动
 
 [start_type]
 type = GUI
@@ -19,7 +19,11 @@ type = http
 # 这些配置项可以在UI中设置页面中修改
 
 [katfile]
-# 此项配置由于KatFile加了CF 弃用
+ifkatfiledown = True
+user = user
+passwd = passwd
+xfss = xfss
+# xfss 目前由于CF的限制 需要自己在网页登录后 点击F12 中获取
 
 [LogLevel]
 level = error
