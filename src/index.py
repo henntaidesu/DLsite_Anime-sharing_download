@@ -75,8 +75,8 @@ class Index:
             elif flag == '2':
                 from src.DLsite.craw_dlsite_works_name import craw_dlsite_works
                 from src.DLsite.craw_dlsite_infomation import crawl_work_web_information
-                sql = (f"SELECT work_id FROM `works` WHERE work_state is NULL or work_state = '1' "
-                       f"and update_time < '{Time_a().tow_days_ago()} 00:00:00'")
+                sql = (f"SELECT work_id , query_count FROM `works` WHERE work_state is NULL or work_state = '1' "
+                       f"and update_time < '{Time_a().tow_days_ago()} 00:00:00' and query_count < 5")
                 Process().multi_process_as_up_group(sql, craw_dlsite_works)
                 # elif flag == '3':
                 sql = f"SELECT work_id, work_type FROM works WHERE work_state in ('2')"
@@ -120,6 +120,6 @@ class Index:
             #     file_copy()
 
             days = 10
-            pause_duration = 86400 * days
+            pause_duration = 3600 * 24 * days
             print(f'暂停{days}天')
             time.sleep(pause_duration)

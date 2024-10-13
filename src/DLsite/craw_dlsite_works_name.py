@@ -15,7 +15,10 @@ def craw_dlsite_works(work_list, i=0):
             formatted_date = Time_a().now_time()
             gc.collect()
             rj_number = work_list[i][0]
+            query_count = work_list[i][1]
             i += 1
+            query_count += 1
+
             Data = get_dlsite_work_name(rj_number)
 
             # if len(rj_number) < 9:
@@ -28,17 +31,17 @@ def craw_dlsite_works(work_list, i=0):
             # if len(rj_number) > 9:
             #     LogPrint(wrj_number + "New")
             #     continue
+
             if not Data[0] or not Data[1]:
-                sql = f"UPDATE `works` SET  `work_state` = '1', `update_time` = '{formatted_date}' " \
-                      f" WHERE `work_id` = '{rj_number}'"
+                sql = f"UPDATE `works` SET  `work_state` = '1', `update_time` = '{formatted_date}' , " \
+                      f"`query_count` = {query_count} WHERE `work_id` = '{rj_number}'"
                 MySQLDB().insert(sql)
                 logger.write_log(f"{rj_number} - 接口无返回值", "warning")
-
                 continue
             if Data == "False":
                 logger.write_log(f"{rj_number} - 接口存在重复数据", "error")
                 sql = f"UPDATE `works` SET  `work_state` = '4', `update_time` = '{formatted_date}' " \
-                      f" WHERE `work_id` = '{rj_number}'"
+                      f"`query_count` = {query_count}  WHERE `work_id` = '{rj_number}'"
                 MySQLDB().insert(sql)
                 continue
             else:
@@ -69,14 +72,17 @@ def craw_dlsite_works(work_list, i=0):
                 if len(WorkName) > 128:
                     WorkName = WorkName[:128]
 
-                sql1 = f"UPDATE `works` SET " \
-                       f"`maker_id` = '{maker_id}', " \
-                       f"`work_name` = '{WorkName}', " \
-                       f"`age_category` = {Data[0][0]['work_age_category']}, " \
-                       f"`maker_name_kana` = '{maker_name_kana}', " \
-                       f"`intro_s` = '{intro_s}', " \
-                       f"`work_type` = '{work_type}', `update_time` = '{formatted_date}', `work_state` = '2'  " \
-                       f"WHERE `work_id` = '{rj_number}' ;"
+                sql1 = (f"UPDATE `works` SET "
+                        f"`maker_id` = '{maker_id}', "
+                        f"`work_name` = '{WorkName}', "
+                        f"`age_category` = {Data[0][0]['work_age_category']}, "
+                        f"`maker_name_kana` = '{maker_name_kana}', "
+                        f"`intro_s` = '{intro_s}', "
+                        f"`work_type` = '{work_type}',"
+                        f"`update_time` = '{formatted_date}', "
+                        f"`work_state` = '2' "
+                        f"`query_count` = {query_count}  "
+                        f"WHERE `work_id` = '{rj_number}' ;")
                 # print(work_workno, "项目作品名称", Data[0][0]['work_work_name'])
                 logger.write_log(f"{work_workno} - 项目作品名称 - {Data[0][0]['work_work_name']}", 'info')
                 # print(sql1)

@@ -96,6 +96,20 @@ class Config:
         encoding = self.config.get('encoding', 'encoding')
         return encoding
 
+    def read_max_RJ(self):
+        max_RJ = int(self.config.get('max_RJ', 'max'))
+        return max_RJ
+
+    def read_download_list(self):
+        auto_download = self.config.get('down_list', 'auto_download')
+        if auto_download == 'True':
+            auto_download = True
+        else:
+            auto_download = False
+        download_processes = int(self.config.get('down_list', 'download_processes'))
+
+        return auto_download, download_processes
+
     def write_katfile_xfss(self, XFSS_code):
         self.config.set('katfile', 'xfss', XFSS_code)
         with open('conf.ini', 'w', encoding='utf-8') as configfile:
