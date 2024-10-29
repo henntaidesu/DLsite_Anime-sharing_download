@@ -80,7 +80,7 @@ def craw_dlsite_works(work_list, i=0):
                         f"`intro_s` = '{intro_s}', "
                         f"`work_type` = '{work_type}',"
                         f"`update_time` = '{formatted_date}', "
-                        f"`work_state` = '2' "
+                        f"`work_state` = '2', "
                         f"`query_count` = {query_count}  "
                         f"WHERE `work_id` = '{rj_number}' ;")
                 # print(work_workno, "项目作品名称", Data[0][0]['work_work_name'])
@@ -100,7 +100,7 @@ def craw_dlsite_works(work_list, i=0):
                            f"VALUES " \
                            f"('{Data[0][0]['work_maker_id']}', " \
                            f"'{TempMakerName}'," \
-                           f" '{Data[1][0]['maker_age_category']}', " \
+                           f"'{Data[1][0]['maker_age_category']}', " \
                            f"'{Data[1][0]['maker_is_ana']}');"
                     # print(sql)
                     MySQLDB().insert(sql2)

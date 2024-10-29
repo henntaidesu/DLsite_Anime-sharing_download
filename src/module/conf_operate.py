@@ -97,8 +97,12 @@ class Config:
         return encoding
 
     def read_max_RJ(self):
-        max_RJ = int(self.config.get('max_RJ', 'max'))
+        max_RJ = int(self.config.get('max_key', 'RJ'))
         return max_RJ
+
+    def read_max_VJ(self):
+        max_VJ = int(self.config.get('max_key', 'VJ'))
+        return max_VJ
 
     def read_download_list(self):
         auto_download = self.config.get('down_list', 'auto_download')
