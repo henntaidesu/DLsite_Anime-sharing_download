@@ -21,8 +21,8 @@ class Time_a:
     def tow_days_ago():
         # 获取当前日期和时间
         current_datetime = datetime.now()
-        # 计算三天前的日期
-        three_days_ago = current_datetime - timedelta(days=2)
+        # 计算10天前的日期
+        three_days_ago = current_datetime - timedelta(days=9)
         # 格式化日期
         formatted_date = three_days_ago.strftime("%Y-%m-%d")
         return formatted_date

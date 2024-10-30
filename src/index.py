@@ -66,11 +66,11 @@ class Index:
             print("7:测试Down URL if Ture")
             print("8:解压文件")
 
-            flag = '1'
+            flag = '2'
 
             if flag == '1':
                 from src.DLsite.RJ_number_generate import RJ, VJ
-                VJ()
+                RJ()
 
             elif flag == '2':
                 from src.DLsite.craw_dlsite_works_name import craw_dlsite_works

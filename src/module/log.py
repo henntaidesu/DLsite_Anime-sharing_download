@@ -3,10 +3,13 @@ import sys
 from src.module.time import Time_a
 from src.module.conf_operate import Config
 from src.module.time import now_time, today
-
+import os
 
 class Log:
     def __init__(self):
+        if not os.path.exists("log"):
+            os.makedirs("log")
+
         self.day = Time_a().today()
         self.confing = Config()
         self.log_level = self.confing.read_log_level()
@@ -53,13 +56,15 @@ class Log:
                 self.logger.error(text)
             elif log_type == 'warning':
                 print(f"{now_time()} - WARNING - {text}")
+        
         elif self.log_level == "info":
             if log_type == 'info':
                 self.logger.info(text)
             elif log_type == 'error':
                 print(f"{now_time()} - ERROR - {text}")
             elif log_type == 'warning':
-                self.logger.warning(text)
+                print(f"{now_time()} - WARIN - {text}")
+        
         elif self.log_level == "debug":
             if log_type == 'info':
                 self.logger.info(text)
