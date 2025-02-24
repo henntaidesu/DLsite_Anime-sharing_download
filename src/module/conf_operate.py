@@ -100,6 +100,12 @@ class Config:
         max_RJ = int(self.config.get('max_key', 'RJ'))
         return max_RJ
 
+    def write_max_RJ(self, max_RJ):
+
+        self.config.set('max_key', 'RJ', str(max_RJ))
+        with open('conf.ini', 'w', encoding='utf-8') as configfile:
+            self.config.write(configfile)
+
     def read_max_VJ(self):
         max_VJ = int(self.config.get('max_key', 'VJ'))
         return max_VJ
@@ -145,6 +151,12 @@ class Config:
         self.config.set('katfile', 'passwd', passwd)
         with open('conf.ini', 'w', encoding='utf-8') as configfile:
             self.config.write(configfile)
+
+    def read_HOME_API(self):
+        address = self.config.get('API', 'address')
+        port = self.config.get('API', 'port')
+        return r"http://" + address + ":" + port
+
 
 
 class WriteConf:

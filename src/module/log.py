@@ -5,6 +5,7 @@ from src.module.conf_operate import Config
 from src.module.time import now_time, today
 import os
 
+
 class Log:
     def __init__(self):
         if not os.path.exists("log"):
@@ -12,7 +13,7 @@ class Log:
 
         self.day = Time_a().today()
         self.confing = Config()
-        self.log_level = self.confing.read_log_level()
+        self.log_level = self.confing.read_log_level() 
         self.logger = self.setup_logger()  # 在设置日志级别之后再设置 logger
 
     def setup_logger(self):
@@ -56,7 +57,7 @@ class Log:
                 self.logger.error(text)
             elif log_type == 'warning':
                 print(f"{now_time()} - WARNING - {text}")
-        
+
         elif self.log_level == "info":
             if log_type == 'info':
                 self.logger.info(text)
@@ -64,7 +65,7 @@ class Log:
                 print(f"{now_time()} - ERROR - {text}")
             elif log_type == 'warning':
                 print(f"{now_time()} - WARIN - {text}")
-        
+
         elif self.log_level == "debug":
             if log_type == 'info':
                 self.logger.info(text)

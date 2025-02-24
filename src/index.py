@@ -9,7 +9,11 @@ from src.web_drive.katfile_auto_down import QTUI_katfile_down
 import threading
 from src.module.conf_operate import Config
 import sys
+import requests
 
+
+conf = Config()
+API_address = conf.read_HOME_API()
 
 class Index:
     def __init__(self):
@@ -38,7 +42,6 @@ class Index:
                 app = QApplication(sys.argv)
                 loop = QEventLoop(app)
                 asyncio.set_event_loop(loop)
-
                 window = IndexWindow()
                 window.show()
 
@@ -69,18 +72,26 @@ class Index:
             flag = '2'
 
             if flag == '1':
-                from src.DLsite.RJ_number_generate import RJ, VJ
+                from src.DLsite.RJ_number_generate import RJ, VJ, API_new_RJ
                 RJ()
 
             elif flag == '2':
                 from src.DLsite.craw_dlsite_works_name import craw_dlsite_works
                 from src.DLsite.craw_dlsite_infomation import crawl_work_web_information
-                sql = (f"SELECT work_id , query_count FROM `works` WHERE work_state is NULL or work_state = '1' "
-                       f"and update_time < '{Time_a().tow_days_ago()} 00:00:00' and query_count < 5")
-                Process().multi_process_as_up_group(sql, craw_dlsite_works)
+                from src.DLsite.RJ_number_generate import RJ, VJ, API_new_RJ
+                API_new_RJ()
+                URL = f'{API_address}/dlsite/status1'
+                # sql = (f"SELECT work_id , query_count FROM `works` WHERE work_state is NULL or work_state = '1' "
+                #        f"and update_time < '{Time_a().tow_days_ago()} 00:00:00' and query_count < 5")'
+                while True:
+                    work_list = requests.get(URL).json()
+                    if work_list:
+                        Process().multi_process_as_up_group(work_list, craw_dlsite_works)
+                    else:
+                        break
                 # elif flag == '3':
-                sql = f"SELECT work_id, work_type FROM works WHERE work_state in ('2')"
-                Process().multi_process_as_up_group(sql, crawl_work_web_information)
+                # sql = f"SELECT work_id, work_type FROM works WHERE work_state in ('2')"
+                # Process().multi_process_as_up_group(sql, crawl_work_web_information)
 
             # elif flag == '4':
             #     from src.Anime_sharing.get_as_work_upgroup_url import get_as_work_upgroup_url

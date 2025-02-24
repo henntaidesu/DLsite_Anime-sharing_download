@@ -4,6 +4,7 @@ import multiprocessing
 from src.module.conf_operate import Config
 from src.module.log import Log
 from src.module.log import err1
+import requests
 
 
 class Process:
@@ -24,13 +25,16 @@ class Process:
 
         return chunks
 
-    def multi_process_as_up_group(self, sql, func):
+    def multi_process_as_up_group(self, work_list, func):
         try:
             processes = int(self.conf.read_processes())
-            flag, work_list = MySQLDB().select(sql)
-            if len(work_list) == 0:
-                print("已完成获取AS UPGroup")
-                return False
+            # if 'http' in sql:
+            #     work_list = requests.get(sql).json()
+            # else:
+            #     flag, work_list = MySQLDB().select(sql)
+            # if len(work_list) == 0:
+            #     print("已完成获取AS UPGroup")
+            #     return False
             chunks = self.split_list(work_list, processes)
             # 创建进程池
             pool = multiprocessing.Pool(processes=processes)
