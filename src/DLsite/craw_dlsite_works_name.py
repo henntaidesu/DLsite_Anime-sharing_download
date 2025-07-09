@@ -43,21 +43,26 @@ def craw_dlsite_works(work_list, i=0):
                 # MySQLDB().insert(sql)
                 URL = f'{API_address}/dlsite/index/update_state'
                 data = {
-                    'work_state': 1,
+                    'work_state': 99,
                     'query_count': query_count,
                     'rj_number': rj_number,
                 }
                 while True:
                     try:
-                        req = requests.post(URL, json=data)
+                        req = requests.post(URL, json=data, timeout=5)
                         if req.status_code == 200:
                             logger.write_log(f"{rj_number} - 更新作品成功", 'warning')
                             break
+
+                    except requests.Timeout:
+                        continue
 
                     except Exception as e:
                         if type(e).__name__ == 'ConnectTimeout':
                             time.sleep(1)
                             continue
+
+
 
 
                 logger.write_log(f"{rj_number} - 接口无返回值", "warning")
@@ -71,10 +76,13 @@ def craw_dlsite_works(work_list, i=0):
                 }
                 while True:
                     try:
-                        req = requests.post(URL, json=data)
+                        req = requests.post(URL, json=data, timeout=5)
                         if req.status_code == 200:
                             logger.write_log(f"{rj_number} - 接口存在重复数据", "error")
                             break
+
+                    except requests.Timeout:
+                        continue
                     except Exception as e:
                         if type(e).__name__ == 'ConnectTimeout':
                             time.sleep(1)
@@ -119,7 +127,7 @@ def craw_dlsite_works(work_list, i=0):
                         f"`work_state` = '2', "
                         f"`query_count` = {query_count}  "
                         f"WHERE `work_id` = '{rj_number}' ;")
-                print(work_workno, "项目作品名称", Data[0][0]['work_work_name'])
+                # print(work_workno, "项目作品名称", Data[0][0]['work_work_name'])
                 # MySQLDB().insert(sql1)
                 URL = f'{API_address}/dlsite/index/update_infomation'
                 data = {
@@ -137,11 +145,13 @@ def craw_dlsite_works(work_list, i=0):
                 req_data = None
                 while True:
                     try:
-                        req = requests.post(URL, json=data)
+                        req = requests.post(URL, json=data, timeout=5)
                         if req.status_code == 200:
                             logger.write_log(f"{work_workno} - 项目作品名称 - {Data[0][0]['work_work_name']}", 'info')
                             req_data = req.json()
                             break
+                    except requests.Timeout:
+                        continue
                     except Exception as e:
                         if type(e).__name__ == 'ConnectTimeout':
                             time.sleep(1)
@@ -178,10 +188,12 @@ def craw_dlsite_works(work_list, i=0):
                     URL = f'{API_address}/dlsite/maker/insert_data'
                     while True:
                         try:
-                            req = requests.post(URL, json=data)
+                            req = requests.post(URL, json=data, timeout=5)
                             if req.status_code == 200:
                                 logger.write_log(f"插入maker_id成功 {Data[0][0]['work_maker_id']}", 'info')
                                 break
+                        except requests.Timeout:
+                            continue
                         except Exception as e:
                             if type(e).__name__ == 'ConnectTimeout':
                                 time.sleep(1)

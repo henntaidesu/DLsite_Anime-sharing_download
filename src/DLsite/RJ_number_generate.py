@@ -21,6 +21,7 @@ def API_new_RJ():
     RJ = int(href[0][href[0].find('RJ') + 2:].replace('.html', '').strip())
     api_url = f'{API_address}/dlsite/index/write_new_RJ/{RJ}'
     state = requests.get(api_url).status_code
+    print('写入新RJ号')
     if state != 200:
         print("出现错误")
     Config().write_max_RJ(RJ)

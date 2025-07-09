@@ -81,6 +81,7 @@ class Index:
                 from src.DLsite.RJ_number_generate import RJ, VJ, API_new_RJ
                 API_new_RJ()
                 URL = f'{API_address}/dlsite/status1'
+                print(URL)
                 # sql = (f"SELECT work_id , query_count FROM `works` WHERE work_state is NULL or work_state = '1' "
                 #        f"and update_time < '{Time_a().tow_days_ago()} 00:00:00' and query_count < 5")'
                 while True:
