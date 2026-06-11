@@ -3,6 +3,7 @@ import sys
 import time
 import shutil
 import subprocess
+import threading
 from tqdm import tqdm
 import patoolib
 from src.module.conf_operate import Config
@@ -37,9 +38,20 @@ def extract_rar(file_path, extract_path):
     # if patoolib.test_archive(file_path):
     try:
         if os.path.exists(BANDIZIP_BZ):
-            result = subprocess.run([BANDIZIP_BZ, 'x', f'-o:{extract_path}', '-aoa', '-y', file_path])
-            if result.returncode != 0:
-                raise Exception(f'bz.exe 解压失败，返回码 {result.returncode}')
+            # bz 返回非 0 多为输出文件被杀软/索引器临时占用（0x20 共享冲突），
+            # -aoa 会覆盖已解出的部分，因此可安全重试，等占用释放后再来
+            last_code = 0
+            for attempt in range(1, 4):
+                result = subprocess.run([BANDIZIP_BZ, 'x', f'-o:{extract_path}', '-aoa', '-y', file_path])
+                if result.returncode == 0:
+                    break
+                last_code = result.returncode
+                if attempt < 3:
+                    logger.write_log(
+                        f'bz.exe 解压返回码 {last_code}，可能文件被占用，{attempt}/3 次后重试', 'warning')
+                    time.sleep(10)
+            else:
+                raise Exception(f'bz.exe 解压失败，返回码 {last_code}')
         else:
             patoolib.extract_archive(file_path, outdir=extract_path)
     except Exception as e:
@@ -115,6 +127,37 @@ def move_to_root(work_id, folder_path):
         err2(e)
 
 
+def _post_extract(work_id, folder_path):
+    """解压成功后：将作品标记为已品悦，关联所属媒体库和文件夹，然后后台补全详细元数据"""
+    from src.module.import_local_works import (_import_rj_list, backfill_works_from_api,
+                                               backfill_work_pages)
+    # 通过父目录匹配媒体库文件夹
+    lib_name = None
+    parent = os.path.dirname(os.path.abspath(folder_path))
+    for lib in Config().read_media_libs():
+        for lib_folder in lib.get('folders', []):
+            try:
+                if os.path.abspath(lib_folder) == parent:
+                    lib_name = lib['name']
+                    break
+            except OSError:
+                pass
+        if lib_name:
+            break
+
+    _import_rj_list([work_id], '已品悦', lib_name, {work_id: os.path.abspath(folder_path)})
+    logger.write_log(f'{work_id} 已标记为已品悦，媒体库: {lib_name or "未关联"}', 'info')
+
+    def _backfill():
+        try:
+            backfill_works_from_api(delay=0.5)
+            backfill_work_pages(delay=1.0)
+        except Exception as e:
+            err2(e)
+
+    threading.Thread(target=_backfill, daemon=True, name=f'backfill-{work_id}').start()
+
+
 def unzip(work_id):
     try:
         # 与下载逻辑保持同一文件夹命名方式（RJ号 / 作品名称）
@@ -122,7 +165,6 @@ def unzip(work_id):
         folder_path = work_folder_path(work_id)
         logger.write_log(f'{work_id} 正在解压', 'info')
         while True:
-            # print(folder_path)
             file_name_list = get_all_archive_files(folder_path)
 
             if len(file_name_list) == 0:
@@ -133,11 +175,11 @@ def unzip(work_id):
                     logger.write_log(f'{work_id} 转码成功', 'info')
                 else:
                     logger.write_log(f'{work_id} 无需转码', 'info')
+                _post_extract(work_id, folder_path)
                 return False
             file_name = file_name_list[0]
             if 'exe' in file_name:
                 file_name = file_name_list[1]
-            # print(file_name)
             flag1 = extract_rar(file_name, folder_path)
             if flag1 is False:
                 return

@@ -1,7 +1,7 @@
 from PyQt5.QtWidgets import (QMainWindow, QPushButton, QTreeWidget, QTreeWidgetItem,
-                             QHeaderView, QMessageBox, QProgressBar)
+                             QHeaderView, QMessageBox, QProgressBar, QLabel)
 from PyQt5.QtGui import QColor
-from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal
 from PyQt5.uic import loadUi
 from src.module.datebase_execution import SQLiteDB
 from src.web_drive.debrid_link import (start_download_worker, stop_download_worker,
@@ -30,6 +30,29 @@ def file_name_of(url):
     return url.rstrip('/').rsplit('/', 1)[-1].split('?')[0]
 
 
+def format_reset(seconds):
+    """把距离流量重置的秒数格式化为 Xh Ym（不足 1 分钟显示 <1m）"""
+    seconds = int(seconds)
+    if seconds <= 0:
+        return ''
+    hours, minutes = seconds // 3600, (seconds % 3600) // 60
+    if hours:
+        return f'{hours}h{minutes}m'
+    return f'{minutes}m' if minutes else '<1m'
+
+
+class UsageLoader(QThread):
+    """后台请求 debrid-link 流量使用情况，避免网络请求卡住 UI"""
+    loaded = pyqtSignal(object)  # downloader/limits 的 value 字典，失败时为 None
+
+    def run(self):
+        from src.web_drive.debrid_link import DebridLink
+        try:
+            self.loaded.emit(DebridLink().download_limits())
+        except Exception:
+            self.loaded.emit(None)
+
+
 class DownloadWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -40,6 +63,9 @@ class DownloadWindow(QMainWindow):
         self.refresh_button = self.findChild(QPushButton, 'refresh_button')
         self.clear_done_button = self.findChild(QPushButton, 'clear_done_button')
         self.clear_all_button = self.findChild(QPushButton, 'clear_all_button')
+        self.usage_label = self.findChild(QLabel, 'usage_label')
+        self.usage_bar = self.findChild(QProgressBar, 'usage_bar')
+        self.usage_loader = None
 
         self.download_tree.setColumnCount(4)
         self.download_tree.setHeaderLabels(['番号 / 文件', '下载进度', '速度', '状态'])
@@ -62,14 +88,45 @@ class DownloadWindow(QMainWindow):
         self.refresh_timer.setInterval(1000)
         self.refresh_timer.timeout.connect(self.refresh)
 
+        # debrid-link 流量使用量变化较慢，单独用较长间隔在后台线程查询
+        self.usage_timer = QTimer(self)
+        self.usage_timer.setInterval(15000)
+        self.usage_timer.timeout.connect(self._fetch_usage)
+
     def showEvent(self, event):
         super().showEvent(event)
         self.refresh()
         self.refresh_timer.start()
+        self._fetch_usage()
+        self.usage_timer.start()
 
     def hideEvent(self, event):
         super().hideEvent(event)
         self.refresh_timer.stop()
+        self.usage_timer.stop()
+
+    def _fetch_usage(self):
+        """启动后台线程查询 debrid-link 流量使用量（上一次还在跑则跳过）"""
+        if self.usage_loader is not None and self.usage_loader.isRunning():
+            return
+        self.usage_loader = UsageLoader(self)
+        self.usage_loader.loaded.connect(self._update_usage)
+        self.usage_loader.start()
+
+    def _update_usage(self, value):
+        """把流量使用量更新到表头进度条与标签：百分比 + 距离重置时间"""
+        usage = (value or {}).get('usagePercent') or {}
+        current = usage.get('current')
+        if current is None:
+            self.usage_label.setText('debrid-link 使用量 --')
+            self.usage_bar.setValue(0)
+            return
+        self.usage_bar.setValue(min(100, int(round(current))))
+        text = 'debrid-link 使用量'
+        reset = format_reset((value.get('nextResetSeconds') or {}).get('value', 0))
+        if reset:
+            text += f' · {reset} 后重置'
+        self.usage_label.setText(text)
 
     def start_download(self):
         """开始/暂停切换"""

@@ -2,7 +2,7 @@ import html
 import os
 from PyQt5.QtWidgets import (QMainWindow, QPushButton, QLabel, QLineEdit, QWidget,
                              QFrame, QScrollArea, QGridLayout, QVBoxLayout, QHBoxLayout)
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QPixmap
 from PyQt5.uic import loadUi
 from src.module.conf_operate import Config
@@ -12,6 +12,16 @@ from src.QTui.media_lib_setting_UI import MediaLibSettingDialog
 CARD_GAP = 10
 WORKS_PAGE = 30  # 作品卡片懒加载：每批数量
 UNKNOWN_MAKER = ''  # maker_name 为空的作品归到"未知社团"
+
+_AGE_MAP = {'1': '全年龄', '2': 'R-15', '3': 'R-18'}
+# label → (db列名, 是否多值用 " / " 分割)
+_LINK_COLS = {
+    '社团': ('maker_name', False),
+    '系列': ('series', False),
+    '剧本': ('scenario', False),
+    '插画': ('illust', False),
+    '声优': ('voice_actor', True),
+}
 
 
 class ClickCard(QFrame):
@@ -129,21 +139,22 @@ class _SliderThumb(QLabel):
 
 class ImageSlider(QFrame):
     """详情页图片区：大图 + 缩略图切换条（仿 DLsite 作品页）"""
-    MAIN_W, MAIN_H = 520, 390
     THUMB_W, THUMB_H = 64, 48
+    _ASPECT = 390 / 520  # 主图高/宽比
 
     def __init__(self, paths, parent=None):
         super().__init__(parent)
         self._paths = paths
         self._index = 0
         self._thumbs = []
+        self._pixmap = None
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
 
         self.main_label = QLabel()
-        self.main_label.setFixedSize(self.MAIN_W, self.MAIN_H)
+        self.main_label.setFixedSize(520, 390)  # 初始尺寸，resizeEvent 中随宽度动态更新
         self.main_label.setAlignment(Qt.AlignCenter)
         self.main_label.setStyleSheet('background: rgba(255, 255, 255, 8); border-radius: 4px;')
         layout.addWidget(self.main_label)
@@ -188,19 +199,31 @@ class ImageSlider(QFrame):
 
         self.set_index(0)
 
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        w = event.size().width()
+        if w > 0:
+            self.main_label.setFixedSize(w, max(1, int(w * self._ASPECT)))
+            self._refresh_main()
+
     def set_index(self, index):
         if not self._paths:
             return
         self._index = index % len(self._paths)
-        pixmap = QPixmap(self._paths[self._index])
-        if pixmap.isNull():
-            self.main_label.clear()
-        else:
-            self.main_label.setPixmap(pixmap.scaled(
-                self.MAIN_W, self.MAIN_H, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        self._pixmap = QPixmap(self._paths[self._index])
+        self._refresh_main()
         for i, thumb in enumerate(self._thumbs):
             thumb.setStyleSheet('border: 2px solid #5b8def;' if i == self._index
                                 else 'border: 2px solid transparent;')
+
+    def _refresh_main(self):
+        if self._pixmap is None or self._pixmap.isNull():
+            self.main_label.clear()
+            return
+        w, h = self.main_label.width(), self.main_label.height()
+        if w > 0 and h > 0:
+            self.main_label.setPixmap(self._pixmap.scaled(
+                w, h, Qt.KeepAspectRatio, Qt.SmoothTransformation))
 
 
 class MediaLibWindow(QMainWindow):
@@ -215,6 +238,7 @@ class MediaLibWindow(QMainWindow):
         self.search_edit = self.findChild(QLineEdit, 'search_edit')
         self.genre_button = self.findChild(QPushButton, 'genre_button')
         self.lib_setting_button = self.findChild(QPushButton, 'lib_setting_button')
+        self.open_folder_button = self.findChild(QPushButton, 'open_folder_button')
         self.cards_scroll = self.findChild(QScrollArea, 'cards_scroll')
         self.cards_container = self.cards_scroll.widget()
 
@@ -234,6 +258,10 @@ class MediaLibWindow(QMainWindow):
         self._current_work = None
         self._detail_widget = None
         self._total_works = 0
+        self._works_scroll_pos = 0
+        self._current_work_folder = None
+        self._filter_col = None
+        self._filter_val = None
         self._work_rows = []      # 作品视图：全部查询结果
         self._filtered_rows = []  # 作品视图：搜索过滤后的结果（懒加载来源）
         self.setting_dialog = None
@@ -241,6 +269,8 @@ class MediaLibWindow(QMainWindow):
         self.back_button.clicked.connect(self.go_back)
         self.genre_button.clicked.connect(self.show_genres)
         self.lib_setting_button.clicked.connect(self.open_lib_settings)
+        self.open_folder_button.clicked.connect(self._open_work_folder)
+        self.open_folder_button.setVisible(False)
         self.search_edit.textChanged.connect(self._apply_filter)
         self.cards_scroll.verticalScrollBar().valueChanged.connect(self._on_scroll)
 
@@ -294,13 +324,17 @@ class MediaLibWindow(QMainWindow):
 
     def _open_work(self, work_id):
         """点击作品卡片：显示作品详情"""
+        self._works_scroll_pos = self.cards_scroll.verticalScrollBar().value()
         self._current_work = work_id
         self._show_detail()
 
     def go_back(self):
-        if self._level == 'detail':
+        if self._level == 'filtered_works':
+            self._show_detail()
+        elif self._level == 'detail':
             self._current_work = None
             self._show_works()
+            self._restore_works_scroll()
         elif self._level == 'works':
             self._current_maker = None
             self._show_makers()
@@ -312,6 +346,46 @@ class MediaLibWindow(QMainWindow):
                 self._show_libs()
         elif self._level == 'genres' and self._root != 'genres':
             self._show_libs()
+
+    def _open_work_folder(self):
+        if self._current_work_folder and os.path.isdir(self._current_work_folder):
+            os.startfile(self._current_work_folder)
+
+    def _open_filter(self, column, value):
+        """点击详情页可跳转字段：按列过滤作品"""
+        self._filter_col = column
+        self._filter_val = value
+        self._show_filtered_works()
+
+    def _show_filtered_works(self):
+        """按单列值过滤的作品视图（跨所有媒体库）"""
+        self._level = 'filtered_works'
+        self._card_width = WORK_CARD_W
+        self.back_button.setVisible(True)
+        val_esc = self._filter_val.replace("'", "''")
+        if self._filter_col == 'voice_actor':
+            cond = f'"voice_actor" LIKE \'%{val_esc}%\''
+        else:
+            cond = f'"{self._filter_col}" = \'{val_esc}\''
+        sql = (f'SELECT "work_id", "work_name", "maker_name", "work_type", "age_category", "cover"'
+               f' FROM "main"."works" WHERE "state" = \'已品悦\' AND {cond}'
+               f' ORDER BY "work_id" DESC')
+        result = SQLiteDB().select(sql)
+        if result is False:
+            return
+        self._work_rows = result[1]
+        self._apply_filter()
+
+    def _restore_works_scroll(self):
+        target = self._works_scroll_pos
+        if target <= 0:
+            return
+        # 预加载直到内容高度能容纳目标滚动位置
+        while (len(self.cards) < len(self._filtered_rows)
+               and self.cards_container.sizeHint().height()
+                   < target + self.cards_scroll.viewport().height()):
+            self._load_more_works()
+        QTimer.singleShot(0, lambda: self.cards_scroll.verticalScrollBar().setValue(target))
 
     def _show_root(self):
         if self._root == 'genres':
@@ -325,6 +399,8 @@ class MediaLibWindow(QMainWindow):
         if self._current_lib is not None and self._current_lib not in names:
             # 当前库已被删除/改名，回到根视图
             self._show_root()
+        elif self._level == 'filtered_works' and self._filter_col:
+            self._show_filtered_works()
         elif self._level == 'detail' and self._current_work:
             self._show_detail()
         elif self._level in ('works', 'detail') and self._current_maker is not None:
@@ -346,13 +422,15 @@ class MediaLibWindow(QMainWindow):
         if self._detail_widget is not None:
             self._detail_widget.deleteLater()
             self._detail_widget = None
+        self.open_folder_button.setVisible(False)
+        self._current_work_folder = None
 
     def _show_libs(self):
         """一级：媒体库卡片"""
         self._level = 'libs'
         self._current_lib = None
         self._current_maker = None
-        self._card_width = 240
+        self._card_width = WORK_CARD_W
         self.back_button.setVisible(False)
         counts = {}
         result = SQLiteDB().select('''SELECT "library", COUNT(*) FROM "main"."works"
@@ -364,7 +442,7 @@ class MediaLibWindow(QMainWindow):
         self.cards = [
             ClickCard(lib['name'],
                       f"{counts.get(lib['name'], 0)} 个作品 · {len(lib['folders'])} 个文件夹",
-                      lib['name'], self._open_lib, 240, 130, parent=self.cards_container)
+                      lib['name'], self._open_lib, WORK_CARD_W, 110, parent=self.cards_container)
             for lib in Config().read_media_libs()
         ]
         self._apply_filter()
@@ -373,7 +451,7 @@ class MediaLibWindow(QMainWindow):
         """二级：当前媒体库（或当前标签）下的社团卡片"""
         self._level = 'makers'
         self._current_maker = None
-        self._card_width = 220
+        self._card_width = WORK_CARD_W
         self.back_button.setVisible(True)
         if self._current_genre is not None:
             genre_esc = self._current_genre.replace("'", "''")
@@ -393,7 +471,7 @@ class MediaLibWindow(QMainWindow):
         self._clear_cards()
         self.cards = [
             ClickCard(maker or '未知社团', f'{count} 个作品',
-                      maker or UNKNOWN_MAKER, self._open_maker, 220, 110,
+                      maker or UNKNOWN_MAKER, self._open_maker, WORK_CARD_W, 110,
                       parent=self.cards_container)
             for maker, count in result[1]
         ]
@@ -402,7 +480,7 @@ class MediaLibWindow(QMainWindow):
     def _show_genres(self):
         """标签视图：全部已品悦作品的ジャンル标签卡片"""
         self._level = 'genres'
-        self._card_width = 200
+        self._card_width = WORK_CARD_W
         self.back_button.setVisible(self._root != 'genres')
         db = SQLiteDB()
         result = db.select('''SELECT g."genre", COUNT(*) FROM "main"."work_genres" g
@@ -417,7 +495,7 @@ class MediaLibWindow(QMainWindow):
         self._total_works = total[1][0][0] if total is not False else 0
         self._clear_cards()
         self.cards = [
-            ClickCard(genre, f'{count} 个作品', genre, self._open_genre, 200, 100,
+            ClickCard(genre, f'{count} 个作品', genre, self._open_genre, WORK_CARD_W, 110,
                       parent=self.cards_container)
             for genre, count in result[1]
         ]
@@ -469,6 +547,9 @@ class MediaLibWindow(QMainWindow):
         self.back_button.setVisible(True)
         self.count_label.setText(work_id)
         self._clear_cards()
+        if work_folder and os.path.isdir(work_folder):
+            self._current_work_folder = work_folder
+            self.open_folder_button.setVisible(True)
 
         widget = QFrame(self.cards_container)
         widget.setProperty('class', 'card')
@@ -531,7 +612,7 @@ class MediaLibWindow(QMainWindow):
             genre_links.setTextFormat(Qt.RichText)
             genre_links.linkActivated.connect(self._open_genre)
 
-        fields = [('RJ号', work_id), ('社团', maker_name), ('販売日', sell_date),
+        fields = [('社团', maker_name), ('販売日', sell_date),
                   ('系列', series), ('剧本', scenario), ('插画', illust),
                   ('声优', voice_actor), ('年龄分级', age_category), ('作品形式', work_type),
                   ('类型', genre), ('文件容量', file_size), ('简介', intro_s)]
@@ -545,6 +626,26 @@ class MediaLibWindow(QMainWindow):
                 value_label = genre_links
             elif not value:
                 continue
+            elif label == '年龄分级':
+                display = _AGE_MAP.get(str(value), str(value))
+                value_label = QLabel(
+                    f'<a href="{html.escape(str(value), quote=True)}">{html.escape(display)}</a>')
+                value_label.setWordWrap(True)
+                value_label.setTextFormat(Qt.RichText)
+                value_label.linkActivated.connect(
+                    lambda v, c='age_category': self._open_filter(c, v))
+            elif label in _LINK_COLS:
+                col, is_multi = _LINK_COLS[label]
+                parts = ([p.strip() for p in str(value).split(' / ') if p.strip()]
+                         if is_multi else [str(value).strip()])
+                links_html = ' / '.join(
+                    f'<a href="{html.escape(p, quote=True)}">{html.escape(p)}</a>'
+                    for p in parts if p)
+                value_label = QLabel(links_html)
+                value_label.setWordWrap(True)
+                value_label.setTextFormat(Qt.RichText)
+                value_label.linkActivated.connect(
+                    lambda v, c=col: self._open_filter(c, v))
             else:
                 value_label = QLabel(str(value))
                 value_label.setWordWrap(True)
@@ -555,15 +656,15 @@ class MediaLibWindow(QMainWindow):
             form.addWidget(value_label, row, 1)
             row += 1
 
-        # 上半部分：左边轮播图，右边字段详情（仿 DLsite 作品页）
+        # 上半部分：左边轮播图（1/3），右边字段详情（2/3）
         content = QHBoxLayout()
         content.setSpacing(20)
         if slider_paths:
-            content.addWidget(ImageSlider(slider_paths, widget), 0, Qt.AlignTop)
+            content.addWidget(ImageSlider(slider_paths, widget), 1, Qt.AlignTop)
         right_box = QVBoxLayout()
         right_box.addLayout(form)
         right_box.addStretch()
-        content.addLayout(right_box, 1)
+        content.addLayout(right_box, 2)
         layout.addLayout(content)
 
         # 正文：文本与图片按原文顺序嵌入
@@ -597,7 +698,7 @@ class MediaLibWindow(QMainWindow):
         if self._level == 'detail':
             return
         keyword = self.search_edit.text().strip().lower()
-        if self._level == 'works':
+        if self._level in ('works', 'filtered_works'):
             # 作品视图：在全量查询结果上过滤，再懒加载
             if keyword:
                 self._filtered_rows = [
@@ -645,7 +746,7 @@ class MediaLibWindow(QMainWindow):
 
     def _on_scroll(self, value):
         """滚动接近底部时加载下一批作品卡片"""
-        if self._level != 'works' or len(self.cards) >= len(self._filtered_rows):
+        if self._level not in ('works', 'filtered_works') or len(self.cards) >= len(self._filtered_rows):
             return
         bar = self.cards_scroll.verticalScrollBar()
         if value >= bar.maximum() - 300:

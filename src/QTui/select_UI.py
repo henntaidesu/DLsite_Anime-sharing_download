@@ -5,7 +5,7 @@ import urllib.parse
 import requests
 from PyQt5.QtWidgets import (QMainWindow, QLineEdit, QPushButton, QListWidget, QListWidgetItem,
                              QStackedWidget, QLabel, QFrame, QHBoxLayout, QVBoxLayout, QMessageBox,
-                             QWidget)
+                             QWidget, QDialog)
 from PyQt5.QtGui import QPixmap, QIcon, QColor, QPainter, QPen
 from PyQt5.uic import loadUi
 from src.Anime_sharing.get_as_work_upgroup_url import as_work_url
@@ -17,6 +17,90 @@ from src.module.time import Time_a
 from src.web_drive.doun_url_test import check_url, make_session
 from src.web_drive.debrid_link import start_download_worker
 from PyQt5.QtCore import Qt, QSize, QThread, pyqtSignal, QTimer, QRectF
+
+
+class _DownTargetDialog(QDialog):
+    """下载目标选择对话框：先选媒体库，多文件夹时再选具体文件夹"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle('选择下载位置')
+        self.setModal(True)
+        self.setMinimumWidth(420)
+        self.selected_folder = None
+
+        self._stack = QStackedWidget(self)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.addWidget(self._stack)
+        self._build_lib_page()
+
+    def _build_lib_page(self):
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(20, 16, 20, 16)
+        layout.setSpacing(8)
+
+        title = QLabel('选择下载到哪个媒体库')
+        title.setStyleSheet('font-weight: 600; font-size: 14px;')
+        layout.addWidget(title)
+
+        for lib in Config().read_media_libs():
+            folders = [f for f in lib.get('folders', []) if f]
+            if not folders:
+                continue
+            label = (f"{lib['name']}　{len(folders)} 个文件夹"
+                     if len(folders) > 1 else lib['name'])
+            btn = QPushButton(label)
+            btn.setMinimumHeight(40)
+            btn.clicked.connect(lambda checked, f=folders: self._pick_lib(f))
+            layout.addWidget(btn)
+
+        layout.addStretch()
+        cancel_btn = QPushButton('取消')
+        cancel_btn.clicked.connect(self.reject)
+        layout.addWidget(cancel_btn)
+        self._stack.addWidget(page)
+
+    def _pick_lib(self, folders):
+        if len(folders) == 1:
+            self.selected_folder = folders[0]
+            self.accept()
+        else:
+            self._show_folder_page(folders)
+
+    def _show_folder_page(self, folders):
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(20, 16, 20, 16)
+        layout.setSpacing(8)
+
+        title = QLabel('选择下载文件夹')
+        title.setStyleSheet('font-weight: 600; font-size: 14px;')
+        layout.addWidget(title)
+
+        for folder in folders:
+            btn = QPushButton(folder)
+            btn.setMinimumHeight(40)
+            btn.setToolTip(folder)
+            btn.clicked.connect(lambda checked, f=folder: self._pick_folder(f))
+            layout.addWidget(btn)
+
+        layout.addStretch()
+        back_btn = QPushButton('← 返回')
+        back_btn.clicked.connect(lambda: self._stack.setCurrentIndex(0))
+        layout.addWidget(back_btn)
+
+        if self._stack.count() > 1:
+            old = self._stack.widget(1)
+            self._stack.removeWidget(old)
+            old.deleteLater()
+        self._stack.addWidget(page)
+        self._stack.setCurrentIndex(1)
+
+    def _pick_folder(self, folder):
+        self.selected_folder = folder
+        self.accept()
 
 
 class LoadingOverlay(QWidget):
@@ -308,6 +392,16 @@ class SelectWindown(QMainWindow):
         host = item.data(Qt.UserRole)
         if self.host_status.get(host) is not True:
             return  # 失效、分卷不全或还在检测中的网站不加入下载
+
+        # 有媒体库配置时弹窗选择下载目标
+        if Config().read_media_libs():
+            dlg = _DownTargetDialog(self)
+            if dlg.exec_() != QDialog.Accepted:
+                return
+            if dlg.selected_folder:
+                from src.web_drive.debrid_link import set_work_base_path
+                set_work_base_path(self.select_ID, dlg.selected_folder)
+
         for down_url in self.host_groups.get(host, []):
             sql = f'''INSERT INTO "main"."download_list" ("UUID", "work_id", "url", "status", "long", "delete")
              VALUES ('{uuid.uuid4()}', '{self.select_ID}', '{down_url}', '0', '0', '1');'''

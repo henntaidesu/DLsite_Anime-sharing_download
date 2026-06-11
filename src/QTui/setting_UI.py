@@ -48,6 +48,7 @@ class SettingWindow(QMainWindow):
             self.port_banner_text = self.findChild(QLineEdit, 'port_benner')
             self.debrid_api_key_text = self.findChild(QLineEdit, 'debrid_api_key_benner')
             self.download_processes_text = self.findChild(QLineEdit, 'download_processes_benner')
+            self.min_speed_text = self.findChild(QLineEdit, 'min_speed_benner')
             self.processes_text = self.findChild(QLineEdit, 'processes_benner')
             self.encoding_text = self.findChild(QLineEdit, 'encoding_benner')
             self.api_address_text = self.findChild(QLineEdit, 'api_address_benner')
@@ -59,6 +60,7 @@ class SettingWindow(QMainWindow):
             self.port_banner_text.editingFinished.connect(self.save_proxy)
             self.debrid_api_key_text.editingFinished.connect(self.save_debrid)
             self.download_processes_text.editingFinished.connect(self.save_download_processes)
+            self.min_speed_text.editingFinished.connect(self.save_min_speed)
             self.processes_text.editingFinished.connect(self.save_processes)
             self.encoding_text.editingFinished.connect(self.save_encoding)
             self.api_address_text.editingFinished.connect(self.save_api)
@@ -111,6 +113,7 @@ class SettingWindow(QMainWindow):
             self.auto_unzip_choose.setCurrentIndex(0 if self.conf.read_auto_unzip() else 1)
             self.folder_name_choose.setCurrentIndex(1 if self.conf.read_folder_name() == 'work_name' else 0)
             self.download_processes_text.setText(str(download_processes))
+            self.min_speed_text.setText(str(self.conf.read_min_speed()))
             self.processes_text.setText(str(self.conf.read_processes()))
 
             log_level = self.conf.read_log_level()
@@ -135,6 +138,10 @@ class SettingWindow(QMainWindow):
 
         def save_download_processes(self):
             self.conf.write_value('down_list', 'download_processes', self.download_processes_text.text())
+
+        def save_min_speed(self):
+            value = self.min_speed_text.text().strip()
+            self.conf.write_value('down_list', 'min_speed', value if value.isdigit() else '0')
 
         def save_processes(self):
             self.conf.write_value('processes', 'processes', self.processes_text.text())

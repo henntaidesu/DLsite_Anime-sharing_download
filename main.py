@@ -8,6 +8,9 @@ if sys.stdout is None:
 if sys.stderr is None:
     sys.stderr = open(os.devnull, "w", encoding="utf-8")
 
+if getattr(sys, 'frozen', False):
+    os.chdir(sys._MEIPASS)
+
 from src.index import Index
 from src.module.create_folder import create_log_folder
 import multiprocessing
