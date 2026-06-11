@@ -162,6 +162,42 @@ QHeaderView::section {
     padding: 6px 8px;
 }
 
+QTreeWidget {
+    background-color: #1b1e25;
+    alternate-background-color: #1e222b;
+    border: 1px solid #2c313a;
+    border-radius: 8px;
+    outline: 0;
+}
+
+QTreeWidget::item {
+    padding: 5px 4px;
+    color: #cdd3de;
+}
+
+QTreeWidget::item:hover {
+    background-color: #232834;
+}
+
+QTreeWidget::item:selected {
+    background-color: #2f3b55;
+    color: #ffffff;
+}
+
+QProgressBar {
+    background-color: #232834;
+    border: none;
+    border-radius: 7px;
+    color: #e6e9ef;
+    font-size: 11px;
+    text-align: center;
+}
+
+QProgressBar::chunk {
+    background-color: #4f7cff;
+    border-radius: 7px;
+}
+
 /* ===== 下拉框 ===== */
 
 QComboBox {

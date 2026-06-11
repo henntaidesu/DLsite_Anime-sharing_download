@@ -1,4 +1,5 @@
 import configparser
+import json
 import os
 
 
@@ -12,8 +13,9 @@ DEFAULT_CONF = {
     'loglevel': {'level': 'info'},
     'encoding': {'encoding': 'cp437'},
     'max_key': {'rj': '0', 'vj': '0'},
-    'down_list': {'auto_download': 'False', 'download_processes': '5'},
+    'down_list': {'auto_download': 'False', 'auto_unzip': 'False', 'download_processes': '5', 'folder_name': 'rj'},
     'api': {'address': '127.0.0.1', 'port': '5000'},
+    'media_lib': {'folders': '[]'},
 }
 
 
@@ -136,6 +138,21 @@ class Config:
         download_processes = int(self.read_value('down_list', 'download_processes', '1'))
         return auto_download, download_processes
 
+    def read_auto_unzip(self):
+        return self.read_value('down_list', 'auto_unzip') == 'True'
+
+    def read_folder_name(self):
+        """下载文件夹命名方式：'rj'=按RJ号，'work_name'=按作品名称"""
+        return self.read_value('down_list', 'folder_name', 'rj')
+
+    def read_media_libs(self):
+        """媒体库文件夹列表"""
+        try:
+            folders = json.loads(self.read_value('media_lib', 'folders', '[]'))
+        except (TypeError, ValueError):
+            folders = []
+        return folders if isinstance(folders, list) else []
+
     def read_HOME_API(self):
         address = self.read_value('API', 'address', '127.0.0.1')
         port = self.read_value('API', 'port', '5000')
@@ -161,6 +178,9 @@ class Config:
 
     def write_proxy_type(self, proxy_type):
         self.write_value('Proxy', 'type', proxy_type)
+
+    def write_media_libs(self, folders):
+        self.write_value('media_lib', 'folders', json.dumps(folders, ensure_ascii=False))
 
 
 class WriteConf:

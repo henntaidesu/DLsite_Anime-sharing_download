@@ -64,6 +64,19 @@
         </property>
        </widget>
       </item>
+      <item>
+       <widget class="QPushButton" name="back_button">
+        <property name="minimumSize">
+         <size>
+          <width>88</width>
+          <height>34</height>
+         </size>
+        </property>
+        <property name="text">
+         <string>← 返回结果</string>
+        </property>
+       </widget>
+      </item>
      </layout>
     </item>
     <item>
@@ -89,16 +102,6 @@
          <number>0</number>
         </property>
         <item>
-         <widget class="QLabel" name="groupListCaption">
-          <property name="text">
-           <string>搜索结果</string>
-          </property>
-          <property name="class" stdset="0">
-           <string>caption</string>
-          </property>
-         </widget>
-        </item>
-        <item>
          <widget class="QListWidget" name="group_list_output"/>
         </item>
        </layout>
@@ -121,57 +124,7 @@
          <number>0</number>
         </property>
         <item>
-         <layout class="QHBoxLayout" name="detailHeaderLayout">
-          <property name="spacing">
-           <number>8</number>
-          </property>
-          <item>
-           <widget class="QPushButton" name="back_button">
-            <property name="minimumSize">
-             <size>
-              <width>88</width>
-              <height>28</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>← 返回结果</string>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <spacer name="detailHeaderSpacer">
-            <property name="orientation">
-             <enum>Qt::Horizontal</enum>
-            </property>
-            <property name="sizeHint" stdset="0">
-             <size>
-              <width>40</width>
-              <height>20</height>
-             </size>
-            </property>
-           </spacer>
-          </item>
-         </layout>
-        </item>
-        <item>
-         <layout class="QVBoxLayout" name="hostCardLayout">
-          <property name="spacing">
-           <number>6</number>
-          </property>
-          <item>
-           <widget class="QLabel" name="hostCardCaption">
-            <property name="text">
-             <string>下载网站</string>
-            </property>
-            <property name="class" stdset="0">
-             <string>caption</string>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QListWidget" name="host_card_list"/>
-          </item>
-         </layout>
+         <widget class="QListWidget" name="host_card_list"/>
         </item>
        </layout>
       </widget>

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>DownloadWindow</class>
- <widget class="QMainWindow" name="DownloadWindow">
+ <class>DownloadedWindow</class>
+ <widget class="QMainWindow" name="DownloadedWindow">
   <property name="geometry">
    <rect>
     <x>0</x>
@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>下载</string>
+   <string>已下载</string>
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QVBoxLayout" name="mainLayout">
@@ -36,6 +36,16 @@
        <number>8</number>
       </property>
       <item>
+       <widget class="QLabel" name="count_label">
+        <property name="text">
+         <string/>
+        </property>
+        <property name="class" stdset="0">
+         <string>caption</string>
+        </property>
+       </widget>
+      </item>
+      <item>
        <spacer name="headerSpacer">
         <property name="orientation">
          <enum>Qt::Horizontal</enum>
@@ -47,22 +57,6 @@
          </size>
         </property>
        </spacer>
-      </item>
-      <item>
-       <widget class="QPushButton" name="start_download_button">
-        <property name="minimumSize">
-         <size>
-          <width>108</width>
-          <height>28</height>
-         </size>
-        </property>
-        <property name="text">
-         <string>开始下载</string>
-        </property>
-        <property name="class" stdset="0">
-         <string>primary</string>
-        </property>
-       </widget>
       </item>
       <item>
        <widget class="QPushButton" name="refresh_button">
@@ -77,36 +71,10 @@
         </property>
        </widget>
       </item>
-      <item>
-       <widget class="QPushButton" name="clear_done_button">
-        <property name="minimumSize">
-         <size>
-          <width>108</width>
-          <height>28</height>
-         </size>
-        </property>
-        <property name="text">
-         <string>清除已完成</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="clear_all_button">
-        <property name="minimumSize">
-         <size>
-          <width>108</width>
-          <height>28</height>
-         </size>
-        </property>
-        <property name="text">
-         <string>清空列表</string>
-        </property>
-       </widget>
-      </item>
      </layout>
     </item>
     <item>
-     <widget class="QTreeWidget" name="download_tree">
+     <widget class="QTableWidget" name="works_table">
       <property name="editTriggers">
        <set>QAbstractItemView::NoEditTriggers</set>
       </property>
@@ -114,12 +82,6 @@
        <enum>QAbstractItemView::SelectRows</enum>
       </property>
       <property name="alternatingRowColors">
-       <bool>true</bool>
-      </property>
-      <property name="rootIsDecorated">
-       <bool>true</bool>
-      </property>
-      <property name="uniformRowHeights">
        <bool>true</bool>
       </property>
      </widget>

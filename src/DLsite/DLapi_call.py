@@ -58,6 +58,34 @@ def get_dlsite_work_name(term):
         err1(e)
 
 
+def get_work_data(work_id):
+    """调用 DL suggest API，返回该 RJ 号作品的全部数据（dict），未获取到返回 None"""
+    try:
+        OpenProxy, proxies = Config().read_proxy()
+        session = requests.Session()
+        if OpenProxy is True:
+            session.proxies.update(proxies)  # 将代理配置应用于该Session
+
+        site = "adult-jp"
+        touch = 0
+        # 生成新的时间戳
+        timestamp = int(time.time() * 1000)
+        timestamp2 = timestamp + 10
+        # 构建请求的 URL，包括新的时间戳
+        url = f"https://www.dlsite.com/suggest/?term={work_id}&site={site}&time={timestamp}&touch={touch}&_={timestamp2}"
+        response = session.get(url, timeout=15)
+        data = json.loads(response.text)
+        works = data.get('work', [])
+        # 优先返回 workno 完全匹配的作品
+        for work in works:
+            if str(work.get('workno', '')).upper() == work_id.upper():
+                return work
+        return works[0] if works else None
+    except Exception as e:
+        err1(e)
+        return None
+
+
 def get_work_name(work_id):
     try:
         OpenProxy, proxies = Config().read_proxy()

@@ -1,9 +1,31 @@
 import os
-from PyQt5.QtWidgets import QMainWindow, QLineEdit, QPushButton, QComboBox, QMessageBox, QFileDialog
-from PyQt5.QtCore import QStandardPaths
+from PyQt5.QtWidgets import (QMainWindow, QLineEdit, QPushButton, QComboBox, QMessageBox,
+                             QFileDialog, QListWidget, QLabel)
+from PyQt5.QtCore import QStandardPaths, QThread, pyqtSignal
 from PyQt5.uic import loadUi
 from src.module.conf_operate import Config
 from src.web_drive.debrid_link import DebridLink
+
+
+class MediaLibScanner(QThread):
+    """后台扫描媒体库：导入一级文件夹的 RJ 号并调用 DL API 补全数据"""
+    progress = pyqtSignal(str)
+    done = pyqtSignal(str)
+
+    def __init__(self, folder, parent=None):
+        super().__init__(parent)
+        self.folder = folder
+
+    def run(self):
+        from src.module.import_local_works import import_media_lib, backfill_works_from_api
+        added, total = import_media_lib(self.folder)
+        self.progress.emit(f'已导入 {total} 个作品（新增 {added}），正在从 DL API 补全数据…')
+        filled, missed, _ = backfill_works_from_api(delay=0.5, progress=self._on_backfill)
+        self.done.emit(f'扫描完成：导入 {total} 个，补全 {filled} 个，未获取到 {missed} 个')
+
+    def _on_backfill(self, i, total, rj, ok):
+        if i % 10 == 0 or i == total:
+            self.progress.emit(f'DL API 数据补全中… {i}/{total}')
 
 
 class SettingWindow(QMainWindow):
@@ -15,20 +37,8 @@ class SettingWindow(QMainWindow):
             self.down_path_save_button = self.findChild(QPushButton, 'DownPathSaveButton')
             self.down_path_save_button.clicked.connect(self.show_choose_path)
 
-            self.proxy_save_button = self.findChild(QPushButton, 'ProxySaveButton')
-            self.proxy_save_button.clicked.connect(self.show_save_proxy)
-
-            self.debrid_save_button = self.findChild(QPushButton, 'DebridSaveButton')
-            self.debrid_save_button.clicked.connect(self.show_save_debrid)
-
             self.debrid_test_button = self.findChild(QPushButton, 'DebridTestButton')
             self.debrid_test_button.clicked.connect(self.show_test_debrid)
-
-            self.other_save_button = self.findChild(QPushButton, 'OtherSaveButton')
-            self.other_save_button.clicked.connect(self.show_save_other)
-
-            self.system_save_button = self.findChild(QPushButton, 'SystemSaveButton')
-            self.system_save_button.clicked.connect(self.show_save_system)
 
             self.proxy_status_choose = self.findChild(QComboBox, 'proxy_status_choose')
             self.set_proxy_status_comboBox()
@@ -41,6 +51,23 @@ class SettingWindow(QMainWindow):
             self.auto_download_choose = self.findChild(QComboBox, 'if_auto_download')
             self.set_auto_download_comboBox()
             self.auto_download_choose.currentIndexChanged.connect(self.choose_auto_download)
+
+            self.auto_unzip_choose = self.findChild(QComboBox, 'if_auto_unzip')
+            self.set_auto_unzip_comboBox()
+            self.auto_unzip_choose.currentIndexChanged.connect(self.choose_auto_unzip)
+
+            self.folder_name_choose = self.findChild(QComboBox, 'folder_name_choose')
+            self.set_folder_name_comboBox()
+            self.folder_name_choose.currentIndexChanged.connect(self.choose_folder_name)
+
+            # 媒体库
+            self.media_lib_list = self.findChild(QListWidget, 'media_lib_list')
+            self.media_lib_status = self.findChild(QLabel, 'media_lib_status')
+            self.media_lib_add_button = self.findChild(QPushButton, 'media_lib_add_button')
+            self.media_lib_add_button.clicked.connect(self.add_media_lib)
+            self.media_lib_remove_button = self.findChild(QPushButton, 'media_lib_remove_button')
+            self.media_lib_remove_button.clicked.connect(self.remove_media_lib)
+            self.media_lib_scanner = None
 
             self.log_level_choose = self.findChild(QComboBox, 'log_level_choose')
             self.set_log_level_comboBox()
@@ -55,6 +82,17 @@ class SettingWindow(QMainWindow):
             self.encoding_text = self.findChild(QLineEdit, 'encoding_benner')
             self.api_address_text = self.findChild(QLineEdit, 'api_address_benner')
             self.api_port_text = self.findChild(QLineEdit, 'api_port_benner')
+
+            # 输入框编辑完成（回车或失去焦点）即保存，无需保存按钮
+            self.path_banner_text.editingFinished.connect(self.save_down_path)
+            self.address_banner_text.editingFinished.connect(self.save_proxy)
+            self.port_banner_text.editingFinished.connect(self.save_proxy)
+            self.debrid_api_key_text.editingFinished.connect(self.save_debrid)
+            self.download_processes_text.editingFinished.connect(self.save_download_processes)
+            self.processes_text.editingFinished.connect(self.save_processes)
+            self.encoding_text.editingFinished.connect(self.save_encoding)
+            self.api_address_text.editingFinished.connect(self.save_api)
+            self.api_port_text.editingFinished.connect(self.save_api)
 
             self.conf = Config()
             self.read_conf()
@@ -94,6 +132,8 @@ class SettingWindow(QMainWindow):
 
             auto_download, download_processes = self.conf.read_download_list()
             self.auto_download_choose.setCurrentIndex(0 if auto_download else 1)
+            self.auto_unzip_choose.setCurrentIndex(0 if self.conf.read_auto_unzip() else 1)
+            self.folder_name_choose.setCurrentIndex(1 if self.conf.read_folder_name() == 'work_name' else 0)
             self.download_processes_text.setText(str(download_processes))
             self.processes_text.setText(str(self.conf.read_processes()))
 
@@ -105,8 +145,33 @@ class SettingWindow(QMainWindow):
             self.api_address_text.setText(self.conf.read_value('API', 'address', '127.0.0.1'))
             self.api_port_text.setText(self.conf.read_value('API', 'port', '5000'))
 
-        def show_save_debrid(self):
+            self.media_lib_list.clear()
+            self.media_lib_list.addItems(self.conf.read_media_libs())
+
+        def save_down_path(self):
+            """手动输入下载路径：输入的是有效目录时才保存"""
+            path = self.path_banner_text.text().strip()
+            if path and os.path.isdir(path):
+                self.conf.write_download_path(os.path.normpath(path))
+
+        def save_proxy(self):
+            self.conf.write_proxy(self.address_banner_text.text(), self.port_banner_text.text())
+
+        def save_debrid(self):
             self.conf.write_debrid_api_key(self.debrid_api_key_text.text().strip())
+
+        def save_download_processes(self):
+            self.conf.write_value('down_list', 'download_processes', self.download_processes_text.text())
+
+        def save_processes(self):
+            self.conf.write_value('processes', 'processes', self.processes_text.text())
+
+        def save_encoding(self):
+            self.conf.write_value('encoding', 'encoding', self.encoding_text.text())
+
+        def save_api(self):
+            self.conf.write_value('API', 'address', self.api_address_text.text())
+            self.conf.write_value('API', 'port', self.api_port_text.text())
 
         def show_test_debrid(self):
             client = DebridLink()
@@ -148,6 +213,55 @@ class SettingWindow(QMainWindow):
         def choose_auto_download(self, index):
             self.conf.write_value('down_list', 'auto_download', self.auto_download_choose.itemData(index))
 
+        def set_auto_unzip_comboBox(self):
+            items = [("开启", "True"), ("关闭", "False")]
+            for text, value in items:
+                self.auto_unzip_choose.addItem(text, value)
+
+        def choose_auto_unzip(self, index):
+            self.conf.write_value('down_list', 'auto_unzip', self.auto_unzip_choose.itemData(index))
+
+        def set_folder_name_comboBox(self):
+            items = [("RJ号", "rj"), ("作品名称", "work_name")]
+            for text, value in items:
+                self.folder_name_choose.addItem(text, value)
+
+        def choose_folder_name(self, index):
+            self.conf.write_value('down_list', 'folder_name', self.folder_name_choose.itemData(index))
+
+        def _media_lib_folders(self):
+            return [self.media_lib_list.item(i).text() for i in range(self.media_lib_list.count())]
+
+        def add_media_lib(self):
+            if self.media_lib_scanner is not None and self.media_lib_scanner.isRunning():
+                QMessageBox.information(self, '媒体库', '正在扫描中，请等待当前扫描完成。')
+                return
+            path = QFileDialog.getExistingDirectory(self, '选择媒体库文件夹', self.default_down_path())
+            if not path:
+                return
+            path = os.path.normpath(path)
+            if path in self._media_lib_folders():
+                QMessageBox.information(self, '媒体库', '该文件夹已在媒体库中。')
+                return
+            self.media_lib_list.addItem(path)
+            self.conf.write_media_libs(self._media_lib_folders())
+            self._start_media_lib_scan(path)
+
+        def remove_media_lib(self):
+            row = self.media_lib_list.currentRow()
+            if row < 0:
+                return
+            self.media_lib_list.takeItem(row)
+            self.conf.write_media_libs(self._media_lib_folders())
+
+        def _start_media_lib_scan(self, path):
+            """后台扫描媒体库文件夹：导入 RJ 号并调用 DL API 补全"""
+            self.media_lib_status.setText(f'正在扫描 {path} …')
+            self.media_lib_scanner = MediaLibScanner(path, self)
+            self.media_lib_scanner.progress.connect(self.media_lib_status.setText)
+            self.media_lib_scanner.done.connect(self.media_lib_status.setText)
+            self.media_lib_scanner.start()
+
         def set_log_level_comboBox(self):
             items = ["info", "error", "debug"]
             for item in items:
@@ -166,19 +280,6 @@ class SettingWindow(QMainWindow):
                 self.path_banner_text.setText(path)
                 self.conf.write_download_path(path)
 
-        def show_save_proxy(self):
-            address = self.address_banner_text.text()
-            port = self.port_banner_text.text()
-            self.conf.write_proxy(address, port)
-
-        def show_save_other(self):
-            self.conf.write_value('down_list', 'download_processes', self.download_processes_text.text())
-            self.conf.write_value('processes', 'processes', self.processes_text.text())
-
-        def show_save_system(self):
-            self.conf.write_value('encoding', 'encoding', self.encoding_text.text())
-            self.conf.write_value('API', 'address', self.api_address_text.text())
-            self.conf.write_value('API', 'port', self.api_port_text.text())
 
     except Exception as e:
         print(f"数据获取错误: {e}")

@@ -45,6 +45,23 @@ class SQLiteDB:
                 "delete" text,
                 PRIMARY KEY ("url")
             )''')
+            cursor.execute('''CREATE TABLE IF NOT EXISTS "works" (
+                "work_id" text,
+                "work_name" TEXT,
+                "maker_id" text,
+                "maker_name" TEXT,
+                "work_type" text,
+                "intro_s" TEXT,
+                "age_category" text,
+                "is_ana" text,
+                "state" text,
+                "down_time" text,
+                PRIMARY KEY ("work_id")
+            )''')
+            # 旧版 works 表没有 state 列时补加
+            columns = [row[1] for row in cursor.execute('PRAGMA table_info("works")').fetchall()]
+            if 'state' not in columns:
+                cursor.execute('ALTER TABLE "works" ADD COLUMN "state" text')
             self.db.commit()
             cursor.close()
         except sqlite3.Error as e:

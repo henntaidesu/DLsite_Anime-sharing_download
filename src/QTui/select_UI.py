@@ -1,18 +1,66 @@
 import asyncio
+import re
 import uuid
 import urllib.parse
 import requests
 from PyQt5.QtWidgets import (QMainWindow, QLineEdit, QPushButton, QListWidget, QListWidgetItem,
-                             QStackedWidget, QLabel, QFrame, QHBoxLayout, QVBoxLayout)
-from PyQt5.QtGui import QPixmap, QIcon, QColor
+                             QStackedWidget, QLabel, QFrame, QHBoxLayout, QVBoxLayout, QMessageBox,
+                             QWidget)
+from PyQt5.QtGui import QPixmap, QIcon, QColor, QPainter, QPen
 from PyQt5.uic import loadUi
 from src.Anime_sharing.get_as_work_upgroup_url import as_work_url
 from src.Anime_sharing.get_webdrive_url import get_work_down_url
+from src.DLsite.DLapi_call import get_work_data
 from src.module.conf_operate import Config
 from src.module.datebase_execution import SQLiteDB
+from src.module.time import Time_a
 from src.web_drive.doun_url_test import check_url, make_session
 from src.web_drive.debrid_link import start_download_worker
-from PyQt5.QtCore import Qt, QSize, QThread, pyqtSignal
+from PyQt5.QtCore import Qt, QSize, QThread, pyqtSignal, QTimer, QRectF
+
+
+class LoadingOverlay(QWidget):
+    """全屏半透明加载遮罩，中间显示转圈动画，挡住下层控件的鼠标操作"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._angle = 0
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._rotate)
+        self.hide()
+
+    def _rotate(self):
+        self._angle = (self._angle + 30) % 360
+        self.update()
+
+    def show_on(self, widget):
+        """覆盖到指定窗口上并开始转圈"""
+        self.setParent(widget)
+        self.setGeometry(widget.rect())
+        self.raise_()
+        self.show()
+        self._timer.start(80)
+
+    def stop(self):
+        self._timer.stop()
+        self.hide()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.fillRect(self.rect(), QColor(0, 0, 0, 150))
+
+        size = 48
+        cx, cy = self.width() / 2, self.height() / 2
+        pen = QPen(QColor('#8fa3ff'), 5, Qt.SolidLine, Qt.RoundCap)
+        painter.setPen(pen)
+        rect = QRectF(cx - size / 2, cy - size / 2, size, size)
+        # Qt 角度单位为 1/16 度，画 270 度的弧并随定时器旋转
+        painter.drawArc(rect, -self._angle * 16, 270 * 16)
+
+        painter.setPen(QColor('#e6e9f0'))
+        painter.drawText(QRectF(0, cy + size / 2 + 12, self.width(), 30),
+                         Qt.AlignHCenter, '正在查询…')
 
 
 class ThumbLoader(QThread):
@@ -73,6 +121,7 @@ class SelectWindown(QMainWindow):
         self.down_url_list = []
         self.select_ID = None
         self.AS_title = None
+        self.work_data = None     # 当前搜索作品的 DL API 数据，加入下载时写入 works 表
         self.push_download_list = []
 
         # 加载 .ui 文件
@@ -92,12 +141,18 @@ class SelectWindown(QMainWindow):
         # 下载网站卡片列表
         self.host_card_list.setSpacing(4)
 
+        # 全屏查询加载遮罩
+        self.loading_overlay = LoadingOverlay(self)
+
         # 查询按钮
         # self.search_button.clicked.connect(self.show_select_button)
         self.search_button.clicked.connect(lambda: asyncio.create_task(self.show_select_button()))
+        # 输入框回车触发查询
+        self.input.returnPressed.connect(lambda: asyncio.create_task(self.show_select_button()))
         # 上传者列表按钮
         self.group_list_output.itemClicked.connect(self.group_list_item_click)
-        # 返回搜索结果按钮
+        # 返回搜索结果按钮：仅在下载网站详情页显示
+        self.back_button.hide()
         self.back_button.clicked.connect(self.show_results_page)
         # 下载网站卡片：点击有效卡片加入下载
         self.host_card_list.itemClicked.connect(self.host_card_click)
@@ -117,7 +172,6 @@ class SelectWindown(QMainWindow):
 
         self.group_list_output.clear()  # 清除现有内容
         if not results:
-            self.group_list_output.addItem('NULL')
             return
 
         placeholder = QPixmap(self.THUMB_SIZE)
@@ -233,9 +287,11 @@ class SelectWindown(QMainWindow):
 
     def show_results_page(self):
         self.lists_stack.setCurrentIndex(0)
+        self.back_button.hide()
 
     def show_detail_page(self):
         self.lists_stack.setCurrentIndex(1)
+        self.back_button.show()
 
     def group_list_item_click(self, item):
         if self.results:
@@ -254,14 +310,30 @@ class SelectWindown(QMainWindow):
             return  # 失效、分卷不全或还在检测中的网站不加入下载
         for down_url in self.host_groups.get(host, []):
             sql = f'''INSERT INTO "main"."download_list" ("UUID", "work_id", "url", "status", "long", "delete")
-             VALUES ('{uuid.uuid4()}', '{self.select_ID}', '{down_url}', '0', '1', '1');'''
+             VALUES ('{uuid.uuid4()}', '{self.select_ID}', '{down_url}', '0', '0', '1');'''
             SQLiteDB().insert(sql)
+        self.record_work()
         start_download_worker()
 
         self.host_status[host] = 'queued'
         status_label = self.host_cards[host]['status']
         status_label.setText('已加入下载')
         status_label.setStyleSheet('color: #8fa3ff; font-weight: 600;')
+
+    def record_work(self):
+        """把 DL API 返回的作品数据写入 works 表，状态为下载中，全部下载完成后由下载线程改为已下载"""
+        work = self.work_data or {}
+
+        def esc(value):
+            return str(value if value is not None else '').replace("'", "''")
+
+        sql = (f'INSERT OR REPLACE INTO "main"."works" '
+               f'("work_id", "work_name", "maker_id", "maker_name", "work_type", '
+               f'"intro_s", "age_category", "is_ana", "state", "down_time") VALUES '
+               f"('{esc(self.select_ID)}', '{esc(work.get('work_name'))}', '{esc(work.get('maker_id'))}', "
+               f"'{esc(work.get('maker_name'))}', '{esc(work.get('work_type'))}', '{esc(work.get('intro_s'))}', "
+               f"'{esc(work.get('age_category'))}', '{esc(work.get('is_ana'))}', '下载中', '{Time_a().now_time()}')")
+        SQLiteDB().insert(sql)
 
     def clear_display(self):
         self._stop_host_checkers()
@@ -276,10 +348,38 @@ class SelectWindown(QMainWindow):
     async def show_select_button(self):
         self.clear_display()
         # 获取输入框的文本
-        self.select_ID = self.input.text()
-        self.aaa()
+        self.select_ID = self.input.text().strip().upper()
+        if not self.select_ID:
+            return
+        # RJ 号格式校验
+        if not re.fullmatch(r'RJ\d+', self.select_ID):
+            QMessageBox.warning(self, 'RJ号错误', f'{self.select_ID} 不是有效的RJ号（格式：RJ + 数字）')
+            return
+        # 已下载过的作品提示用户
+        result = SQLiteDB().select(
+            f'''SELECT "work_name", "down_time" FROM "main"."works" WHERE "work_id" = '{self.select_ID}' ''')
+        if result is not False and result[1]:
+            work_name, down_time = result[1][0]
+            ret = QMessageBox.question(
+                self, '已下载',
+                f'{self.select_ID} {work_name or ""}\n该作品已于 {str(down_time)[:19]} 加入过下载，是否继续搜索？',
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            if ret != QMessageBox.Yes:
+                return
+        # 查询期间显示全屏转圈遮罩，网络请求放到线程池避免卡死界面
+        self.loading_overlay.show_on(self.window())
+        try:
+            loop = asyncio.get_event_loop()
+            self.work_data, self.results = await loop.run_in_executor(
+                None, self._do_search, self.select_ID)
+        finally:
+            self.loading_overlay.stop()
+        if not self.results:
+            QMessageBox.information(self, '提示', '无匹配数据')
+            return
+        self.ui_group_list(self.results)
 
-    def aaa(self):
-        if self.select_ID:
-            self.results = as_work_url(self.select_ID)
-            self.ui_group_list(self.results)
+    @staticmethod
+    def _do_search(work_id):
+        """后台线程执行：从 DL API 获取作品数据 + 搜索 AS 论坛"""
+        return get_work_data(work_id), as_work_url(work_id)

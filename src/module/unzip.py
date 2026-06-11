@@ -75,7 +75,9 @@ def get_all_archive_files(folder_path):
 
 def unzip(work_id):
     try:
-        folder_path = f"{Config().read_file_down_path()}\\{work_id}"
+        # 与下载逻辑保持同一文件夹命名方式（RJ号 / 作品名称）
+        from src.web_drive.debrid_link import work_folder_path
+        folder_path = work_folder_path(work_id)
         logger.write_log(f'{work_id} 正在解压', 'info')
         while True:
             # print(folder_path)

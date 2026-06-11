@@ -149,19 +149,6 @@
          </property>
         </widget>
        </item>
-       <item>
-        <widget class="QPushButton" name="ProxySaveButton">
-         <property name="minimumSize">
-          <size>
-           <width>72</width>
-           <height>32</height>
-          </size>
-         </property>
-         <property name="text">
-          <string>保存</string>
-         </property>
-        </widget>
-       </item>
       </layout>
      </widget>
     </item>
@@ -213,19 +200,6 @@
          </property>
         </widget>
        </item>
-       <item>
-        <widget class="QPushButton" name="DebridSaveButton">
-         <property name="minimumSize">
-          <size>
-           <width>72</width>
-           <height>32</height>
-          </size>
-         </property>
-         <property name="text">
-          <string>保存</string>
-         </property>
-        </widget>
-       </item>
       </layout>
      </widget>
     </item>
@@ -234,105 +208,243 @@
       <property name="title">
        <string>下载选项</string>
       </property>
-      <layout class="QHBoxLayout" name="otherLayout">
+      <layout class="QVBoxLayout" name="otherLayout">
        <property name="spacing">
         <number>8</number>
        </property>
        <item>
-        <widget class="QLabel" name="label_4">
-         <property name="text">
-          <string>自动下载</string>
+        <layout class="QHBoxLayout" name="otherRow1">
+         <property name="spacing">
+          <number>8</number>
          </property>
-         <property name="class" stdset="0">
-          <string>caption</string>
-         </property>
-        </widget>
+         <item>
+          <widget class="QLabel" name="label_4">
+           <property name="text">
+            <string>自动下载</string>
+           </property>
+           <property name="class" stdset="0">
+            <string>caption</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QComboBox" name="if_auto_download">
+           <property name="minimumSize">
+            <size>
+             <width>90</width>
+             <height>32</height>
+            </size>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="autoUnzipLabel">
+           <property name="text">
+            <string>自动解压</string>
+           </property>
+           <property name="class" stdset="0">
+            <string>caption</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QComboBox" name="if_auto_unzip">
+           <property name="minimumSize">
+            <size>
+             <width>90</width>
+             <height>32</height>
+            </size>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="folderNameLabel">
+           <property name="text">
+            <string>文件夹命名</string>
+           </property>
+           <property name="class" stdset="0">
+            <string>caption</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QComboBox" name="folder_name_choose">
+           <property name="minimumSize">
+            <size>
+             <width>100</width>
+             <height>32</height>
+            </size>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <spacer name="otherRow1Spacer">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+        </layout>
        </item>
        <item>
-        <widget class="QComboBox" name="if_auto_download">
-         <property name="minimumSize">
-          <size>
-           <width>90</width>
-           <height>32</height>
-          </size>
+        <layout class="QHBoxLayout" name="otherRow2">
+         <property name="spacing">
+          <number>8</number>
          </property>
-        </widget>
+         <item>
+          <widget class="QLabel" name="label_5">
+           <property name="text">
+            <string>下载线程数</string>
+           </property>
+           <property name="class" stdset="0">
+            <string>caption</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLineEdit" name="download_processes_benner">
+           <property name="minimumSize">
+            <size>
+             <width>0</width>
+             <height>32</height>
+            </size>
+           </property>
+           <property name="maximumSize">
+            <size>
+             <width>80</width>
+             <height>16777215</height>
+            </size>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="label_6">
+           <property name="text">
+            <string>查询线程数</string>
+           </property>
+           <property name="class" stdset="0">
+            <string>caption</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLineEdit" name="processes_benner">
+           <property name="minimumSize">
+            <size>
+             <width>0</width>
+             <height>32</height>
+            </size>
+           </property>
+           <property name="maximumSize">
+            <size>
+             <width>80</width>
+             <height>16777215</height>
+            </size>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <spacer name="otherSpacer">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <widget class="QGroupBox" name="mediaLibGroup">
+      <property name="title">
+       <string>媒体库</string>
+      </property>
+      <layout class="QVBoxLayout" name="mediaLibLayout">
+       <property name="spacing">
+        <number>8</number>
+       </property>
+       <item>
+        <layout class="QHBoxLayout" name="mediaLibHeader">
+         <property name="spacing">
+          <number>8</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="media_lib_status">
+           <property name="text">
+            <string/>
+           </property>
+           <property name="class" stdset="0">
+            <string>caption</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <spacer name="mediaLibSpacer">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+         <item>
+          <widget class="QPushButton" name="media_lib_add_button">
+           <property name="minimumSize">
+            <size>
+             <width>108</width>
+             <height>28</height>
+            </size>
+           </property>
+           <property name="text">
+            <string>添加文件夹</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="media_lib_remove_button">
+           <property name="minimumSize">
+            <size>
+             <width>88</width>
+             <height>28</height>
+            </size>
+           </property>
+           <property name="text">
+            <string>移除选中</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
        </item>
        <item>
-        <widget class="QLabel" name="label_5">
-         <property name="text">
-          <string>下载线程数</string>
-         </property>
-         <property name="class" stdset="0">
-          <string>caption</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QLineEdit" name="download_processes_benner">
+        <widget class="QListWidget" name="media_lib_list">
          <property name="minimumSize">
           <size>
            <width>0</width>
-           <height>32</height>
+           <height>90</height>
           </size>
          </property>
          <property name="maximumSize">
           <size>
-           <width>80</width>
-           <height>16777215</height>
+           <width>16777215</width>
+           <height>140</height>
           </size>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QLabel" name="label_6">
-         <property name="text">
-          <string>查询线程数</string>
-         </property>
-         <property name="class" stdset="0">
-          <string>caption</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QLineEdit" name="processes_benner">
-         <property name="minimumSize">
-          <size>
-           <width>0</width>
-           <height>32</height>
-          </size>
-         </property>
-         <property name="maximumSize">
-          <size>
-           <width>80</width>
-           <height>16777215</height>
-          </size>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <spacer name="otherSpacer">
-         <property name="orientation">
-          <enum>Qt::Horizontal</enum>
-         </property>
-         <property name="sizeHint" stdset="0">
-          <size>
-           <width>40</width>
-           <height>20</height>
-          </size>
-         </property>
-        </spacer>
-       </item>
-       <item>
-        <widget class="QPushButton" name="OtherSaveButton">
-         <property name="minimumSize">
-          <size>
-           <width>72</width>
-           <height>32</height>
-          </size>
-         </property>
-         <property name="text">
-          <string>保存</string>
          </property>
         </widget>
        </item>
@@ -430,19 +542,6 @@
          </property>
          <property name="placeholderText">
           <string>port</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QPushButton" name="SystemSaveButton">
-         <property name="minimumSize">
-          <size>
-           <width>72</width>
-           <height>32</height>
-          </size>
-         </property>
-         <property name="text">
-          <string>保存</string>
          </property>
         </widget>
        </item>
