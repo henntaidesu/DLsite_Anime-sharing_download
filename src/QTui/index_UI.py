@@ -1,7 +1,7 @@
 from src.QTui.select_UI import SelectWindown
 from src.QTui.download_UI import DownloadWindow
 from src.QTui.downloaded_UI import DownloadedWindow
-from src.QTui.media_lib_UI import MediaLibWindow
+from src.QTui.media_lib_UI import MediaLibWindow, TagWindow
 from src.QTui.setting_UI import SettingWindow
 from src.QTui.style.theme import enable_dark_title_bar
 from PyQt5.QtWidgets import QApplication, QMainWindow, QStackedWidget, QPushButton, QVBoxLayout, QWidget
@@ -18,6 +18,7 @@ class IndexWindow(QWidget):
         self.download_button = self.findChild(QPushButton, 'pushButton_2')
         self.downloaded_button = self.findChild(QPushButton, 'pushButton_4')
         self.media_lib_button = self.findChild(QPushButton, 'pushButton_5')
+        self.tag_button = self.findChild(QPushButton, 'pushButton_6')
         self.setting_button = self.findChild(QPushButton, 'pushButton_3')
 
         # 连接按钮点击事件到槽函数
@@ -25,6 +26,7 @@ class IndexWindow(QWidget):
         self.download_button.clicked.connect(self.show_download_window)
         self.downloaded_button.clicked.connect(self.show_downloaded_window)
         self.media_lib_button.clicked.connect(self.show_media_lib_window)
+        self.tag_button.clicked.connect(self.show_tag_window)
         self.setting_button.clicked.connect(self.show_setting_window)
 
         # 初始化 QStackedWidget
@@ -43,6 +45,9 @@ class IndexWindow(QWidget):
 
         self.media_lib_window = MediaLibWindow()
         self.stackedWidget.addWidget(self.media_lib_window)
+
+        self.tag_window = TagWindow()
+        self.stackedWidget.addWidget(self.tag_window)
 
         self.setting_window = SettingWindow()
         self.stackedWidget.addWidget(self.setting_window)
@@ -63,6 +68,9 @@ class IndexWindow(QWidget):
 
     def show_media_lib_window(self):
         self.stackedWidget.setCurrentWidget(self.media_lib_window)
+
+    def show_tag_window(self):
+        self.stackedWidget.setCurrentWidget(self.tag_window)
 
     def show_setting_window(self):
         self.stackedWidget.setCurrentWidget(self.setting_window)

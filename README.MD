@@ -28,6 +28,19 @@ level = error
 
 
 
+### 打包
+
+``` bash
+pip install pyinstaller
+pyinstaller main.spec
+```
+
+打包后的程序在 `dist/main.exe`，已配置为无控制台窗口（GUI模式），暗色主题样式文件会一并打包。
+
+注意：
+- 必须使用 `pyinstaller main.spec` 打包，不要用 `pyinstaller -F main.py`（会重新生成 spec 文件，丢失已配置的 datas 等设置）
+- exe 需要在仓库根目录下运行（`.ui` 文件和 `DASD.db` 使用相对路径加载）
+
 ### 基本窗口
 
 

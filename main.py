@@ -1,4 +1,13 @@
 import sys
+import os
+
+# 无控制台打包（console=False）时 sys.stdout/stderr 为 None，
+# patoolib 等库在导入时会访问 sys.stderr.encoding 导致崩溃，这里补上空流
+if sys.stdout is None:
+    sys.stdout = open(os.devnull, "w", encoding="utf-8")
+if sys.stderr is None:
+    sys.stderr = open(os.devnull, "w", encoding="utf-8")
+
 from src.index import Index
 from src.module.create_folder import create_log_folder
 import multiprocessing

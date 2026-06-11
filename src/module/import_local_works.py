@@ -155,12 +155,14 @@ PAGE_COLUMNS = ('work_name', 'maker_name', 'sell_date', 'series', 'scenario', 'i
 
 
 def backfill_work_pages(delay=1.0, progress=None, library=None, force=False):
-    """对缺少页面元数据的已品悦作品逐个抓取 DLsite 作品页，
-    补全字段并下载全部图片（第一张作为封面，存到 images/<RJ号>/）。
+    """对未标记 meta_scanned 的已品悦作品逐个抓取 DLsite 作品页，
+    补全字段、保存正文与标签，并下载全部图片到作品文件夹的数据源目录。
     抓取成功的作品标记 meta_scanned = '1'，下次扫描不再重新获取。
     返回 (补全数, 失败数, 总数)。delay 为每次抓取间隔秒数（限速）。
-    library 限定只处理该媒体库的作品；force 为 True 时无视标记和已有数据强制重新抓取。"""
-    from src.DLsite.DLsite_page import get_work_page, download_work_images, save_work_description
+    library 限定只处理该媒体库的作品；force 为 True 时无视标记选取全部作品：
+    作品页仍可访问的删除旧数据源后全量重新下载，获取不到的保留原有元数据。"""
+    from src.DLsite.DLsite_page import (get_work_page, download_work_images,
+                                        save_work_description, remove_work_data_source)
 
     db = SQLiteDB()
     lib_cond = ''
@@ -169,9 +171,9 @@ def backfill_work_pages(delay=1.0, progress=None, library=None, force=False):
     if force:
         sql = f'''SELECT "work_id", "folder" FROM "main"."works" WHERE "state" = '已品悦'{lib_cond}'''
     else:
+        # meta_scanned 是"已完整扫描"（字段+图片+正文+标签）的唯一标记：
+        # 旧版扫描过、字段已齐但缺正文/标签的作品也会被选中补全
         sql = f'''SELECT "work_id", "folder" FROM "main"."works" WHERE "state" = '已品悦'
-                  AND ("sell_date" IS NULL OR "sell_date" = ''
-                       OR "cover" IS NULL OR "cover" = '')
                   AND COALESCE("meta_scanned", '') != '1'{lib_cond}'''
     result = db.select(sql)
     if result is False:
@@ -185,8 +187,18 @@ def backfill_work_pages(delay=1.0, progress=None, library=None, force=False):
     for i, (rj, work_folder) in enumerate(rj_list, 1):
         data, image_urls, body_text = get_work_page(rj)
         if data:
+            if force:
+                # 作品页仍可访问：删除旧数据源后全量重新下载；
+                # 获取不到的作品走 else 分支，原有元数据保持不动
+                remove_work_data_source(rj, work_folder)
             cover = download_work_images(rj, image_urls, work_folder)
             save_work_description(rj, body_text, work_folder)
+            genres = data.pop('genres', [])
+            if genres:
+                db.delete(f'''DELETE FROM "main"."work_genres" WHERE "work_id" = '{rj}' ''')
+                for genre in genres:
+                    db.insert(f'''INSERT OR IGNORE INTO "main"."work_genres" ("work_id", "genre")
+                                  VALUES ('{rj}', '{esc(genre)}')''')
             sets = [f'''"{col}" = '{esc(data[col])}' ''' for col in PAGE_COLUMNS if data.get(col)]
             if cover:
                 sets.append(f'''"cover" = '{esc(cover)}' ''')

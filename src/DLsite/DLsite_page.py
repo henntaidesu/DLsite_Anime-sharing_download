@@ -1,4 +1,6 @@
 import os
+import re
+import shutil
 import requests
 from bs4 import BeautifulSoup
 from src.module.conf_operate import Config
@@ -10,6 +12,7 @@ IMAGES_DIR = 'images'  # 无作品文件夹时的图片回退目录：images/<RJ
 DATA_SOURCE_DIR = 'DataSource'  # 作品文件夹内存放 DLsite 图片的子文件夹名
 DESCRIPTION_TXT = 'description.txt'  # 数据源文件夹内的作品页正文文本
 IMAGE_EXTS = ('.jpg', '.jpeg', '.png', '.gif', '.webp')
+BODY_IMAGE_RE = re.compile(r'^\[img:(.+)\]$')  # description.txt 中正文图片的占位标记行
 
 # 作品页 work_outline 表格字段 -> works 表列名
 FIELD_MAP = {
@@ -68,6 +71,10 @@ def get_work_page(work_id):
             column = FIELD_MAP.get(th.get_text(strip=True))
             if column:
                 data[column] = ' '.join(td.get_text(' ', strip=True).split())
+                if column == 'genre':
+                    # ジャンル标签逐个提取（每个标签是一个 <a>），供 work_genres 表使用
+                    data['genres'] = [a.get_text(strip=True)
+                                      for a in td.find_all('a') if a.get_text(strip=True)]
     # 作品名 / 社团名（suggest API 检索不到的作品兜底）
     name = soup.find(id='work_name')
     if name:
@@ -88,29 +95,52 @@ def get_work_page(work_id):
         if og and og.get('content'):
             urls.append(og['content'])
 
-    # 正文（work_parts_container）：文本 + 正文图片
+    # 正文（work_parts_container）：图片先替换成 [img:文件名] 占位标记再取文本，
+    # 详情页据此把正文图片嵌回原文位置
     body_text = ''
     description = (soup.select_one('div[itemprop="description"]')
                    or soup.find(class_='work_parts_container'))
     if description is not None:
-        body_text = description.get_text('\n', strip=True)
         for img in description.find_all('img'):
             src = img.get('data-src') or img.get('src')
+            marker = ''
             if src:
                 url = 'https:' + src if src.startswith('//') else src
                 if url not in urls:
                     urls.append(url)
+                filename = url.rsplit('/', 1)[-1].split('?')[0]
+                if filename:
+                    marker = f'\n[img:{filename}]\n'
+            img.replace_with(marker)
+        body_text = description.get_text('\n', strip=True)
     return data, urls, body_text
+
+
+def _data_source_folder(work_id, work_folder=None):
+    """作品数据源目录：<作品文件夹>/DataSource/，无作品文件夹时回退 images/<RJ号>/"""
+    if work_folder and os.path.isdir(work_folder):
+        return os.path.join(work_folder, DATA_SOURCE_DIR)
+    return os.path.join(IMAGES_DIR, work_id)
+
+
+def remove_work_data_source(work_id, work_folder=None):
+    """删除作品已下载的数据源文件夹（强制重扫确认作品页可访问后调用），返回是否删除"""
+    folder = _data_source_folder(work_id, work_folder)
+    if not os.path.isdir(folder):
+        return False
+    try:
+        shutil.rmtree(folder)
+        return True
+    except OSError as e:
+        logger.write_log(f'数据源文件夹删除失败 {work_id}: {e}', 'error')
+        return False
 
 
 def download_work_images(work_id, urls, work_folder=None):
     """下载作品全部图片到 <作品文件夹>/DataSource/（无作品文件夹时回退 images/<RJ号>/）。
     数据源文件夹已存在且有图片时不再下载，直接返回其中第一张作为封面；
     否则逐张下载（已存在的文件跳过），返回封面（第一张图片）的路径，没有图片返回 ''"""
-    if work_folder and os.path.isdir(work_folder):
-        folder = os.path.join(work_folder, DATA_SOURCE_DIR)
-    else:
-        folder = os.path.join(IMAGES_DIR, work_id)
+    folder = _data_source_folder(work_id, work_folder)
     if os.path.isdir(folder):
         existing = [f for f in sorted(os.listdir(folder))
                     if os.path.isfile(os.path.join(folder, f)) and f.lower().endswith(IMAGE_EXTS)]
@@ -148,10 +178,7 @@ def save_work_description(work_id, text, work_folder=None):
     返回 txt 路径，text 为空或写入失败返回 ''"""
     if not text:
         return ''
-    if work_folder and os.path.isdir(work_folder):
-        folder = os.path.join(work_folder, DATA_SOURCE_DIR)
-    else:
-        folder = os.path.join(IMAGES_DIR, work_id)
+    folder = _data_source_folder(work_id, work_folder)
     path = os.path.join(folder, DESCRIPTION_TXT)
     try:
         os.makedirs(folder, exist_ok=True)

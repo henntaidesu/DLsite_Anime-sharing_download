@@ -69,6 +69,11 @@ class SQLiteDB:
                 "folder" text,
                 PRIMARY KEY ("work_id")
             )''')
+            cursor.execute('''CREATE TABLE IF NOT EXISTS "work_genres" (
+                "work_id" text NOT NULL,
+                "genre" text NOT NULL,
+                PRIMARY KEY ("work_id", "genre")
+            )''')
             # 旧版 works 表缺列时补加
             columns = [row[1] for row in cursor.execute('PRAGMA table_info("works")').fetchall()]
             for col in ('state', 'library', 'sell_date', 'series', 'scenario', 'illust',
