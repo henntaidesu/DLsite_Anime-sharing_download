@@ -1,5 +1,6 @@
 from src.QTui.select_UI import SelectWindown
 from src.QTui.setting_UI import SettingWindow
+from src.QTui.style.theme import enable_dark_title_bar
 from PyQt5.QtWidgets import QApplication, QMainWindow, QStackedWidget, QPushButton, QVBoxLayout, QWidget
 from PyQt5.uic import loadUi
 
@@ -8,6 +9,7 @@ class IndexWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         loadUi("src/QTui/ui_file/index.ui", self)  # 请替换为你的 .ui 文件路径
+        enable_dark_title_bar(self)
 
         self.select_button = self.findChild(QPushButton, 'pushButton')
         self.download_button = self.findChild(QPushButton, 'pushButton_2')
@@ -29,9 +31,9 @@ class IndexWindow(QMainWindow):
         self.setting_window = SettingWindow()
         self.stackedWidget.addWidget(self.setting_window)
 
-
-        # # 设置默认显示的窗口
-        # self.stackedWidget.setCurrentIndex(self.select_window)
+        # 设置默认显示的窗口
+        self.select_button.setChecked(True)
+        self.stackedWidget.setCurrentWidget(self.select_window)
 
     def show_select_window(self):
         # 切换到 SelectWindown 窗口
@@ -42,4 +44,3 @@ class IndexWindow(QMainWindow):
 
     def show_setting_window(self):
         self.stackedWidget.setCurrentWidget(self.setting_window)
-

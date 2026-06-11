@@ -36,10 +36,12 @@ class Index:
             try:
                 from PyQt5.QtWidgets import QApplication
                 from src.QTui.index_UI import IndexWindow
+                from src.QTui.style.theme import apply_dark_theme
                 import sys
                 import asyncio
                 from qasync import QEventLoop
                 app = QApplication(sys.argv)
+                apply_dark_theme(app)
                 loop = QEventLoop(app)
                 asyncio.set_event_loop(loop)
                 window = IndexWindow()

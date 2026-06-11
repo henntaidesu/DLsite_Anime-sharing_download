@@ -118,19 +118,19 @@ class SelectWindown(QMainWindow):
         if_rj = if_rj[:if_rj.rfind(']')]
         if if_rj == self.select_ID:
             self.if_rj_text.setText('DLsite ID：相同')
-            self.if_rj_text.setStyleSheet('color: black;')
+            self.if_rj_text.setStyleSheet('color: #4ade80;')
         else:
             self.if_rj_text.setText('DLsite ID：不同')
-            self.if_rj_text.setStyleSheet('color: red;')
+            self.if_rj_text.setStyleSheet('color: #f87171;')
 
         AS_title = re.sub(r'\[.*?\]', '', AS_title).replace('\n', '').replace('✨shine✨', '')
         similarity = jellyfish.jaro_winkler_similarity(AS_title, self.dl_work_name)
         similarity = float(f"{similarity:.2f}")
         self.similarity.setText(f"标题相似度: {similarity:.2f}%")
         if similarity < 0.6:
-            self.similarity.setStyleSheet('color: red;')
+            self.similarity.setStyleSheet('color: #f87171;')
         else:
-            self.similarity.setStyleSheet('color: black;')
+            self.similarity.setStyleSheet('color: #4ade80;')
 
     # async def async_exec_download(self):
     #     download_path = f"{Config().read_file_down_path()}\\{self.select_ID}"

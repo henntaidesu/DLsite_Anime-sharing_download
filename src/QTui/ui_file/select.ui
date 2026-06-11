@@ -1,0 +1,337 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>SelectWindow</class>
+ <widget class="QMainWindow" name="SelectWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>820</width>
+    <height>640</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>搜索</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QVBoxLayout" name="mainLayout">
+    <property name="spacing">
+     <number>12</number>
+    </property>
+    <property name="leftMargin">
+     <number>16</number>
+    </property>
+    <property name="topMargin">
+     <number>16</number>
+    </property>
+    <property name="rightMargin">
+     <number>16</number>
+    </property>
+    <property name="bottomMargin">
+     <number>16</number>
+    </property>
+    <item>
+     <layout class="QHBoxLayout" name="searchLayout">
+      <property name="spacing">
+       <number>8</number>
+      </property>
+      <item>
+       <widget class="QLineEdit" name="select_benner">
+        <property name="minimumSize">
+         <size>
+          <width>0</width>
+          <height>34</height>
+         </size>
+        </property>
+        <property name="placeholderText">
+         <string>输入作品番号，例如 RJ01234567</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="select_work">
+        <property name="minimumSize">
+         <size>
+          <width>88</width>
+          <height>34</height>
+         </size>
+        </property>
+        <property name="text">
+         <string>查询</string>
+        </property>
+        <property name="class" stdset="0">
+         <string>primary</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="download_check">
+        <property name="minimumSize">
+         <size>
+          <width>88</width>
+          <height>34</height>
+         </size>
+        </property>
+        <property name="text">
+         <string>校验</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </item>
+    <item>
+     <widget class="QFrame" name="infoCard">
+      <property name="class" stdset="0">
+       <string>card</string>
+      </property>
+      <layout class="QGridLayout" name="infoLayout">
+       <property name="leftMargin">
+        <number>12</number>
+       </property>
+       <property name="topMargin">
+        <number>10</number>
+       </property>
+       <property name="rightMargin">
+        <number>12</number>
+       </property>
+       <property name="bottomMargin">
+        <number>10</number>
+       </property>
+       <property name="horizontalSpacing">
+        <number>10</number>
+       </property>
+       <property name="verticalSpacing">
+        <number>8</number>
+       </property>
+       <item row="0" column="0">
+        <widget class="QLabel" name="dlTitleCaption">
+         <property name="text">
+          <string>DLsite 标题</string>
+         </property>
+         <property name="class" stdset="0">
+          <string>caption</string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="1">
+        <widget class="QLabel" name="New_DL_title">
+         <property name="text">
+          <string/>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
+         </property>
+         <property name="textInteractionFlags">
+          <set>Qt::TextSelectableByMouse</set>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="0">
+        <widget class="QLabel" name="asTitleCaption">
+         <property name="text">
+          <string>AS 标题</string>
+         </property>
+         <property name="class" stdset="0">
+          <string>caption</string>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="1">
+        <widget class="QLabel" name="New_as_title">
+         <property name="text">
+          <string/>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
+         </property>
+         <property name="textInteractionFlags">
+          <set>Qt::TextSelectableByMouse</set>
+         </property>
+        </widget>
+       </item>
+       <item row="2" column="0" colspan="2">
+        <layout class="QHBoxLayout" name="statusLayout">
+         <property name="spacing">
+          <number>24</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="similarity">
+           <property name="text">
+            <string>标题相似度：</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="if_rj">
+           <property name="text">
+            <string>DLsite ID：</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="db_status">
+           <property name="text">
+            <string/>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="in_db">
+           <property name="text">
+            <string/>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <spacer name="statusSpacer">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <layout class="QHBoxLayout" name="listsLayout" stretch="3,4,1">
+      <property name="spacing">
+       <number>12</number>
+      </property>
+      <item>
+       <layout class="QVBoxLayout" name="groupListLayout">
+        <property name="spacing">
+         <number>6</number>
+        </property>
+        <item>
+         <widget class="QLabel" name="groupListCaption">
+          <property name="text">
+           <string>上传者列表</string>
+          </property>
+          <property name="class" stdset="0">
+           <string>caption</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QListWidget" name="group_list_output"/>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <layout class="QVBoxLayout" name="urlListLayout">
+        <property name="spacing">
+         <number>6</number>
+        </property>
+        <item>
+         <widget class="QLabel" name="urlListCaption">
+          <property name="text">
+           <string>下载链接</string>
+          </property>
+          <property name="class" stdset="0">
+           <string>caption</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QListWidget" name="url_ui_list"/>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <layout class="QVBoxLayout" name="urlStatusLayout">
+        <property name="spacing">
+         <number>6</number>
+        </property>
+        <item>
+         <widget class="QLabel" name="urlStatusCaption">
+          <property name="text">
+           <string>状态</string>
+          </property>
+          <property name="class" stdset="0">
+           <string>caption</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QListWidget" name="url_ui_status"/>
+        </item>
+       </layout>
+      </item>
+     </layout>
+    </item>
+    <item>
+     <layout class="QHBoxLayout" name="bottomLayout">
+      <property name="spacing">
+       <number>8</number>
+      </property>
+      <item>
+       <widget class="QLineEdit" name="down_path_text">
+        <property name="minimumSize">
+         <size>
+          <width>0</width>
+          <height>34</height>
+         </size>
+        </property>
+        <property name="placeholderText">
+         <string>下载路径</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="test_down_url_button">
+        <property name="minimumSize">
+         <size>
+          <width>88</width>
+          <height>34</height>
+         </size>
+        </property>
+        <property name="text">
+         <string>测试链接</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="confirm_in_db">
+        <property name="minimumSize">
+         <size>
+          <width>88</width>
+          <height>34</height>
+         </size>
+        </property>
+        <property name="text">
+         <string>入库</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="download_button">
+        <property name="minimumSize">
+         <size>
+          <width>88</width>
+          <height>34</height>
+         </size>
+        </property>
+        <property name="text">
+         <string>下载</string>
+        </property>
+        <property name="class" stdset="0">
+         <string>primary</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </item>
+   </layout>
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
