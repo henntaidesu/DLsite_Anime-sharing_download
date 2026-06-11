@@ -4,7 +4,7 @@ QWidget {
     background-color: #15171c;
     color: #e6e9ef;
     font-family: "Microsoft YaHei UI", "Segoe UI", sans-serif;
-    font-size: 13px;
+    font-size: 16px;
 }
 
 /* ===== 侧边栏 ===== */
@@ -19,7 +19,7 @@ QWidget {
 }
 
 #logoLabel {
-    font-size: 15px;
+    font-size: 18px;
     font-weight: 600;
     color: #ffffff;
     padding: 16px 6px 16px 6px;
@@ -32,7 +32,7 @@ QPushButton[class="navButton"] {
     padding: 10px 16px;
     text-align: left;
     color: #aab2c0;
-    font-size: 14px;
+    font-size: 16px;
 }
 
 QPushButton[class="navButton"]:hover {
@@ -54,7 +54,7 @@ QPushButton {
     border: 1px solid #343b48;
     border-radius: 6px;
     padding: 6px 14px;
-    min-height: 18px;
+    min-height: 22px;
 }
 
 QPushButton:hover {
@@ -140,7 +140,7 @@ QComboBox {
     border: 1px solid #343b48;
     border-radius: 6px;
     padding: 5px 10px;
-    min-height: 18px;
+    min-height: 22px;
 }
 
 QComboBox:hover {
@@ -213,7 +213,7 @@ QLabel {
 
 QLabel[class="caption"] {
     color: #8b93a3;
-    font-size: 12px;
+    font-size: 14px;
 }
 
 /* ===== 滚动条 ===== */

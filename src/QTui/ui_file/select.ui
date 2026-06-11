@@ -169,20 +169,6 @@
           </widget>
          </item>
          <item>
-          <widget class="QLabel" name="db_status">
-           <property name="text">
-            <string/>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QLabel" name="in_db">
-           <property name="text">
-            <string/>
-           </property>
-          </widget>
-         </item>
-         <item>
           <spacer name="statusSpacer">
            <property name="orientation">
             <enum>Qt::Horizontal</enum>
@@ -213,7 +199,7 @@
         <item>
          <widget class="QLabel" name="groupListCaption">
           <property name="text">
-           <string>上传者列表</string>
+           <string>搜索结果</string>
           </property>
           <property name="class" stdset="0">
            <string>caption</string>
@@ -282,32 +268,6 @@
         </property>
         <property name="placeholderText">
          <string>下载路径</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="test_down_url_button">
-        <property name="minimumSize">
-         <size>
-          <width>88</width>
-          <height>34</height>
-         </size>
-        </property>
-        <property name="text">
-         <string>测试链接</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="confirm_in_db">
-        <property name="minimumSize">
-         <size>
-          <width>88</width>
-          <height>34</height>
-         </size>
-        </property>
-        <property name="text">
-         <string>入库</string>
         </property>
        </widget>
       </item>

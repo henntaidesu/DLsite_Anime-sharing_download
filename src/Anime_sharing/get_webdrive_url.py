@@ -1,91 +1,9 @@
 import requests
 from lxml import html
 
-from src.module.time import Time_a
-from src.module.datebase_execution import MySQLDB, TrimString
 from src.module.log import Log, err1, err2
 
 logger = Log()
-
-
-def as_work_down_url(work_list, i=0):
-    try:
-        while True:
-            if i >= len(work_list):
-                return
-            down_url_list = []
-            Id = work_list[i][0]
-            work_id = work_list[i][1]
-            group_url = work_list[i][2]
-            # Id = '37022'
-            # work_id = 'RJ01000686'
-            # group_url = '230103-みにょって-【マゾ向け実演】エロ意地悪低音声優に絶頂管理される寸止めドスケベオナニー【バイノーラル】-rj01000686.1264875'
-
-            i += 1
-
-            try:
-                flag, down_url_set = get_work_down_url(group_url)
-                if down_url_set:
-                    for index in down_url_set:
-                        if index is None:
-                            flag = 4
-                            continue
-                        url = index[8:]
-                        down_url_list.append(url)
-                    insert_down_url(down_url_list, Id, work_id, flag)
-                else:
-                    logger.write_log(f"groupID - {Id} - 作品 - {work_id} - 未获取到下载连接", 'error')
-                    sql = (f"UPDATE `AS_work_updata_group` SET  `url_state` = '8', "
-                           f"`update_time` = '{Time_a().now_time()}' WHERE `id` = {Id};")
-                    MySQLDB().update(sql)
-            except Exception as e:
-                sql = (f"UPDATE `AS_work_updata_group` SET  `url_state` = '8', `update_time` = '{Time_a().now_time()}'"
-                       f" WHERE `id` = {Id};")
-                MySQLDB().update(sql)
-                logger.write_log(f"groupID - {Id} - 作品 - {work_id} - 源HTML错误", 'error')
-                if type(e).__name__ == 'SSLError' or type(e).__name__ == 'NameError' or type(e).__name__ == 'TypeError':
-                    as_work_down_url(work_list, i)
-    except Exception as e:
-        err2(e)
-        if type(e).__name__ == 'SSLError' or type(e).__name__ == 'NameError' or type(e).__name__ == 'TypeError':
-            as_work_down_url(work_list, i)
-
-
-def insert_down_url(down_url_set, Id, WorkId, URLState):
-    unique_urls = list(set(down_url_set))
-    # print(unique_urls)
-    for URL in unique_urls:
-        time = Time_a().now_time()
-        text = URL
-        index = text.find(".")
-        WebName = text[:index]
-        # or WebName == "pixhost"
-        if WebName[:3] == "www" or WebName[:2] == "ww" or WebName == "imagetwist":
-            continue
-        if WebName == "estpublic:guestpublic@bishoujo":
-            # estpublic:guestpublic@bishoujo.moe:666
-            WebName = "mikoconFTP"
-        if "xt=urn" in WebName:
-            WebName = "xt=urn"
-        if len(WebName) > 12:
-            WebName = WebName[:12]
-
-        URL = TrimString(URL)
-        WebName = TrimString(WebName)
-
-        sql = f"INSERT INTO `AS_work_down_URL` (`group_table_id`, `work_down_url`, `url_state`,`down_web_name`, " \
-              f"`update_time`)VALUES ({Id}, '{URL}', '0', '{WebName}', '{time}');"
-        MySQLDB().insert(sql)
-
-    sql = (f"UPDATE `AS_work_updata_group` SET  `url_state` = '{URLState}', `update_time` = '{Time_a().now_time()}"
-           f" WHERE `id` = {Id};")
-    Flag = MySQLDB().update(sql)
-    if Flag is True:
-        LenData = len(unique_urls)  # 使用去重后的集合长度
-        logger.write_log(f"已查询到groupID - {Id} - 作品 - {WorkId} - 有{LenData}个下载连接，"
-                         f"已更新AS_work_updata_group表 HTMLType:{URLState}", 'info')
-    if Flag is False:
-        logger.write_log(f"{WorkId}", 'error')
 
 
 def get_work_down_url(URL):

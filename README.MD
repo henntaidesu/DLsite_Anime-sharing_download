@@ -1,15 +1,11 @@
 ##  本程序可用于在Anime-sharing中检索查找DLsite作品 
 
-数据库采用mysql数据库，用于方便管理已下载作品。也有非数据库模式。
+使用本地SQLite数据库（DASD.db）管理下载列表，无需连接外部数据库。
 
 ``` ini
-[database]
-open_db = True
-# 没有MySQL数据库 请将其设置为False 否则程序可能无法启动
-
 [start_type]
 type = GUI
-# 有两种模式CLI与GUI模式 不建议使用CLI模式（使用CLI必须有数据库，并且CLI是爬虫模式）
+# 有两种模式CLI与GUI模式 不建议使用CLI模式（CLI是爬虫模式）
 
 [Proxy]
 openproxy = True 

@@ -22,7 +22,6 @@ jellyfish==1.1.0
 Jinja2==3.1.4
 lxml==4.9.3
 MarkupSafe==2.1.5
-mysql-connector-python==8.1.0
 outcome==1.3.0.post0
 packaging==23.2
 patool==2.0.0
@@ -31,7 +30,6 @@ protobuf==4.21.12
 pycparser==2.21
 pyinstaller==6.1.0
 pyinstaller-hooks-contrib==2023.10
-PyMySQL==1.1.0
 PyQt5==5.15.11
 PyQt5-Qt5==5.15.2
 PyQt5_sip==12.15.0

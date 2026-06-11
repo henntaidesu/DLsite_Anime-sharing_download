@@ -2,8 +2,6 @@ import time
 from src.module.time import Time_a
 from src.module.log import Log, err1
 from src.module.mulit_processes import Process
-from src.module.datebase_execution import MySQLDB, TrimString
-from src.module.file_copy import file_copy
 from src.module.unzip import unzip
 from src.web_drive.katfile_auto_down import QTUI_katfile_down
 import threading
@@ -64,23 +62,17 @@ class Index:
             print("\n")
             print("1:生成RJ数据")
             print("2:调用DL SELECT API更新works")
-            print("3:更新information表")
-            print("4:获取AS UPGroup")
-            print("5:获取AS Down URL")
-            print("6:转换Short URL")
-            print("7:测试Down URL if Ture")
             print("8:解压文件")
 
             flag = '2'
 
             if flag == '1':
-                from src.DLsite.RJ_number_generate import RJ, VJ, API_new_RJ
+                from src.DLsite.RJ_number_generate import RJ, API_new_RJ
                 RJ()
 
             elif flag == '2':
                 from src.DLsite.craw_dlsite_works_name import craw_dlsite_works
-                from src.DLsite.craw_dlsite_infomation import crawl_work_web_information
-                from src.DLsite.RJ_number_generate import RJ, VJ, API_new_RJ
+                from src.DLsite.RJ_number_generate import RJ, API_new_RJ
                 API_new_RJ()
                 URL = f'{API_address}/dlsite/status1'
                 print(URL)
@@ -92,46 +84,10 @@ class Index:
                         Process().multi_process_as_up_group(work_list, craw_dlsite_works)
                     else:
                         break
-                # elif flag == '3':
-                # sql = f"SELECT work_id, work_type FROM works WHERE work_state in ('2')"
-                # Process().multi_process_as_up_group(sql, crawl_work_web_information)
-
-            # elif flag == '4':
-            #     from src.Anime_sharing.get_as_work_upgroup_url import get_as_work_upgroup_url
-            #     sql = (f"SELECT work_id, work_type FROM works WHERE  work_state in {'7', '14'} "
-            #            f"and update_time < '{Time_a().tow_days_ago()} 00:00:00' ")
-            #     self.process.multi_process_as_up_group(sql, get_as_work_upgroup_url)
-            #
-            # elif flag == '5':
-            #     from src.Anime_sharing.get_webdrive_url import as_work_down_url
-            #     sql = (f"SELECT id, work_id, url FROM AS_work_updata_group WHERE url_state = '0'"
-            #            f"and update_time < '{Time_a().tow_days_ago()} 00:00:00' LIMIT 20000")
-            #     self.process.multi_process_as_up_group(sql, as_work_down_url)
-            #
-            # elif flag == '6':
-            #     from src.web_drive.re_short_url import re_down_table_short_url
-            #     short_name = "('bit')"
-            #     sql = f"SELECT id, work_down_url, down_web_name FROM AS_work_down_URL " \
-            #           f"WHERE url_state = '0' and down_web_name in {short_name} "
-            #     self.process.multi_process_as_up_group(sql, re_down_table_short_url)
-            #
-            # elif flag == '7':
-            #     from src.web_drive.doun_url_test import down_url_test
-            #     down_name = "('katfile', 'mexa', 'mx-sh', 'rapidgator', 'rg', 'rosefile', 'ddownload')"
-            #     sql = f"SELECT id, work_down_url, down_web_name FROM AS_work_down_URL " \
-            #           f"WHERE url_state = '0' and down_web_name IN {down_name}  limit 10000"
-            #     self.process.multi_process_as_up_group(sql, down_url_test)
 
             # elif flag == '8':
-
-                # sql = f"SELECT * FROM `DLsite`.`test_copy1` where `2` is null"
-                # flag, data = DateBase().select_all(sql)
-                # for i in data:
                 # rj = 'RJ01053406'
                 # unzip(rj)
-
-            # elif flag == '9':
-            #     file_copy()
 
             days = 10
             pause_duration = 3600 * 24 * days

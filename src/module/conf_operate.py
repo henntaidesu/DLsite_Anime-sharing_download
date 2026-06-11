@@ -1,4 +1,3 @@
-import pymysql
 import configparser
 
 
@@ -21,26 +20,6 @@ class Config:
             return True
         else:
             return False
-
-    def open_DB(self):
-        open_DB = self.config.get('database', 'open_DB')
-        if open_DB == 'True':
-            return True
-        else:
-            return False
-
-    def read_database(self):
-        host = self.config.get('database', 'host')
-        port = self.config.get('database', 'port')
-        port = int(port)
-        user = self.config.get('database', 'user')
-        password = self.config.get('database', 'password')
-        data_base = self.config.get('database', 'database')
-        open_DB = self.config.get('database', 'open_DB')
-
-        if open_DB == 'True':
-            db = pymysql.connect(host=host, port=port, user=user, password=password, database=data_base)
-            return db
 
     def read_file_down_path(self):
         folder_path = self.config.get('DownPath', 'DownPath')
@@ -153,8 +132,9 @@ class Config:
             self.config.write(configfile)
 
     def read_HOME_API(self):
-        address = self.config.get('API', 'address')
-        port = self.config.get('API', 'port')
+        # conf.ini 中缺少 [API] 节时使用默认值，避免启动崩溃
+        address = self.config.get('API', 'address', fallback='127.0.0.1')
+        port = self.config.get('API', 'port', fallback='5000')
         return r"http://" + address + ":" + port
 
 

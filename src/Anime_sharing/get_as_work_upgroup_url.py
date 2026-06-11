@@ -3,11 +3,9 @@ from lxml import html
 import urllib.parse
 from src.module.log import Log, err1, err2
 from src.module.time import Time_a
-from src.module.datebase_execution import MySQLDB
 from src.module.conf_operate import Config
 
 logger = Log()
-db = MySQLDB()
 
 
 def get_as_work_upgroup_url(rj_number, i=0):
@@ -72,44 +70,42 @@ def as_work_url(Work_id):
         if OpenProxy is True:
             session.proxies.update(proxy_url)  # 将代理配置应用于该Session
 
-        url = f"https://www.anime-sharing.com/search/7017202/?q={Work_id}&o=relevance"
+        url = f"https://www.anime-sharing.com/search/52383544/?q={Work_id}&o=relevance"
         response = session.get(url)
 
         html_content = response.text
         tree = html.fromstring(html_content)
-        title_elements = tree.cssselect('.block-body')
-        group_list = []
+        result_items = tree.cssselect('.block-body .block-row')
+        display_list = []
         url_list = []
-        # 遍历并处理找到的元素
-        for title_element in title_elements:
-            li_elements = title_element.findall('.//li')
-            for li in li_elements:
-                group = li.get('data-author')
-                if group is None:
-                    continue
-                else:
-                    a_element = li.find('.//a')
-                    if a_element is not None:
-                        url = a_element.get('href')
-                        url = urllib.parse.unquote(url)
+        # 逐条解析搜索结果列表
+        for item in result_items:
+            title_a = item.cssselect('.contentRow-title a')
+            if not title_a:
+                continue
+            title_a = title_a[0]
+            href = title_a.get('href')
+            if not href or '/threads/' not in href:
+                continue
+            title = ' '.join(title_a.text_content().split())
 
-                        group_str = str(group)
+            # 去掉 ?q= 查询串和 #post 锚点，保留 threads/xxx 相对路径
+            href = urllib.parse.unquote(href)
+            href = href.split('?')[0].split('#')[0].strip('/')
 
-                        # print(groupStr)
-                        group_str = group_str.lower()
-                        group_str_long = len(group_str)
-                        if group_str == url[:group_str_long]:
-                            continue
+            # 作者 · 日期 · 回复数 · 版块
+            minor_items = [li.text_content().strip()
+                           for li in item.cssselect('.contentRow-minor li')]
+            minor = ' · '.join(' '.join(x.split()) for x in minor_items if x)
 
-                        group_list.append(group)
-                        url_list.append(url)
-        print(group_list)
-        if not group_list:
-            group_list = ['NULL']
+            display_list.append(f"{title}\n{minor}" if minor else title)
+            url_list.append(href)
+
+        if not display_list:
+            display_list = ['NULL']
             url_list = None
-        return group_list, url_list
+        return display_list, url_list
 
-
-
-    except ExceptionGroup as e:
+    except Exception as e:
         err1(e)
+        return ['NULL'], None
