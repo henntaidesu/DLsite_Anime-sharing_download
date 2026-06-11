@@ -3,8 +3,7 @@ from src.module.time import Time_a
 from src.module.log import Log, err1
 from src.module.mulit_processes import Process
 from src.module.unzip import unzip
-from src.web_drive.katfile_auto_down import QTUI_katfile_down
-import threading
+from src.web_drive.debrid_link import start_download_worker
 from src.module.conf_operate import Config
 import sys
 import requests
@@ -21,10 +20,12 @@ class Index:
     def choose(self):
 
         if Config().read_start_type():
-            thread1 = threading.Thread(target=self.open_GUI)
-            thread2 = threading.Thread(target=QTUI_katfile_down)
-            thread1.start()
-            thread2.start()
+            # 设置中开启了自动下载时，随程序启动下载线程；否则由下载页"开始下载"按钮启动
+            auto_download, _ = Config().read_download_list()
+            if auto_download:
+                start_download_worker()
+            # Qt 界面必须在主线程中运行
+            self.open_GUI()
         else:
             self.open_CLI()
 
@@ -33,11 +34,15 @@ class Index:
         while True:
             try:
                 from PyQt5.QtWidgets import QApplication
+                from PyQt5.QtCore import Qt
                 from src.QTui.index_UI import IndexWindow
                 from src.QTui.style.theme import apply_dark_theme
                 import sys
                 import asyncio
                 from qasync import QEventLoop
+                # 跟随 Windows 显示缩放（必须在创建 QApplication 之前设置）
+                QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
+                QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
                 app = QApplication(sys.argv)
                 apply_dark_theme(app)
                 loop = QEventLoop(app)
@@ -55,7 +60,8 @@ class Index:
             except Exception as e:
                 print(f"An error occurred: {e}")
             else:
-                raise ValueError('未知错误')
+                # 事件循环正常退出（窗口已关闭），结束程序
+                break
 
     def open_CLI(self):
         while True:

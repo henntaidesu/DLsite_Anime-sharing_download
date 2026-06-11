@@ -1,9 +1,28 @@
+import urllib.parse
+
 import requests
 from lxml import html
 
 from src.module.log import Log, err1, err2
+from src.web_drive.debrid_link import supported_domains
 
 logger = Log()
+
+
+def _is_supported(url):
+    """链接所属域名是否被 debrid-link 支持"""
+    try:
+        netloc = urllib.parse.urlparse(url).netloc.lower()
+    except Exception:
+        return False
+    if not netloc:
+        return False
+    if netloc.startswith('www.'):
+        netloc = netloc[4:]
+    for domain in supported_domains():
+        if netloc == domain or netloc.endswith('.' + domain):
+            return True
+    return False
 
 
 def get_work_down_url(URL):
@@ -23,49 +42,27 @@ def get_work_down_url(URL):
 
         L1 = tree.xpath('//span[contains(@class, "bbcode-box-content")]')
         L2 = tree.xpath('//div[contains(@class, "bbWrapper")]')
-        # L3 = tree.xpath('//span[contains(@class, "bbcode-box")]')
-        List = [L1, L2]
-        Flag = 0
         href_list = []
-        for i in List:
-            span_elements = i
-            Flag += 1
-            if None in span_elements:
+        for span_elements in [L1, L2]:
+            if not span_elements or None in span_elements:
                 continue
-            if span_elements:
-                for span in span_elements:
-                    # 获取span元素的文本内容
-                    span_text = span.text_content()
-                    # 获取span元素内的所有a标签的href属性
-                    a_elements = span.xpath(".//a")
-                    for a in a_elements:
-                        url = a.get("href")
-                        try:
-                            if 'katfile' not in url:
-                                continue
-                            else:
-                                href_list.append(url)
-                        except TypeError:
-                            continue
+            for span in span_elements:
+                for a in span.xpath(".//a"):
+                    href = a.get("href")
+                    if href and _is_supported(href):
+                        href_list.append(href)
 
-        print(type(href_list))
+        # 去重并保持原始顺序
+        href_list = list(dict.fromkeys(href_list))
 
-        href_list = list(set(href_list))
+        if not href_list:
+            return [], AS_title
 
-        if href_list == '':
-            return []
-
-        not_mp3_list = []
         if len(href_list) > 1:
-            for href in href_list:
-                if 'mp3' in href:
-                    continue
-                else:
-                    not_mp3_list.append(href)
-            print(href_list)
-            return not_mp3_list, AS_title
-        else:
-            return href_list, AS_title
+            not_mp3_list = [href for href in href_list if 'mp3' not in href]
+            return not_mp3_list or href_list, AS_title
+        return href_list, AS_title
 
-    except ExceptionGroup as e:
+    except Exception as e:
         err1(e)
+        return [], None

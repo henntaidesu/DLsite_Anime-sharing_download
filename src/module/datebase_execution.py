@@ -1,22 +1,55 @@
 import sys
-from src.module.log import Log
 import sqlite3
 
 
 class SQLiteDB:
     def __init__(self):
-        self.print_log = Log()
+        self._print_log = None
         self.db = None
         self.db_path = "DASD.db"
         self.connect_db()
+        self.create_tables()
+
+    @property
+    def print_log(self):
+        # 延迟创建 Log，避免 datebase_execution -> log -> conf_operate -> datebase_execution 循环导入
+        if self._print_log is None:
+            from src.module.log import Log
+            self._print_log = Log()
+        return self._print_log
 
     def connect_db(self):
-        """连接SQLite数据库"""
+        """连接SQLite数据库（文件不存在时自动创建）"""
         try:
             self.db = sqlite3.connect(self.db_path)
         except sqlite3.Error as e:
-            self.print_log.write_log(f"数据库连接失败: {str(e)}", 'error')
+            print(f"数据库连接失败: {str(e)}")
             sys.exit()
+
+    def create_tables(self):
+        """创建数据表（不存在时）"""
+        try:
+            cursor = self.db.cursor()
+            cursor.execute('''CREATE TABLE IF NOT EXISTS "conf" (
+                "section" TEXT NOT NULL,
+                "key" TEXT NOT NULL,
+                "value" TEXT,
+                PRIMARY KEY ("section", "key")
+            )''')
+            cursor.execute('''CREATE TABLE IF NOT EXISTS "download_list" (
+                "UUID" text,
+                "work_id" text,
+                "url" TEXT NOT NULL,
+                "status" text,
+                "long" text,
+                "delete" text,
+                PRIMARY KEY ("url")
+            )''')
+            self.db.commit()
+            cursor.close()
+        except sqlite3.Error as e:
+            # 此处不用 Log（配置加载期间 Log 尚不可用），直接输出
+            print(f"数据表创建失败: {str(e)}")
 
     def execute_query(self, sql, query_type='select'):
         """

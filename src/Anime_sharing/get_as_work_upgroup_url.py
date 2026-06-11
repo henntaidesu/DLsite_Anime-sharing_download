@@ -28,8 +28,7 @@ def get_as_work_upgroup_url(rj_number, i=0):
         #     else:
         #         print(11111)
         #         continue
-        group_list, url_list = as_work_url(rj_number)
-        return group_list, url_list
+        return as_work_url(rj_number)
 
         # print(Data)
         # if Data:
@@ -76,8 +75,7 @@ def as_work_url(Work_id):
         html_content = response.text
         tree = html.fromstring(html_content)
         result_items = tree.cssselect('.block-body .block-row')
-        display_list = []
-        url_list = []
+        results = []
         # 逐条解析搜索结果列表
         for item in result_items:
             title_a = item.cssselect('.contentRow-title a')
@@ -98,14 +96,23 @@ def as_work_url(Work_id):
                            for li in item.cssselect('.contentRow-minor li')]
             minor = ' · '.join(' '.join(x.split()) for x in minor_items if x)
 
-            display_list.append(f"{title}\n{minor}" if minor else title)
-            url_list.append(href)
+            # 帖子摘要（Title / Brand / Size / Release Date 等详情）
+            snippet_el = item.cssselect('.contentRow-snippet')
+            snippet = snippet_el[0].text_content().strip() if snippet_el else ''
 
-        if not display_list:
-            display_list = ['NULL']
-            url_list = None
-        return display_list, url_list
+            # 作品缩略图
+            thumb_el = item.cssselect('.structItem-iconContainer img.thread-thumbnail')
+            thumb = thumb_el[0].get('src') if thumb_el else ''
+
+            results.append({
+                'title': title,
+                'url': href,
+                'minor': minor,
+                'snippet': snippet,
+                'thumb': thumb,
+            })
+        return results
 
     except Exception as e:
         err1(e)
-        return ['NULL'], None
+        return []

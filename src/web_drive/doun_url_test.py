@@ -1,158 +1,52 @@
 import requests
-from lxml import html
 
+from src.module.conf_operate import Config
 from src.module.log import Log
 
 logger = Log()
 
+USER_AGENT = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+              '(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36')
 
-def resolve_short_url(short_url):
-    # 发起GET请求以获取重定向信息
-    url = "https://" + short_url
-    with requests.head(url, allow_redirects=True) as response:
-        # 提取最终的URL
-        final_url = response.url
+# 个别网盘（如 rapidgator）对失效文件返回 200 + 错误页而非 404，
+# 需要用页面中明确的死链提示语兜底（统一小写匹配）
+DEAD_MARKERS = [
+    'file not found',
+    '404 file',
+    'file was deleted',
+    'file has expired',
+    'file does not exist',
+]
 
-    return final_url
+
+def make_session():
+    """创建带统一代理配置的会话，供批量检测复用"""
+    open_proxy, proxies = Config().read_proxy()
+    session = requests.Session()
+    if open_proxy is True:
+        session.proxies.update(proxies)
+    session.headers['User-Agent'] = USER_AGENT
+    return session
 
 
-def katfile(url):
+def check_url(url, session=None):
+    """直连访问下载链接判断是否有效（不经过下载中转站）
+
+    判定规则：
+    1. HTTP 404 等 4xx/5xx 状态 → 失效（网盘对已删除/过期文件通常返回 404，katfile 返回 500）
+    2. 返回 200 但页面是明确的"文件不存在"错误页 → 失效（rapidgator 等不返回 404 的网盘）
+    3. 其余 → 有效
+    返回 True=有效，False=失效或无法访问
+    """
+    if session is None:
+        session = make_session()
     try:
-        # url = "https://" + url
-        # print(url)
-        response = requests.get(url)
-        html_data = response.text
-        tree = html.fromstring(html_data)
-
-        span_elements = tree.xpath('//*[@id="container"]')
-        for span in span_elements:
-            # span_text = span.text_content()
-            a_elements = span.xpath(".//img")
-            href_list = [a.get("src") for a in a_elements]
-            href_list = str(href_list)
-            # print(type(href_list))
-            if "404" in href_list:
-                return False
-            else:
-                return True
-    except ExceptionGroup as e:
-        print(e)
-
-
-def mexa(url):
-    try:
-        text_content = None
-        url = "https://" + url
-        # print(url)
-        response = requests.get(url)
-        html_data = response.text
-        tree = html.fromstring(html_data)
-
-        span_elements = tree.xpath('//*[@id="page"]/center/div/p[1]/b')
-
-        if span_elements:
-            text_content = span_elements[0].text
-            text_content = str(text_content)
-
-        if "File Not Found" in text_content:
-            return False
-    except:
-        return True
-
-
-def rapidgator(url):
-    try:
-        text_content = None
-        url = "https://" + url
-        # print(url)
-        response = requests.get(url)
-        html_data = response.text
-        tree = html.fromstring(html_data)
-
-        span_elements = tree.xpath('/html/body/div[1]/div[3]/div/div/center/h3')
-
-        if span_elements:
-            text_content = span_elements[0].text
-            text_content = str(text_content)
-
-        if "404 File not found" in text_content:
-            return False
-    except:
-        return True
-
-
-def rosefile(url):
-    url = "https://" + url
-    # print(url)
-    response = requests.get(url)
-    html_data = response.text
-    if "404 File does not exist" in html_data:
+        response = session.get(url, timeout=20, allow_redirects=True)
+    except requests.exceptions.RequestException:
         return False
-    else:
-        return True
 
+    if response.status_code >= 400:
+        return False
 
-def atfile(url):
-    try:
-        text_content = None
-        url = "http://" + url
-        # print(url)
-        response = requests.get(url)
-        html_data = response.text
-        tree = html.fromstring(html_data)
-
-        span_elements = tree.xpath('/html/body/h1')
-
-        if span_elements:
-            text_content = span_elements[0].text
-            text_content = str(text_content)
-
-        if "Not Found" in text_content:
-            print(False)
-            return False
-    except:
-        print(True)
-        return True
-
-
-def fikper(url):
-    try:
-        text_content = None
-        url = "https://" + url
-        print(url)
-        response = requests.get(url)
-        html_data = response.text
-        print(html_data)
-        tree = html.fromstring(html_data)
-
-        span_elements = tree.xpath('/html/body')
-
-        if span_elements:
-            text_content = span_elements[0].text
-            text_content = str(text_content)
-        print(text_content)
-        if "Not Found" in text_content:
-            return False
-    except:
-        return True
-
-
-def ddownload(url):
-    try:
-        text_content = None
-        url = "https://" + url
-        # print(url)
-        response = requests.get(url)
-        html_data = response.text
-        tree = html.fromstring(html_data)
-
-        span_elements = tree.xpath('/html/body/div[1]/div[3]/div/div/center/h3')
-
-        if span_elements:
-            text_content = span_elements[0].text
-            text_content = str(text_content)
-
-        if "404 File not found" in text_content:
-            return False
-    except:
-        return True
+    text = response.text.lower()
+    return not any(marker in text for marker in DEAD_MARKERS)

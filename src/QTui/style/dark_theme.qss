@@ -4,7 +4,7 @@ QWidget {
     background-color: #15171c;
     color: #e6e9ef;
     font-family: "Microsoft YaHei UI", "Segoe UI", sans-serif;
-    font-size: 16px;
+    font-size: 13px;
 }
 
 /* ===== 侧边栏 ===== */
@@ -19,7 +19,7 @@ QWidget {
 }
 
 #logoLabel {
-    font-size: 18px;
+    font-size: 15px;
     font-weight: 600;
     color: #ffffff;
     padding: 16px 6px 16px 6px;
@@ -32,7 +32,7 @@ QPushButton[class="navButton"] {
     padding: 10px 16px;
     text-align: left;
     color: #aab2c0;
-    font-size: 16px;
+    font-size: 14px;
 }
 
 QPushButton[class="navButton"]:hover {
@@ -54,7 +54,7 @@ QPushButton {
     border: 1px solid #343b48;
     border-radius: 6px;
     padding: 6px 14px;
-    min-height: 22px;
+    min-height: 18px;
 }
 
 QPushButton:hover {
@@ -133,6 +133,35 @@ QListWidget::item:selected {
     color: #ffffff;
 }
 
+/* ===== 表格 ===== */
+
+QTableWidget {
+    background-color: #1b1e25;
+    alternate-background-color: #1e222b;
+    border: 1px solid #2c313a;
+    border-radius: 8px;
+    outline: 0;
+    gridline-color: #2c313a;
+}
+
+QTableWidget::item {
+    padding: 6px 8px;
+    color: #cdd3de;
+}
+
+QTableWidget::item:selected {
+    background-color: #2f3b55;
+    color: #ffffff;
+}
+
+QHeaderView::section {
+    background-color: #232834;
+    color: #9aa3b2;
+    border: none;
+    border-bottom: 1px solid #2c313a;
+    padding: 6px 8px;
+}
+
 /* ===== 下拉框 ===== */
 
 QComboBox {
@@ -140,7 +169,7 @@ QComboBox {
     border: 1px solid #343b48;
     border-radius: 6px;
     padding: 5px 10px;
-    min-height: 22px;
+    min-height: 18px;
 }
 
 QComboBox:hover {
@@ -213,7 +242,7 @@ QLabel {
 
 QLabel[class="caption"] {
     color: #8b93a3;
-    font-size: 14px;
+    font-size: 12px;
 }
 
 /* ===== 滚动条 ===== */

@@ -3,20 +3,16 @@ from src.index import Index
 from src.module.create_folder import create_log_folder
 import multiprocessing
 import sys
-import asyncio
 from PyQt5.QtWidgets import QApplication
 from qasync import QEventLoop
 from src.QTui.select_UI import SelectWindown
-from src.web_drive.katfile_auto_down import GETXFSS
-
-# GETXFSS()
 
 if __name__ == '__main__':
     multiprocessing.freeze_support()
     flag = create_log_folder()
     if flag is True:
         index_instance = Index()
-        asyncio.run(index_instance.choose())
+        index_instance.choose()
     else:
         sys.exit()
 

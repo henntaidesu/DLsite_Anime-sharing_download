@@ -71,7 +71,7 @@
           </size>
          </property>
          <property name="text">
-          <string>保存</string>
+          <string>设置</string>
          </property>
         </widget>
        </item>
@@ -166,118 +166,65 @@
      </widget>
     </item>
     <item>
-     <widget class="QGroupBox" name="katfileGroup">
+     <widget class="QGroupBox" name="debridGroup">
       <property name="title">
-       <string>KatFile</string>
+       <string>Debrid-Link 下载中转站</string>
       </property>
-      <layout class="QVBoxLayout" name="katfileLayout">
+      <layout class="QHBoxLayout" name="debridLayout">
        <property name="spacing">
-        <number>10</number>
+        <number>8</number>
        </property>
        <item>
-        <layout class="QHBoxLayout" name="katfileAccountLayout">
-         <property name="spacing">
-          <number>8</number>
+        <widget class="QLabel" name="label_3">
+         <property name="text">
+          <string>API Key</string>
          </property>
-         <item>
-          <widget class="QLabel" name="label_3">
-           <property name="text">
-            <string>账户</string>
-           </property>
-           <property name="class" stdset="0">
-            <string>caption</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QLineEdit" name="user_benner">
-           <property name="minimumSize">
-            <size>
-             <width>0</width>
-             <height>32</height>
-            </size>
-           </property>
-           <property name="placeholderText">
-            <string>user</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QLineEdit" name="passwd_benner">
-           <property name="minimumSize">
-            <size>
-             <width>0</width>
-             <height>32</height>
-            </size>
-           </property>
-           <property name="echoMode">
-            <enum>QLineEdit::Password</enum>
-           </property>
-           <property name="placeholderText">
-            <string>passwd</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QPushButton" name="KatfileConfigSaveButton">
-           <property name="minimumSize">
-            <size>
-             <width>72</width>
-             <height>32</height>
-            </size>
-           </property>
-           <property name="text">
-            <string>保存</string>
-           </property>
-          </widget>
-         </item>
-        </layout>
+         <property name="class" stdset="0">
+          <string>caption</string>
+         </property>
+        </widget>
        </item>
        <item>
-        <layout class="QHBoxLayout" name="katfileXfssLayout">
-         <property name="spacing">
-          <number>8</number>
+        <widget class="QLineEdit" name="debrid_api_key_benner">
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>32</height>
+          </size>
          </property>
-         <item>
-          <widget class="QPushButton" name="GetKatfileXfssButton">
-           <property name="minimumSize">
-            <size>
-             <width>86</width>
-             <height>32</height>
-            </size>
-           </property>
-           <property name="text">
-            <string>获取XFSS</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QLineEdit" name="XFSS_benner">
-           <property name="minimumSize">
-            <size>
-             <width>0</width>
-             <height>32</height>
-            </size>
-           </property>
-           <property name="placeholderText">
-            <string>XFSS</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QPushButton" name="KatfileXfssSaveButton">
-           <property name="minimumSize">
-            <size>
-             <width>72</width>
-             <height>32</height>
-            </size>
-           </property>
-           <property name="text">
-            <string>保存</string>
-           </property>
-          </widget>
-         </item>
-        </layout>
+         <property name="echoMode">
+          <enum>QLineEdit::Password</enum>
+         </property>
+         <property name="placeholderText">
+          <string>https://debrid-link.com/webapp/apikey</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="DebridTestButton">
+         <property name="minimumSize">
+          <size>
+           <width>72</width>
+           <height>32</height>
+          </size>
+         </property>
+         <property name="text">
+          <string>测试</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="DebridSaveButton">
+         <property name="minimumSize">
+          <size>
+           <width>72</width>
+           <height>32</height>
+          </size>
+         </property>
+         <property name="text">
+          <string>保存</string>
+         </property>
+        </widget>
        </item>
       </layout>
      </widget>
@@ -285,7 +232,7 @@
     <item>
      <widget class="QGroupBox" name="otherGroup">
       <property name="title">
-       <string>其他</string>
+       <string>下载选项</string>
       </property>
       <layout class="QHBoxLayout" name="otherLayout">
        <property name="spacing">
@@ -312,6 +259,58 @@
         </widget>
        </item>
        <item>
+        <widget class="QLabel" name="label_5">
+         <property name="text">
+          <string>下载线程数</string>
+         </property>
+         <property name="class" stdset="0">
+          <string>caption</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLineEdit" name="download_processes_benner">
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>32</height>
+          </size>
+         </property>
+         <property name="maximumSize">
+          <size>
+           <width>80</width>
+           <height>16777215</height>
+          </size>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="label_6">
+         <property name="text">
+          <string>查询线程数</string>
+         </property>
+         <property name="class" stdset="0">
+          <string>caption</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLineEdit" name="processes_benner">
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>32</height>
+          </size>
+         </property>
+         <property name="maximumSize">
+          <size>
+           <width>80</width>
+           <height>16777215</height>
+          </size>
+         </property>
+        </widget>
+       </item>
+       <item>
         <spacer name="otherSpacer">
          <property name="orientation">
           <enum>Qt::Horizontal</enum>
@@ -323,6 +322,129 @@
           </size>
          </property>
         </spacer>
+       </item>
+       <item>
+        <widget class="QPushButton" name="OtherSaveButton">
+         <property name="minimumSize">
+          <size>
+           <width>72</width>
+           <height>32</height>
+          </size>
+         </property>
+         <property name="text">
+          <string>保存</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <widget class="QGroupBox" name="systemGroup">
+      <property name="title">
+       <string>系统</string>
+      </property>
+      <layout class="QHBoxLayout" name="systemLayout">
+       <property name="spacing">
+        <number>8</number>
+       </property>
+       <item>
+        <widget class="QLabel" name="label_7">
+         <property name="text">
+          <string>日志级别</string>
+         </property>
+         <property name="class" stdset="0">
+          <string>caption</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QComboBox" name="log_level_choose">
+         <property name="minimumSize">
+          <size>
+           <width>90</width>
+           <height>32</height>
+          </size>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="label_8">
+         <property name="text">
+          <string>解压编码</string>
+         </property>
+         <property name="class" stdset="0">
+          <string>caption</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLineEdit" name="encoding_benner">
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>32</height>
+          </size>
+         </property>
+         <property name="maximumSize">
+          <size>
+           <width>90</width>
+           <height>16777215</height>
+          </size>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="label_9">
+         <property name="text">
+          <string>API 地址</string>
+         </property>
+         <property name="class" stdset="0">
+          <string>caption</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLineEdit" name="api_address_benner">
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>32</height>
+          </size>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLineEdit" name="api_port_benner">
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>32</height>
+          </size>
+         </property>
+         <property name="maximumSize">
+          <size>
+           <width>80</width>
+           <height>16777215</height>
+          </size>
+         </property>
+         <property name="placeholderText">
+          <string>port</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="SystemSaveButton">
+         <property name="minimumSize">
+          <size>
+           <width>72</width>
+           <height>32</height>
+          </size>
+         </property>
+         <property name="text">
+          <string>保存</string>
+         </property>
+        </widget>
        </item>
       </layout>
      </widget>
