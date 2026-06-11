@@ -8,25 +8,40 @@ from src.QTui.style.theme import enable_dark_title_bar
 
 
 class MediaLibScanner(QThread):
-    """后台扫描媒体库：导入一级文件夹的 RJ 号并调用 DL API 补全数据"""
+    """后台扫描媒体库：导入全部文件夹的 RJ 号并调用 DL API 补全数据。
+    已扫描过元数据的作品跳过，新发现的作品正常补全；force 为 True 时强制全部重新获取。"""
     progress = pyqtSignal(str)
     done = pyqtSignal(str)
 
-    def __init__(self, folder, lib_name, parent=None):
+    def __init__(self, lib_name, folders, force=False, parent=None):
         super().__init__(parent)
-        self.folder = folder
         self.lib_name = lib_name
+        self.folders = folders
+        self.force = force
 
     def run(self):
-        from src.module.import_local_works import import_media_lib, backfill_works_from_api
-        added, total = import_media_lib(self.folder, self.lib_name)
+        from src.module.import_local_works import (import_media_lib, backfill_works_from_api,
+                                                   backfill_work_pages)
+        added = total = 0
+        for folder in self.folders:
+            folder_added, folder_total = import_media_lib(folder, self.lib_name)
+            added += folder_added
+            total += folder_total
         self.progress.emit(f'已导入 {total} 个作品（新增 {added}），正在从 DL API 补全数据…')
-        filled, missed, _ = backfill_works_from_api(delay=0.5, progress=self._on_backfill)
-        self.done.emit(f'扫描完成：导入 {total} 个，补全 {filled} 个，未获取到 {missed} 个')
+        filled, _, _ = backfill_works_from_api(delay=0.5, progress=self._on_backfill,
+                                               library=self.lib_name, force=self.force)
+        self.progress.emit('正在抓取 DLsite 作品页元数据与图片…')
+        page_filled, page_missed, _ = backfill_work_pages(delay=1.0, progress=self._on_page,
+                                                          library=self.lib_name, force=self.force)
+        self.done.emit(f'扫描完成：导入 {total} 个，API 补全 {filled} 个，'
+                       f'作品页补全 {page_filled} 个（失败 {page_missed}）')
 
     def _on_backfill(self, i, total, rj, ok):
         if i % 10 == 0 or i == total:
             self.progress.emit(f'DL API 数据补全中… {i}/{total}')
+
+    def _on_page(self, i, total, rj, ok):
+        self.progress.emit(f'作品页抓取中… {i}/{total}（{rj}）')
 
 
 class MediaLibSettingDialog(QDialog):
@@ -44,7 +59,7 @@ class MediaLibSettingDialog(QDialog):
         self.conf = Config()
         self.media_libs = []  # [{'name': 名称, 'folders': [文件夹]}]
         self.media_lib_scanner = None
-        self.media_lib_pending = []  # 扫描队列：[(库名, 文件夹)]
+        self.media_lib_pending = []  # 扫描队列：[(库名, 是否强制)]
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
@@ -125,9 +140,12 @@ class MediaLibSettingDialog(QDialog):
         add_button = QPushButton('添加文件夹')
         add_button.clicked.connect(lambda _, n=lib['name']: self.add_media_lib_folder(n))
         header.addWidget(add_button)
-        scan_button = QPushButton('扫描')
+        scan_button = QPushButton('扫描元数据')
         scan_button.clicked.connect(lambda _, n=lib['name']: self.scan_media_lib(n))
         header.addWidget(scan_button)
+        rescan_button = QPushButton('重新扫描元数据')
+        rescan_button.clicked.connect(lambda _, n=lib['name']: self.scan_media_lib(n, force=True))
+        header.addWidget(rescan_button)
         delete_button = QPushButton('删除')
         delete_button.clicked.connect(lambda _, n=lib['name']: self.delete_media_lib(n))
         header.addWidget(delete_button)
@@ -173,16 +191,15 @@ class MediaLibSettingDialog(QDialog):
             if path in other['folders']:
                 QMessageBox.information(self, '媒体库', f'该文件夹已在媒体库"{other["name"]}"中。')
                 return
+        # 只登记文件夹，扫描由"扫描元数据"按钮触发
         lib['folders'].append(path)
         self._save_media_libs()
-        self._queue_media_lib_scan(lib_name, path)
 
     def remove_media_lib_folder(self, lib_name, folder):
         lib = self._find_media_lib(lib_name)
         if lib is None or folder not in lib['folders']:
             return
         lib['folders'].remove(folder)
-        self.media_lib_pending = [p for p in self.media_lib_pending if p != (lib_name, folder)]
         self._save_media_libs()
 
     def delete_media_lib(self, lib_name):
@@ -201,25 +218,27 @@ class MediaLibSettingDialog(QDialog):
         SQLiteDB().update(
             f'''UPDATE "main"."works" SET "library" = NULL WHERE "library" = '{name_esc}' ''')
 
-    def scan_media_lib(self, lib_name):
-        """重新扫描媒体库下的全部文件夹"""
+    def scan_media_lib(self, lib_name, force=False):
+        """扫描媒体库下的全部文件夹；force 为 True 时强制重新获取全部元数据"""
         lib = self._find_media_lib(lib_name)
         if lib is None or not lib['folders']:
             return
-        for folder in lib['folders']:
-            self._queue_media_lib_scan(lib_name, folder)
-
-    def _queue_media_lib_scan(self, lib_name, folder):
         if self.media_lib_scanner is not None and self.media_lib_scanner.isRunning():
-            if (lib_name, folder) not in self.media_lib_pending:
-                self.media_lib_pending.append((lib_name, folder))
+            if (lib_name, force) not in self.media_lib_pending:
+                self.media_lib_pending.append((lib_name, force))
         else:
-            self._start_media_lib_scan(lib_name, folder)
+            self._start_media_lib_scan(lib_name, force)
 
-    def _start_media_lib_scan(self, lib_name, path):
-        """后台扫描媒体库文件夹：导入 RJ 号并调用 DL API 补全"""
-        self.media_lib_status.setText(f'正在扫描 {path} …')
-        self.media_lib_scanner = MediaLibScanner(path, lib_name, self)
+    def _start_media_lib_scan(self, lib_name, force):
+        """后台扫描媒体库：导入 RJ 号并调用 DL API 补全（文件夹列表在启动时快照）"""
+        lib = self._find_media_lib(lib_name)
+        if lib is None or not lib['folders']:
+            # 排队期间库被删除/清空，跳到下一个
+            if self.media_lib_pending:
+                self._start_media_lib_scan(*self.media_lib_pending.pop(0))
+            return
+        self.media_lib_status.setText(f'正在扫描媒体库"{lib_name}"…')
+        self.media_lib_scanner = MediaLibScanner(lib_name, list(lib['folders']), force, self)
         self.media_lib_scanner.progress.connect(self.media_lib_status.setText)
         self.media_lib_scanner.done.connect(self._on_media_lib_scan_done)
         self.media_lib_scanner.start()

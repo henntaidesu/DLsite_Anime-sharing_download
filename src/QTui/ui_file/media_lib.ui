@@ -36,6 +36,19 @@
        <number>8</number>
       </property>
       <item>
+       <widget class="QPushButton" name="back_button">
+        <property name="minimumSize">
+         <size>
+          <width>72</width>
+          <height>28</height>
+         </size>
+        </property>
+        <property name="text">
+         <string>← 返回</string>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="QLabel" name="count_label">
         <property name="text">
          <string/>
@@ -59,16 +72,6 @@
        </spacer>
       </item>
       <item>
-       <widget class="QComboBox" name="lib_choose">
-        <property name="minimumSize">
-         <size>
-          <width>140</width>
-          <height>28</height>
-         </size>
-        </property>
-       </widget>
-      </item>
-      <item>
        <widget class="QLineEdit" name="search_edit">
         <property name="minimumSize">
          <size>
@@ -81,19 +84,6 @@
         </property>
         <property name="clearButtonEnabled">
          <bool>true</bool>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="refresh_button">
-        <property name="minimumSize">
-         <size>
-          <width>88</width>
-          <height>28</height>
-         </size>
-        </property>
-        <property name="text">
-         <string>刷新</string>
         </property>
        </widget>
       </item>

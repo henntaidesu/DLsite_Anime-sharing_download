@@ -28,6 +28,10 @@ class Config:
         if Config.config is None:
             Config.config = self._load_config()
 
+    def reload(self):
+        """丢弃类级缓存，重新从数据库加载配置（页面切换时调用，保证读到最新值）"""
+        Config.config = self._load_config()
+
     @staticmethod
     def _db():
         # 延迟导入，避免 conf_operate -> datebase_execution -> log -> conf_operate 循环导入

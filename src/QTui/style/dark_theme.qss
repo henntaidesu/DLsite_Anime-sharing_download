@@ -270,6 +270,22 @@ QFrame[class="card"] QLabel {
     background: transparent;
 }
 
+/* 可点击的媒体库卡片 */
+QFrame[class="libCard"] {
+    background-color: #1b1e25;
+    border: 1px solid #2c313a;
+    border-radius: 10px;
+}
+
+QFrame[class="libCard"]:hover {
+    border-color: #4f7cff;
+    background-color: #1e222b;
+}
+
+QFrame[class="libCard"] QLabel {
+    background: transparent;
+}
+
 /* ===== 标签 ===== */
 
 QLabel {

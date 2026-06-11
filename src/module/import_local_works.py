@@ -26,26 +26,29 @@ def scan_rj_folders(root):
 
 
 def scan_top_rj_folders(root):
-    """只读取目录下的全部一级文件夹，返回文件夹名中包含的 RJ 号集合"""
-    rj_set = set()
+    """只读取目录下的全部一级文件夹，返回 {RJ号: 文件夹绝对路径}"""
+    rj_map = {}
     try:
         for name in os.listdir(root):
-            if not os.path.isdir(os.path.join(root, name)):
+            path = os.path.join(root, name)
+            if not os.path.isdir(path):
                 continue
             match = RJ_PATTERN.search(name)
             if match:
-                rj_set.add(match.group(0).upper())
+                rj_map[match.group(0).upper()] = os.path.abspath(path)
     except OSError as e:
         logger.write_log(f'媒体库目录读取失败 {root}: {e}', 'error')
-    return rj_set
+    return rj_map
 
 
-def _import_rj_list(rj_list, state, library=None):
-    """把 RJ 号列表写入 works 表并标记状态（可附带所属媒体库名），返回新增数"""
+def _import_rj_list(rj_list, state, library=None, folders=None):
+    """把 RJ 号列表写入 works 表并标记状态（可附带所属媒体库名与
+    folders 提供的 {RJ号: 作品文件夹路径}），返回新增数"""
     db = SQLiteDB()
     result = db.select('SELECT "work_id" FROM "main"."works"')
     existing = {row[0] for row in result[1]} if result is not False else set()
     now = Time_a().now_time()
+    folders = folders or {}
     set_lib = ''
     lib_value = 'NULL'
     if library is not None:
@@ -53,11 +56,17 @@ def _import_rj_list(rj_list, state, library=None):
         set_lib = f', "library" = {lib_value}'
     added = 0
     for rj in rj_list:
+        folder_value = 'NULL'
+        set_folder = ''
+        if folders.get(rj):
+            folder_value = "'" + folders[rj].replace("'", "''") + "'"
+            set_folder = f', "folder" = {folder_value}'
         if rj in existing:
-            db.update(f'''UPDATE "main"."works" SET "state" = '{state}'{set_lib} WHERE "work_id" = '{rj}' ''')
+            db.update(f'''UPDATE "main"."works" SET "state" = '{state}'{set_lib}{set_folder}
+                          WHERE "work_id" = '{rj}' ''')
         else:
-            db.insert(f'''INSERT INTO "main"."works" ("work_id", "state", "library", "down_time")
-                          VALUES ('{rj}', '{state}', {lib_value}, '{now}')''')
+            db.insert(f'''INSERT INTO "main"."works" ("work_id", "state", "library", "folder", "down_time")
+                          VALUES ('{rj}', '{state}', {lib_value}, {folder_value}, '{now}')''')
             added += 1
     return added
 
@@ -79,20 +88,31 @@ def import_media_lib(root, lib_name=None):
     if not os.path.isdir(root):
         logger.write_log(f'媒体库导入失败，目录不存在: {root}', 'error')
         return 0, 0
-    rj_list = sorted(scan_top_rj_folders(root))
-    added = _import_rj_list(rj_list, '已品悦', lib_name)
+    rj_map = scan_top_rj_folders(root)
+    rj_list = sorted(rj_map)
+    added = _import_rj_list(rj_list, '已品悦', lib_name, rj_map)
     logger.write_log(f'媒体库导入完成 {root}: 扫描到 {len(rj_list)} 个，新增 {added} 个', 'info')
     return added, len(rj_list)
 
 
-def backfill_works_from_api(delay=0.5, progress=None):
+def backfill_works_from_api(delay=0.5, progress=None, library=None, force=False):
     """对 works 表中缺少作品名的记录逐个调用 DL API 补全字段，
-    返回 (补全数, 未获取到数, 总数)。delay 为每次调用间隔秒数（限速）。"""
+    返回 (补全数, 未获取到数, 总数)。delay 为每次调用间隔秒数（限速）。
+    library 限定只处理该媒体库的作品；force 为 True 时无视已有数据强制重新获取。"""
     from src.DLsite.DLapi_call import get_work_data
 
     db = SQLiteDB()
-    result = db.select(
-        '''SELECT "work_id" FROM "main"."works" WHERE "work_name" IS NULL OR "work_name" = '' ''')
+    lib_cond = ''
+    if library is not None:
+        lib_cond = f''' AND "library" = '{str(library).replace("'", "''")}' '''
+    if force:
+        sql = f'''SELECT "work_id" FROM "main"."works" WHERE "state" = '已品悦'{lib_cond}'''
+    else:
+        # 已扫描过元数据（meta_scanned = '1'）的作品不再重新获取
+        sql = f'''SELECT "work_id" FROM "main"."works"
+                  WHERE ("work_name" IS NULL OR "work_name" = '')
+                  AND COALESCE("meta_scanned", '') != '1'{lib_cond}'''
+    result = db.select(sql)
     if result is False:
         return 0, 0, 0
     rj_list = [row[0] for row in result[1]]
@@ -126,4 +146,60 @@ def backfill_works_from_api(delay=0.5, progress=None):
 
     logger.write_log(
         f'DL API 数据补全完成: 补全 {filled} 个，未获取到 {missed} 个，共 {len(rj_list)} 个', 'info')
+    return filled, missed, len(rj_list)
+
+
+# 作品页抓取可补全的 works 表列
+PAGE_COLUMNS = ('work_name', 'maker_name', 'sell_date', 'series', 'scenario', 'illust',
+                'voice_actor', 'age_category', 'work_type', 'genre', 'file_size')
+
+
+def backfill_work_pages(delay=1.0, progress=None, library=None, force=False):
+    """对缺少页面元数据的已品悦作品逐个抓取 DLsite 作品页，
+    补全字段并下载全部图片（第一张作为封面，存到 images/<RJ号>/）。
+    抓取成功的作品标记 meta_scanned = '1'，下次扫描不再重新获取。
+    返回 (补全数, 失败数, 总数)。delay 为每次抓取间隔秒数（限速）。
+    library 限定只处理该媒体库的作品；force 为 True 时无视标记和已有数据强制重新抓取。"""
+    from src.DLsite.DLsite_page import get_work_page, download_work_images
+
+    db = SQLiteDB()
+    lib_cond = ''
+    if library is not None:
+        lib_cond = f''' AND "library" = '{str(library).replace("'", "''")}' '''
+    if force:
+        sql = f'''SELECT "work_id", "folder" FROM "main"."works" WHERE "state" = '已品悦'{lib_cond}'''
+    else:
+        sql = f'''SELECT "work_id", "folder" FROM "main"."works" WHERE "state" = '已品悦'
+                  AND ("sell_date" IS NULL OR "sell_date" = ''
+                       OR "cover" IS NULL OR "cover" = '')
+                  AND COALESCE("meta_scanned", '') != '1'{lib_cond}'''
+    result = db.select(sql)
+    if result is False:
+        return 0, 0, 0
+    rj_list = result[1]
+
+    def esc(value):
+        return str(value if value is not None else '').replace("'", "''")
+
+    filled = missed = 0
+    for i, (rj, work_folder) in enumerate(rj_list, 1):
+        data, image_urls = get_work_page(rj)
+        if data:
+            cover = download_work_images(rj, image_urls, work_folder)
+            sets = [f'''"{col}" = '{esc(data[col])}' ''' for col in PAGE_COLUMNS if data.get(col)]
+            if cover:
+                sets.append(f'''"cover" = '{esc(cover)}' ''')
+            sets.append('''"meta_scanned" = '1' ''')
+            db.update(f'''UPDATE "main"."works" SET {', '.join(sets)} WHERE "work_id" = '{rj}' ''')
+            filled += 1
+        else:
+            missed += 1
+        if progress:
+            progress(i, len(rj_list), rj, bool(data))
+        if i % 50 == 0:
+            logger.write_log(f'作品页元数据补全进度: {i}/{len(rj_list)}（成功 {filled}）', 'info')
+        time.sleep(delay)
+
+    logger.write_log(
+        f'作品页元数据补全完成: 补全 {filled} 个，失败 {missed} 个，共 {len(rj_list)} 个', 'info')
     return filled, missed, len(rj_list)

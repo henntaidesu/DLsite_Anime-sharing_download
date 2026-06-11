@@ -67,6 +67,12 @@ class SettingWindow(QMainWindow):
             self.conf = Config()
             self.read_conf()
 
+        def showEvent(self, event):
+            """切换到本页时重新加载配置：先丢弃缓存从数据库重读，再回填控件"""
+            super().showEvent(event)
+            self.conf.reload()
+            self.read_conf()
+
         @staticmethod
         def default_down_path():
             """用户的“下载”文件夹"""
