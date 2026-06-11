@@ -320,11 +320,26 @@ class MediaLibWindow(QMainWindow):
             row += 1
         layout.addLayout(form)
 
-        # 已下载的全部图片（img_main 排在最前）：优先读作品文件夹下的数据源文件夹
-        from src.DLsite.DLsite_page import DATA_SOURCE_DIR
+        from src.DLsite.DLsite_page import DATA_SOURCE_DIR, DESCRIPTION_TXT
         folder = os.path.join(work_folder, DATA_SOURCE_DIR) if work_folder else ''
         if not os.path.isdir(folder):
             folder = os.path.join('images', work_id)
+
+        # 作品页正文文本（扫描时保存的 description.txt）
+        txt_path = os.path.join(folder, DESCRIPTION_TXT)
+        if os.path.isfile(txt_path):
+            try:
+                with open(txt_path, encoding='utf-8') as f:
+                    body_text = f.read().strip()
+            except OSError:
+                body_text = ''
+            if body_text:
+                body_label = QLabel(body_text)
+                body_label.setWordWrap(True)
+                body_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+                layout.addWidget(body_label)
+
+        # 已下载的全部图片（img_main 排在最前）
         if os.path.isdir(folder):
             max_width = max(360, self.cards_scroll.viewport().width() - 100)
             for filename in sorted(os.listdir(folder)):

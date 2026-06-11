@@ -8,6 +8,8 @@ logger = Log()
 
 IMAGES_DIR = 'images'  # 无作品文件夹时的图片回退目录：images/<RJ号>/
 DATA_SOURCE_DIR = 'DataSource'  # 作品文件夹内存放 DLsite 图片的子文件夹名
+DESCRIPTION_TXT = 'description.txt'  # 数据源文件夹内的作品页正文文本
+IMAGE_EXTS = ('.jpg', '.jpeg', '.png', '.gif', '.webp')
 
 # 作品页 work_outline 表格字段 -> works 表列名
 FIELD_MAP = {
@@ -36,7 +38,9 @@ def _session():
 
 
 def get_work_page(work_id):
-    """抓取 DLsite 作品页，返回 (字段 dict, 图片 URL 列表)；页面不存在或请求失败返回 (None, [])"""
+    """抓取 DLsite 作品页，返回 (字段 dict, 图片 URL 列表, 正文文本)；
+    图片列表为轮播图在前、正文图片在后（封面取第一张轮播图）。
+    页面不存在或请求失败返回 (None, [], '')"""
     session = _session()
     resp = None
     for shop in ('home', 'maniax'):
@@ -45,13 +49,13 @@ def get_work_page(work_id):
             r = session.get(url, timeout=20)
         except requests.RequestException as e:
             logger.write_log(f'作品页请求失败 {work_id}: {e}', 'error')
-            return None, []
+            return None, [], ''
         if r.status_code == 200:
             resp = r
             break
     if resp is None:
         logger.write_log(f'作品页不存在 {work_id}', 'info')
-        return None, []
+        return None, [], ''
 
     soup = BeautifulSoup(resp.text, 'lxml')
     data = {}
@@ -83,7 +87,20 @@ def get_work_page(work_id):
         og = soup.find('meta', property='og:image')
         if og and og.get('content'):
             urls.append(og['content'])
-    return data, urls
+
+    # 正文（work_parts_container）：文本 + 正文图片
+    body_text = ''
+    description = (soup.select_one('div[itemprop="description"]')
+                   or soup.find(class_='work_parts_container'))
+    if description is not None:
+        body_text = description.get_text('\n', strip=True)
+        for img in description.find_all('img'):
+            src = img.get('data-src') or img.get('src')
+            if src:
+                url = 'https:' + src if src.startswith('//') else src
+                if url not in urls:
+                    urls.append(url)
+    return data, urls, body_text
 
 
 def download_work_images(work_id, urls, work_folder=None):
@@ -95,10 +112,12 @@ def download_work_images(work_id, urls, work_folder=None):
     else:
         folder = os.path.join(IMAGES_DIR, work_id)
     if os.path.isdir(folder):
-        for filename in sorted(os.listdir(folder)):
-            path = os.path.join(folder, filename)
-            if os.path.isfile(path):
-                return path
+        existing = [f for f in sorted(os.listdir(folder))
+                    if os.path.isfile(os.path.join(folder, f)) and f.lower().endswith(IMAGE_EXTS)]
+        if existing:
+            # 优先用主图做封面（正文图片是哈希文件名，排序会排在主图前面）
+            main = [f for f in existing if 'img_main' in f.lower()]
+            return os.path.join(folder, (main or existing)[0])
     if not urls:
         return ''
     os.makedirs(folder, exist_ok=True)
@@ -121,3 +140,24 @@ def download_work_images(work_id, urls, work_folder=None):
         if not cover:
             cover = path
     return cover
+
+
+def save_work_description(work_id, text, work_folder=None):
+    """把作品页正文保存为 <作品文件夹>/DataSource/description.txt
+    （无作品文件夹时回退 images/<RJ号>/），每次覆盖写入。
+    返回 txt 路径，text 为空或写入失败返回 ''"""
+    if not text:
+        return ''
+    if work_folder and os.path.isdir(work_folder):
+        folder = os.path.join(work_folder, DATA_SOURCE_DIR)
+    else:
+        folder = os.path.join(IMAGES_DIR, work_id)
+    path = os.path.join(folder, DESCRIPTION_TXT)
+    try:
+        os.makedirs(folder, exist_ok=True)
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(text)
+    except OSError as e:
+        logger.write_log(f'正文保存失败 {work_id}: {e}', 'error')
+        return ''
+    return path

@@ -160,7 +160,7 @@ def backfill_work_pages(delay=1.0, progress=None, library=None, force=False):
     抓取成功的作品标记 meta_scanned = '1'，下次扫描不再重新获取。
     返回 (补全数, 失败数, 总数)。delay 为每次抓取间隔秒数（限速）。
     library 限定只处理该媒体库的作品；force 为 True 时无视标记和已有数据强制重新抓取。"""
-    from src.DLsite.DLsite_page import get_work_page, download_work_images
+    from src.DLsite.DLsite_page import get_work_page, download_work_images, save_work_description
 
     db = SQLiteDB()
     lib_cond = ''
@@ -183,9 +183,10 @@ def backfill_work_pages(delay=1.0, progress=None, library=None, force=False):
 
     filled = missed = 0
     for i, (rj, work_folder) in enumerate(rj_list, 1):
-        data, image_urls = get_work_page(rj)
+        data, image_urls, body_text = get_work_page(rj)
         if data:
             cover = download_work_images(rj, image_urls, work_folder)
+            save_work_description(rj, body_text, work_folder)
             sets = [f'''"{col}" = '{esc(data[col])}' ''' for col in PAGE_COLUMNS if data.get(col)]
             if cover:
                 sets.append(f'''"cover" = '{esc(cover)}' ''')
