@@ -15,7 +15,7 @@ DEFAULT_CONF = {
     'max_key': {'rj': '0', 'vj': '0'},
     'down_list': {'auto_download': 'False', 'auto_unzip': 'False', 'download_processes': '5', 'folder_name': 'rj'},
     'api': {'address': '127.0.0.1', 'port': '5000'},
-    'media_lib': {'folders': '[]'},
+    'media_lib': {'libs': '[]'},
 }
 
 
@@ -146,12 +146,25 @@ class Config:
         return self.read_value('down_list', 'folder_name', 'rj')
 
     def read_media_libs(self):
-        """媒体库文件夹列表"""
+        """媒体库列表：[{'name': 名称, 'folders': [文件夹, ...]}, ...]"""
         try:
-            folders = json.loads(self.read_value('media_lib', 'folders', '[]'))
+            libs = json.loads(self.read_value('media_lib', 'libs', '[]'))
         except (TypeError, ValueError):
-            folders = []
-        return folders if isinstance(folders, list) else []
+            libs = []
+        if not isinstance(libs, list):
+            libs = []
+        libs = [lib for lib in libs
+                if isinstance(lib, dict) and lib.get('name') and isinstance(lib.get('folders'), list)]
+        if not libs:
+            # 旧版扁平文件夹列表迁移为一个默认媒体库
+            try:
+                folders = json.loads(self.read_value('media_lib', 'folders', '[]'))
+            except (TypeError, ValueError):
+                folders = []
+            if isinstance(folders, list) and folders:
+                libs = [{'name': '默认媒体库', 'folders': folders}]
+                self.write_media_libs(libs)
+        return libs
 
     def read_HOME_API(self):
         address = self.read_value('API', 'address', '127.0.0.1')
@@ -179,8 +192,8 @@ class Config:
     def write_proxy_type(self, proxy_type):
         self.write_value('Proxy', 'type', proxy_type)
 
-    def write_media_libs(self, folders):
-        self.write_value('media_lib', 'folders', json.dumps(folders, ensure_ascii=False))
+    def write_media_libs(self, libs):
+        self.write_value('media_lib', 'libs', json.dumps(libs, ensure_ascii=False))
 
 
 class WriteConf:

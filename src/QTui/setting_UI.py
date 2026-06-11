@@ -1,31 +1,10 @@
 import os
 from PyQt5.QtWidgets import (QMainWindow, QLineEdit, QPushButton, QComboBox, QMessageBox,
-                             QFileDialog, QListWidget, QLabel)
-from PyQt5.QtCore import QStandardPaths, QThread, pyqtSignal
+                             QFileDialog)
+from PyQt5.QtCore import QStandardPaths
 from PyQt5.uic import loadUi
 from src.module.conf_operate import Config
 from src.web_drive.debrid_link import DebridLink
-
-
-class MediaLibScanner(QThread):
-    """后台扫描媒体库：导入一级文件夹的 RJ 号并调用 DL API 补全数据"""
-    progress = pyqtSignal(str)
-    done = pyqtSignal(str)
-
-    def __init__(self, folder, parent=None):
-        super().__init__(parent)
-        self.folder = folder
-
-    def run(self):
-        from src.module.import_local_works import import_media_lib, backfill_works_from_api
-        added, total = import_media_lib(self.folder)
-        self.progress.emit(f'已导入 {total} 个作品（新增 {added}），正在从 DL API 补全数据…')
-        filled, missed, _ = backfill_works_from_api(delay=0.5, progress=self._on_backfill)
-        self.done.emit(f'扫描完成：导入 {total} 个，补全 {filled} 个，未获取到 {missed} 个')
-
-    def _on_backfill(self, i, total, rj, ok):
-        if i % 10 == 0 or i == total:
-            self.progress.emit(f'DL API 数据补全中… {i}/{total}')
 
 
 class SettingWindow(QMainWindow):
@@ -59,15 +38,6 @@ class SettingWindow(QMainWindow):
             self.folder_name_choose = self.findChild(QComboBox, 'folder_name_choose')
             self.set_folder_name_comboBox()
             self.folder_name_choose.currentIndexChanged.connect(self.choose_folder_name)
-
-            # 媒体库
-            self.media_lib_list = self.findChild(QListWidget, 'media_lib_list')
-            self.media_lib_status = self.findChild(QLabel, 'media_lib_status')
-            self.media_lib_add_button = self.findChild(QPushButton, 'media_lib_add_button')
-            self.media_lib_add_button.clicked.connect(self.add_media_lib)
-            self.media_lib_remove_button = self.findChild(QPushButton, 'media_lib_remove_button')
-            self.media_lib_remove_button.clicked.connect(self.remove_media_lib)
-            self.media_lib_scanner = None
 
             self.log_level_choose = self.findChild(QComboBox, 'log_level_choose')
             self.set_log_level_comboBox()
@@ -144,9 +114,6 @@ class SettingWindow(QMainWindow):
             self.encoding_text.setText(str(self.conf.read_sys_encoding()))
             self.api_address_text.setText(self.conf.read_value('API', 'address', '127.0.0.1'))
             self.api_port_text.setText(self.conf.read_value('API', 'port', '5000'))
-
-            self.media_lib_list.clear()
-            self.media_lib_list.addItems(self.conf.read_media_libs())
 
         def save_down_path(self):
             """手动输入下载路径：输入的是有效目录时才保存"""
@@ -228,39 +195,6 @@ class SettingWindow(QMainWindow):
 
         def choose_folder_name(self, index):
             self.conf.write_value('down_list', 'folder_name', self.folder_name_choose.itemData(index))
-
-        def _media_lib_folders(self):
-            return [self.media_lib_list.item(i).text() for i in range(self.media_lib_list.count())]
-
-        def add_media_lib(self):
-            if self.media_lib_scanner is not None and self.media_lib_scanner.isRunning():
-                QMessageBox.information(self, '媒体库', '正在扫描中，请等待当前扫描完成。')
-                return
-            path = QFileDialog.getExistingDirectory(self, '选择媒体库文件夹', self.default_down_path())
-            if not path:
-                return
-            path = os.path.normpath(path)
-            if path in self._media_lib_folders():
-                QMessageBox.information(self, '媒体库', '该文件夹已在媒体库中。')
-                return
-            self.media_lib_list.addItem(path)
-            self.conf.write_media_libs(self._media_lib_folders())
-            self._start_media_lib_scan(path)
-
-        def remove_media_lib(self):
-            row = self.media_lib_list.currentRow()
-            if row < 0:
-                return
-            self.media_lib_list.takeItem(row)
-            self.conf.write_media_libs(self._media_lib_folders())
-
-        def _start_media_lib_scan(self, path):
-            """后台扫描媒体库文件夹：导入 RJ 号并调用 DL API 补全"""
-            self.media_lib_status.setText(f'正在扫描 {path} …')
-            self.media_lib_scanner = MediaLibScanner(path, self)
-            self.media_lib_scanner.progress.connect(self.media_lib_status.setText)
-            self.media_lib_scanner.done.connect(self.media_lib_status.setText)
-            self.media_lib_scanner.start()
 
         def set_log_level_comboBox(self):
             items = ["info", "error", "debug"]

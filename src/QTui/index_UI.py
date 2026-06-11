@@ -1,6 +1,7 @@
 from src.QTui.select_UI import SelectWindown
 from src.QTui.download_UI import DownloadWindow
 from src.QTui.downloaded_UI import DownloadedWindow
+from src.QTui.media_lib_UI import MediaLibWindow
 from src.QTui.setting_UI import SettingWindow
 from src.QTui.style.theme import enable_dark_title_bar
 from PyQt5.QtWidgets import QApplication, QMainWindow, QStackedWidget, QPushButton, QVBoxLayout, QWidget
@@ -16,12 +17,14 @@ class IndexWindow(QWidget):
         self.select_button = self.findChild(QPushButton, 'pushButton')
         self.download_button = self.findChild(QPushButton, 'pushButton_2')
         self.downloaded_button = self.findChild(QPushButton, 'pushButton_4')
+        self.media_lib_button = self.findChild(QPushButton, 'pushButton_5')
         self.setting_button = self.findChild(QPushButton, 'pushButton_3')
 
         # 连接按钮点击事件到槽函数
         self.select_button.clicked.connect(self.show_select_window)
         self.download_button.clicked.connect(self.show_download_window)
         self.downloaded_button.clicked.connect(self.show_downloaded_window)
+        self.media_lib_button.clicked.connect(self.show_media_lib_window)
         self.setting_button.clicked.connect(self.show_setting_window)
 
         # 初始化 QStackedWidget
@@ -37,6 +40,9 @@ class IndexWindow(QWidget):
 
         self.downloaded_window = DownloadedWindow()
         self.stackedWidget.addWidget(self.downloaded_window)
+
+        self.media_lib_window = MediaLibWindow()
+        self.stackedWidget.addWidget(self.media_lib_window)
 
         self.setting_window = SettingWindow()
         self.stackedWidget.addWidget(self.setting_window)
@@ -54,6 +60,9 @@ class IndexWindow(QWidget):
 
     def show_downloaded_window(self):
         self.stackedWidget.setCurrentWidget(self.downloaded_window)
+
+    def show_media_lib_window(self):
+        self.stackedWidget.setCurrentWidget(self.media_lib_window)
 
     def show_setting_window(self):
         self.stackedWidget.setCurrentWidget(self.setting_window)

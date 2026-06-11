@@ -1,12 +1,17 @@
 import os
 import sys
 import time
+import shutil
+import subprocess
 from tqdm import tqdm
 import patoolib
 from src.module.conf_operate import Config
 from src.module.log import Log, err1, err2
 
 logger = Log()
+
+# Bandizip 命令行工具，用于解压 rar 等格式（patool 不支持 Bandizip）
+BANDIZIP_BZ = r"C:\Program Files\Bandizip\bz.exe"
 
 
 def rename(work_path):  # 输入一个目录，解决该目录下所有文件名的乱码。
@@ -31,7 +36,12 @@ def rename(work_path):  # 输入一个目录，解决该目录下所有文件名
 def extract_rar(file_path, extract_path):
     # if patoolib.test_archive(file_path):
     try:
-        patoolib.extract_archive(file_path, outdir=extract_path)
+        if os.path.exists(BANDIZIP_BZ):
+            result = subprocess.run([BANDIZIP_BZ, 'x', f'-o:{extract_path}', '-aoa', '-y', file_path])
+            if result.returncode != 0:
+                raise Exception(f'bz.exe 解压失败，返回码 {result.returncode}')
+        else:
+            patoolib.extract_archive(file_path, outdir=extract_path)
     except Exception as e:
         print(e)
         err2(e)
@@ -73,6 +83,38 @@ def get_all_archive_files(folder_path):
     return archive_files
 
 
+def move_to_root(work_id, folder_path):
+    # 解压后内容常被多包一层或多层目录（如 RJxxx\RJxxx\RJxxx），
+    # 沿“只有一个子目录”的链找到最终内容目录，把其内容移到根目录，并删除嵌套路径文件夹
+    try:
+        final_path = folder_path
+        while True:
+            dirs = [d for d in os.listdir(final_path) if os.path.isdir(os.path.join(final_path, d))]
+            if len(dirs) != 1:
+                break
+            final_path = os.path.join(final_path, dirs[0])
+        if final_path == folder_path:
+            return
+        top_name = os.path.relpath(final_path, folder_path).split(os.sep)[0]
+        top_path = os.path.join(folder_path, top_name)
+        pending = []  # 与嵌套路径目录重名的内容先用临时名，删除嵌套目录后再改回
+        for name in os.listdir(final_path):
+            src = os.path.join(final_path, name)
+            dst = os.path.join(folder_path, name)
+            if os.path.exists(dst):
+                tmp = dst + '_moving_tmp'
+                shutil.move(src, tmp)
+                pending.append((tmp, dst))
+            else:
+                shutil.move(src, dst)
+        shutil.rmtree(top_path)
+        for tmp, dst in pending:
+            os.rename(tmp, dst)
+        logger.write_log(f'{work_id} 已将最终目录内容移动到根目录', 'info')
+    except Exception as e:
+        err2(e)
+
+
 def unzip(work_id):
     try:
         # 与下载逻辑保持同一文件夹命名方式（RJ号 / 作品名称）
@@ -84,6 +126,7 @@ def unzip(work_id):
             file_name_list = get_all_archive_files(folder_path)
 
             if len(file_name_list) == 0:
+                move_to_root(work_id, folder_path)
                 un_flag = rename(folder_path)
                 logger.write_log(f'{work_id} 解压成功', 'info')
                 if un_flag is True:

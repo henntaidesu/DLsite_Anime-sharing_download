@@ -40,19 +40,24 @@ def scan_top_rj_folders(root):
     return rj_set
 
 
-def _import_rj_list(rj_list, state):
-    """把 RJ 号列表写入 works 表并标记状态，返回新增数"""
+def _import_rj_list(rj_list, state, library=None):
+    """把 RJ 号列表写入 works 表并标记状态（可附带所属媒体库名），返回新增数"""
     db = SQLiteDB()
     result = db.select('SELECT "work_id" FROM "main"."works"')
     existing = {row[0] for row in result[1]} if result is not False else set()
     now = Time_a().now_time()
+    set_lib = ''
+    lib_value = 'NULL'
+    if library is not None:
+        lib_value = "'" + str(library).replace("'", "''") + "'"
+        set_lib = f', "library" = {lib_value}'
     added = 0
     for rj in rj_list:
         if rj in existing:
-            db.update(f'''UPDATE "main"."works" SET "state" = '{state}' WHERE "work_id" = '{rj}' ''')
+            db.update(f'''UPDATE "main"."works" SET "state" = '{state}'{set_lib} WHERE "work_id" = '{rj}' ''')
         else:
-            db.insert(f'''INSERT INTO "main"."works" ("work_id", "state", "down_time")
-                          VALUES ('{rj}', '{state}', '{now}')''')
+            db.insert(f'''INSERT INTO "main"."works" ("work_id", "state", "library", "down_time")
+                          VALUES ('{rj}', '{state}', {lib_value}, '{now}')''')
             added += 1
     return added
 
@@ -68,14 +73,14 @@ def import_local_works(root):
     return added, len(rj_list)
 
 
-def import_media_lib(root):
+def import_media_lib(root, lib_name=None):
     """导入一个媒体库文件夹：读取一级文件夹的 RJ 号写入 works 表并标记为已品悦，
-    返回 (新增数, 扫描到的总数)"""
+    lib_name 为所属媒体库名称。返回 (新增数, 扫描到的总数)"""
     if not os.path.isdir(root):
         logger.write_log(f'媒体库导入失败，目录不存在: {root}', 'error')
         return 0, 0
     rj_list = sorted(scan_top_rj_folders(root))
-    added = _import_rj_list(rj_list, '已品悦')
+    added = _import_rj_list(rj_list, '已品悦', lib_name)
     logger.write_log(f'媒体库导入完成 {root}: 扫描到 {len(rj_list)} 个，新增 {added} 个', 'info')
     return added, len(rj_list)
 

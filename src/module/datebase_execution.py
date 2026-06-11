@@ -55,13 +55,16 @@ class SQLiteDB:
                 "age_category" text,
                 "is_ana" text,
                 "state" text,
+                "library" text,
                 "down_time" text,
                 PRIMARY KEY ("work_id")
             )''')
-            # 旧版 works 表没有 state 列时补加
+            # 旧版 works 表缺列时补加
             columns = [row[1] for row in cursor.execute('PRAGMA table_info("works")').fetchall()]
             if 'state' not in columns:
                 cursor.execute('ALTER TABLE "works" ADD COLUMN "state" text')
+            if 'library' not in columns:
+                cursor.execute('ALTER TABLE "works" ADD COLUMN "library" text')
             self.db.commit()
             cursor.close()
         except sqlite3.Error as e:
