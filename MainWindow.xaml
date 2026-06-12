@@ -25,6 +25,10 @@
                              Checked="Nav_Checked" Tag="medialib" Content="媒体库" />
                 <RadioButton x:Name="NavTag" Style="{StaticResource NavButton}" GroupName="nav"
                              Checked="Nav_Checked" Tag="tag" Content="标签" />
+                <RadioButton x:Name="NavType" Style="{StaticResource NavButton}" GroupName="nav"
+                             Checked="Nav_Checked" Tag="type" Content="作品形式" />
+                <RadioButton x:Name="NavFavorite" Style="{StaticResource NavButton}" GroupName="nav"
+                             Checked="Nav_Checked" Tag="favorite" Content="收藏夹" />
                 <RadioButton x:Name="NavSetting" Style="{StaticResource NavButton}" GroupName="nav"
                              Checked="Nav_Checked" Tag="setting" Content="设置" />
             </StackPanel>

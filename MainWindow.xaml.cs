@@ -14,8 +14,10 @@ public partial class MainWindow : Window
     private readonly SearchPage _searchPage = new();
     private readonly DownloadPage _downloadPage = new();
     private readonly DownloadedPage _downloadedPage = new();
-    private readonly MediaLibPage _mediaLibPage = new(rootGenres: false);
-    private readonly MediaLibPage _tagPage = new(rootGenres: true);
+    private readonly MediaLibPage _mediaLibPage = new(MediaLibRoot.Library);
+    private readonly MediaLibPage _tagPage = new(MediaLibRoot.Genre);
+    private readonly MediaLibPage _typePage = new(MediaLibRoot.WorkType);
+    private readonly MediaLibPage _favoritePage = new(MediaLibRoot.Favorite);
     private readonly SettingsPage _settingsPage = new();
 
     public MainWindow()
@@ -44,6 +46,8 @@ public partial class MainWindow : Window
         NavDownloaded.Content = I18n.Tr("已下载");
         NavMediaLib.Content = I18n.Tr("媒体库");
         NavTag.Content = I18n.Tr("标签");
+        NavType.Content = I18n.Tr("作品形式");
+        NavFavorite.Content = I18n.Tr("收藏夹");
         NavSetting.Content = I18n.Tr("设置");
     }
 
@@ -57,6 +61,8 @@ public partial class MainWindow : Window
             "downloaded" => _downloadedPage,
             "medialib" => _mediaLibPage,
             "tag" => _tagPage,
+            "type" => _typePage,
+            "favorite" => _favoritePage,
             "setting" => _settingsPage,
             _ => (object)_searchPage,
         };

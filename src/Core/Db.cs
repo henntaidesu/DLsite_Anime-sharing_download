@@ -129,7 +129,7 @@ public static class Db
             [
                 "state", "library", "sell_date", "series", "scenario", "illust",
                 "voice_actor", "genre", "file_size", "cover", "meta_scanned", "folder",
-                "target", "target_lib"
+                "target", "target_lib", "read_flag", "favorite"
             ];
             foreach (var col in required)
             {

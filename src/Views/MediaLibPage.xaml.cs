@@ -16,16 +16,32 @@ using DASD.Services;
 
 namespace DASD.Views;
 
+/// <summary>媒体库页的根视图模式。</summary>
+public enum MediaLibRoot
+{
+    /// <summary>媒体库页：媒体库 → 社团 → 作品。</summary>
+    Library,
+    /// <summary>标签页：标签 → 社团 → 作品。</summary>
+    Genre,
+    /// <summary>作品形式页：作品形式 → 社团 → 作品。</summary>
+    WorkType,
+    /// <summary>收藏夹页：收藏的作品平铺 → 作品详情。</summary>
+    Favorite,
+}
+
 /// <summary>
 /// 媒体库页（对应 Python 版 media_lib_UI.py）：媒体库卡片 → 社团卡片 → 作品卡片 → 作品详情 四级浏览。
-/// rootGenres=true 时作为"标签页"使用：根视图为标签（标签 → 社团 → 作品）。
+/// root=Genre 时作为"标签页"使用（标签 → 社团 → 作品）；root=WorkType 时作为"作品形式页"使用（作品形式 → 社团 → 作品）。
 /// </summary>
 public partial class MediaLibPage : UserControl
 {
     private const int WorksPageSize = 30;   // 作品卡片懒加载：每批数量
     private const string UnknownMaker = ""; // maker_name 为空的作品归到"未知社团"
-    private const double WorkCardW = 210, WorkCardH = 248;
+    private const double WorkCardW = 210, WorkCardH = 248;   // WorkCardW 作为卡片最小宽度
     private const double WorkCoverW = 186, WorkCoverH = 140;
+    private const double CardGap = 10;                       // 卡片右/下外边距
+    private const double CoverWidthDelta = WorkCardW - WorkCoverW; // 封面宽 = 卡片宽 - 内边距
+    private double _cardWidth = WorkCardW;                   // 动态卡片宽度：按视口宽度撑满整行，消除右侧留白
 
     private static readonly string[] VideoExts =
         [".mp4", ".mkv", ".avi", ".wmv", ".mov", ".flv", ".webm", ".m4v", ".ts", ".mpg", ".mpeg"];
@@ -47,15 +63,18 @@ public partial class MediaLibPage : UserControl
         ["声优"] = ("voice_actor", true),
     };
 
-    private readonly bool _rootGenres;
+    private readonly MediaLibRoot _root;
     private readonly WrapPanel _cardsPanel = new();
 
-    private string _level = "libs";  // libs / makers / works / detail / genres / filtered_works
+    private string _level = "libs";  // libs / makers / works / detail / genres / types / filtered_works
     private string? _currentLib;
     private string? _currentMaker;   // null=未选社团；UnknownMaker=未知社团
     private string? _currentGenre;
+    private string? _currentType;    // 当前选中的作品形式（work_type）
     private string? _currentWork;
     private string? _currentWorkFolder;
+    private bool _currentRead;   // 当前详情作品的"已读"状态
+    private bool _currentFav;    // 当前详情作品的"收藏"状态
     private string? _filterCol;
     private string? _filterVal;
     private int _totalWorks;
@@ -73,21 +92,33 @@ public partial class MediaLibPage : UserControl
     private FrameworkElement? _detailFileTree;
     private bool _showingFileTree;
 
-    // 文件树视图：左侧轮播图（限高基准）/ 右侧内嵌预览
+    // 文件列表视图：左侧轮播图（限高基准）/ 整页预览状态
     private FrameworkElement? _detailSlider;
-    private Border? _previewHost;
     private InlineMediaPlayer? _inlinePlayer;
+    private List<string> _previewImages = [];
+    private int _previewIndex;
 
-    public MediaLibPage(bool rootGenres)
+    private static readonly Brush RowHoverBrush = MakeFrozenBrush(Color.FromArgb(18, 255, 255, 255));
+
+    private static Brush MakeFrozenBrush(Color color)
+    {
+        var brush = new SolidColorBrush(color);
+        brush.Freeze();
+        return brush;
+    }
+
+    public MediaLibPage(MediaLibRoot root)
     {
         InitializeComponent();
-        _rootGenres = rootGenres;
-        if (rootGenres)
+        _root = root;
+        // 各根视图的初始层级；媒体库设置按钮仅在媒体库首页显示（由 ClearCards/ShowLibs 控制）
+        _level = root switch
         {
-            _level = "genres";
-            GenreButton.Visibility = Visibility.Collapsed;      // 根视图就是标签页
-            LibSettingButton.Visibility = Visibility.Collapsed; // 媒体库管理只保留在媒体库页
-        }
+            MediaLibRoot.Genre => "genres",
+            MediaLibRoot.WorkType => "types",
+            MediaLibRoot.Favorite => "favorites",
+            _ => "libs",
+        };
         RetranslateUi();
         I18n.LanguageChanged += RetranslateUi;
     }
@@ -95,12 +126,14 @@ public partial class MediaLibPage : UserControl
     private void RetranslateUi()
     {
         BackButton.Content = I18n.Tr("← 返回");
-        GenreButton.Content = I18n.Tr("作品标签");
         LibSettingButton.Content = I18n.Tr("媒体库设置");
         OpenFolderButton.Content = I18n.Tr("打开文件夹");
         ViewFilesButton.Content = I18n.Tr(_showingFileTree ? "作品信息" : "查看作品");
         MoveLibButton.Content = I18n.Tr("移动媒体库");
         SearchBox.ToolTip = I18n.Tr("搜索 RJ号 / 作品名 / 社团");
+        PreviewCloseButton.Content = I18n.Tr("← 返回");
+        PreviewPrevButton.Content = "‹ " + I18n.Tr("上一张");
+        PreviewNextButton.Content = I18n.Tr("下一张") + " ›";
         Refresh();
     }
 
@@ -124,8 +157,16 @@ public partial class MediaLibPage : UserControl
                 break;
             case "detail":
                 _currentWork = null;
-                ShowWorks();
-                RestoreWorksScroll();
+                if (_root == MediaLibRoot.Favorite)
+                {
+                    ShowFavorites();
+                    RestoreWorksScroll();
+                }
+                else
+                {
+                    ShowWorks();
+                    RestoreWorksScroll();
+                }
                 break;
             case "works":
                 _currentMaker = null;
@@ -137,24 +178,49 @@ public partial class MediaLibPage : UserControl
                     _currentGenre = null;
                     ShowGenres();
                 }
+                else if (_currentType != null)
+                {
+                    _currentType = null;
+                    ShowTypes();
+                }
                 else
                 {
                     ShowLibs();
                 }
                 break;
-            case "genres" when !_rootGenres:
+            case "genres" when _root != MediaLibRoot.Genre:
+                ShowLibs();
+                break;
+            case "types" when _root != MediaLibRoot.WorkType:
                 ShowLibs();
                 break;
         }
     }
 
-    private void GenreButton_Click(object sender, RoutedEventArgs e)
+    private void ReadButton_Click(object sender, RoutedEventArgs e)
     {
-        _currentLib = null;
-        _currentMaker = null;
-        _currentGenre = null;
-        _currentWork = null;
-        ShowGenres();
+        if (_currentWork == null)
+            return;
+        _currentRead = !_currentRead;
+        Db.Execute("UPDATE \"works\" SET \"read_flag\" = @v WHERE \"work_id\" = @w",
+            ("@v", _currentRead ? "1" : null), ("@w", _currentWork));
+        UpdateReadFavButtons();
+    }
+
+    private void FavButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentWork == null)
+            return;
+        _currentFav = !_currentFav;
+        Db.Execute("UPDATE \"works\" SET \"favorite\" = @v WHERE \"work_id\" = @w",
+            ("@v", _currentFav ? "1" : null), ("@w", _currentWork));
+        UpdateReadFavButtons();
+    }
+
+    private void UpdateReadFavButtons()
+    {
+        ReadButton.Content = (_currentRead ? "★ " : "☆ ") + I18n.Tr("已读");
+        FavButton.Content = (_currentFav ? "♥ " : "♡ ") + I18n.Tr("收藏");
     }
 
     private void LibSettingButton_Click(object sender, RoutedEventArgs e)
@@ -240,7 +306,6 @@ public partial class MediaLibPage : UserControl
         }
         else
         {
-            StopPreview();
             _detailRightHost.Children.Clear();
             if (_detailInfoPanel != null)
                 _detailRightHost.Children.Add(_detailInfoPanel);
@@ -259,42 +324,59 @@ public partial class MediaLibPage : UserControl
             ShowFilteredWorks();
         else if (_level == "detail" && _currentWork != null)
             ShowDetail();
+        else if (_level == "favorites")
+            ShowFavorites();
         else if (_level is "works" && _currentMaker != null)
             ShowWorks();
-        else if (_level == "makers" && (_currentLib != null || _currentGenre != null))
+        else if (_level == "makers" && (_currentLib != null || _currentGenre != null || _currentType != null))
             ShowMakers();
         else if (_level == "genres")
             ShowGenres();
+        else if (_level == "types")
+            ShowTypes();
         else
             ShowRoot();
     }
 
     private void ShowRoot()
     {
-        if (_rootGenres)
-            ShowGenres();
-        else
-            ShowLibs();
+        switch (_root)
+        {
+            case MediaLibRoot.Genre:
+                ShowGenres();
+                break;
+            case MediaLibRoot.WorkType:
+                ShowTypes();
+                break;
+            case MediaLibRoot.Favorite:
+                ShowFavorites();
+                break;
+            default:
+                ShowLibs();
+                break;
+        }
     }
 
     // ---------- 视图构建 ----------
 
     private void ClearCards()
     {
+        _cardWidth = ComputeCardWidth();  // 重建前按当前视口宽度算好动态卡片宽度
         _cardsPanel.Children.Clear();
         ContentHost.Content = _cardsPanel;
         OpenFolderButton.Visibility = Visibility.Collapsed;
         ViewFilesButton.Visibility = Visibility.Collapsed;
         ViewFilesButton.Content = I18n.Tr("查看作品");
         MoveLibButton.Visibility = Visibility.Collapsed;
+        ReadButton.Visibility = Visibility.Collapsed;
+        FavButton.Visibility = Visibility.Collapsed;
+        LibSettingButton.Visibility = Visibility.Collapsed;  // 仅媒体库首页显示，由 ShowLibs 重新打开
         _detailRightHost = null;
         _detailInfoPanel = null;
         _detailFileTree = null;
         _showingFileTree = false;
         _currentWorkFolder = null;
-        _inlinePlayer?.Shutdown();
-        _inlinePlayer = null;
-        _previewHost = null;
+        ClosePreview();
         _detailSlider = null;
     }
 
@@ -303,9 +385,9 @@ public partial class MediaLibPage : UserControl
         var card = new Border
         {
             Style = (Style)FindResource("Card"),
-            Width = WorkCardW,
+            Width = _cardWidth,
             Height = 110,
-            Margin = new Thickness(0, 0, 10, 10),
+            Margin = new Thickness(0, 0, CardGap, CardGap),
             Cursor = Cursors.Hand,
             Tag = title.ToLowerInvariant(),  // 搜索过滤用
         };
@@ -338,6 +420,7 @@ public partial class MediaLibPage : UserControl
                 counts[row[0] as string ?? ""] = Convert.ToInt64(row[1]);
         _totalWorks = (int)counts.Values.Sum();
         ClearCards();
+        LibSettingButton.Visibility = Visibility.Visible;  // 媒体库设置仅在媒体库首页显示
         foreach (var lib in AppConfig.ReadMediaLibs())
         {
             var name = lib.Name;
@@ -368,6 +451,12 @@ public partial class MediaLibPage : UserControl
                 "WHERE w.\"state\" = '已品悦' AND g.\"genre\" = @g " +
                 "GROUP BY w.\"maker_name\" ORDER BY COUNT(*) DESC",
                 ("@g", _currentGenre));
+        else if (_currentType != null)
+            rows = Db.Select(
+                "SELECT \"maker_name\", COUNT(*) FROM \"works\" " +
+                "WHERE \"state\" = '已品悦' AND \"work_type\" = @t " +
+                "GROUP BY \"maker_name\" ORDER BY COUNT(*) DESC",
+                ("@t", _currentType));
         else
             rows = Db.Select(
                 "SELECT \"maker_name\", COUNT(*) FROM \"works\" " +
@@ -398,7 +487,7 @@ public partial class MediaLibPage : UserControl
     private void ShowGenres()
     {
         _level = "genres";
-        BackButton.Visibility = _rootGenres ? Visibility.Collapsed : Visibility.Visible;
+        BackButton.Visibility = _root == MediaLibRoot.Genre ? Visibility.Collapsed : Visibility.Visible;
         var rows = Db.Select(
             "SELECT g.\"genre\", COUNT(*) FROM \"work_genres\" g " +
             "JOIN \"works\" w ON w.\"work_id\" = g.\"work_id\" " +
@@ -427,6 +516,39 @@ public partial class MediaLibPage : UserControl
         ShowMakers();
     }
 
+    /// <summary>作品形式视图：全部已品悦作品按 work_type 分组的形式卡片。</summary>
+    private void ShowTypes()
+    {
+        _level = "types";
+        BackButton.Visibility = _root == MediaLibRoot.WorkType ? Visibility.Collapsed : Visibility.Visible;
+        var rows = Db.Select(
+            "SELECT \"work_type\", COUNT(*) FROM \"works\" " +
+            "WHERE \"state\" = '已品悦' AND \"work_type\" IS NOT NULL AND \"work_type\" <> '' " +
+            "GROUP BY \"work_type\" ORDER BY COUNT(*) DESC");
+        if (rows == null)
+            return;
+        _totalWorks = (int)rows.Sum(r => Convert.ToInt64(r[1]));
+        ClearCards();
+        foreach (var row in rows)
+        {
+            var type = row[0] as string ?? "";
+            var count = Convert.ToInt64(row[1]);
+            _cardsPanel.Children.Add(MakeClickCard(
+                type, I18n.Format(I18n.Tr("{count} 个作品"), ("count", count)),
+                () => OpenType(type)));
+        }
+        ApplyCardFilter();
+    }
+
+    private void OpenType(string type)
+    {
+        _currentType = type;
+        _currentGenre = null;
+        _currentLib = null;
+        _currentMaker = null;
+        ShowMakers();
+    }
+
     /// <summary>三级：当前社团的作品卡片（标签流程下为 标签+社团）。</summary>
     private void ShowWorks()
     {
@@ -444,6 +566,12 @@ public partial class MediaLibPage : UserControl
                 $"WHERE w.\"state\" = '已品悦' AND g.\"genre\" = @g AND {makerCond.Replace("\"maker_name\"", "w.\"maker_name\"")} " +
                 "ORDER BY w.\"work_id\" DESC",
                 ("@g", _currentGenre), ("@maker", _currentMaker ?? ""));
+        else if (_currentType != null)
+            rows = Db.Select(
+                "SELECT \"work_id\", \"work_name\", \"maker_name\", \"work_type\", \"age_category\", \"cover\" " +
+                $"FROM \"works\" WHERE \"state\" = '已品悦' AND \"work_type\" = @t AND {makerCond} " +
+                "ORDER BY \"work_id\" DESC",
+                ("@t", _currentType), ("@maker", _currentMaker ?? ""));
         else
             rows = Db.Select(
                 "SELECT \"work_id\", \"work_name\", \"maker_name\", \"work_type\", \"age_category\", \"cover\" " +
@@ -482,6 +610,21 @@ public partial class MediaLibPage : UserControl
         ShowFilteredWorks();
     }
 
+    /// <summary>收藏夹视图：平铺所有已收藏的作品（懒加载，复用作品卡片流）。</summary>
+    private void ShowFavorites()
+    {
+        _level = "favorites";
+        _currentMaker = null;
+        BackButton.Visibility = Visibility.Collapsed;
+        var rows = Db.Select(
+            "SELECT \"work_id\", \"work_name\", \"maker_name\", \"work_type\", \"age_category\", \"cover\" " +
+            "FROM \"works\" WHERE \"favorite\" = '1' ORDER BY \"work_id\" DESC");
+        if (rows == null)
+            return;
+        _workRows = rows;
+        ApplyCardFilter();
+    }
+
     // ---------- 过滤与懒加载 ----------
 
     private void SearchBox_TextChanged(object sender, TextChangedEventArgs e) => ApplyCardFilter();
@@ -491,7 +634,7 @@ public partial class MediaLibPage : UserControl
         if (_level == "detail")
             return;
         var keyword = SearchBox.Text.Trim().ToLowerInvariant();
-        if (_level is "works" or "filtered_works")
+        if (_level is "works" or "filtered_works" or "favorites")
         {
             // 作品视图：在全量查询结果上过滤，再懒加载
             _filteredRows = keyword.Length == 0
@@ -499,7 +642,8 @@ public partial class MediaLibPage : UserControl
                 : _workRows.Where(r =>
                     $"{r[0]} {r[1]} {r[2]}".ToLowerInvariant().Contains(keyword)).ToList();
             ClearCards();
-            BackButton.Visibility = Visibility.Visible;
+            // 收藏夹是其根视图，不显示返回按钮；作品/过滤视图为下钻视图，显示返回
+            BackButton.Visibility = _level == "favorites" ? Visibility.Collapsed : Visibility.Visible;
             _loadedCards = 0;
             LoadMoreWorks();
             return;
@@ -519,6 +663,7 @@ public partial class MediaLibPage : UserControl
         {
             "makers" => "个社团",
             "genres" => "个标签",
+            "types" => "个形式",
             _ => "个媒体库",
         });
         CountLabel.Text = keyword.Length > 0
@@ -549,11 +694,42 @@ public partial class MediaLibPage : UserControl
 
     private void CardsScroll_ScrollChanged(object sender, ScrollChangedEventArgs e)
     {
+        // 视口宽度变化（窗口缩放 / 滚动条出现）时，按新宽度重排卡片以撑满整行
+        if (e.ViewportWidthChange != 0)
+            RelayoutCards();
         // 滚动接近底部时加载下一批作品卡片
-        if (_level is not ("works" or "filtered_works") || _loadedCards >= _filteredRows.Count)
+        if (_level is not ("works" or "filtered_works" or "favorites") || _loadedCards >= _filteredRows.Count)
             return;
         if (e.VerticalOffset >= CardsScroll.ScrollableHeight - 300)
             LoadMoreWorks();
+    }
+
+    /// <summary>按视口宽度计算卡片宽度：先求每行能放下的列数（按最小宽度），再让卡片均分整行宽度。</summary>
+    private double ComputeCardWidth()
+    {
+        var avail = CardsScroll.ViewportWidth;
+        if (avail <= 0)
+            return WorkCardW;  // 尚未布局时退回最小宽度，布局后由重排修正
+        var columns = Math.Max(1, (int)(avail / (WorkCardW + CardGap)));
+        return Math.Floor(avail / columns - CardGap);
+    }
+
+    /// <summary>视口宽度变化后，把新宽度套用到已生成的所有卡片（及作品卡封面）。</summary>
+    private void RelayoutCards()
+    {
+        if (ContentHost.Content != _cardsPanel)
+            return;  // 详情视图不是卡片流，跳过
+        var width = ComputeCardWidth();
+        if (Math.Abs(width - _cardWidth) < 0.5)
+            return;
+        _cardWidth = width;
+        foreach (var card in _cardsPanel.Children.OfType<Border>())
+        {
+            card.Width = width;
+            // 作品卡：StackPanel 首个子元素是固定高、宽随卡片变化的封面区
+            if (card.Child is StackPanel { Children: [Grid cover, ..] })
+                cover.Width = width - CoverWidthDelta;
+        }
     }
 
     private void RestoreWorksScroll()
@@ -583,16 +759,16 @@ public partial class MediaLibPage : UserControl
         var card = new Border
         {
             Style = (Style)FindResource("Card"),
-            Width = WorkCardW,
+            Width = _cardWidth,
             Height = WorkCardH,
-            Margin = new Thickness(0, 0, 10, 10),
+            Margin = new Thickness(0, 0, CardGap, CardGap),
             Cursor = Cursors.Hand,
             ToolTip = workName.Length > 0 ? workName : workId,
         };
         var panel = new StackPanel();
 
-        // 封面区固定大小：图片按比例铺满裁切，无封面时显示纯色底
-        var coverGrid = new Grid { Width = WorkCoverW, Height = WorkCoverH, ClipToBounds = true };
+        // 封面区：宽度随卡片动态变化、高度固定（图片按比例铺满裁切），无封面时显示纯色底
+        var coverGrid = new Grid { Width = _cardWidth - CoverWidthDelta, Height = WorkCoverH, ClipToBounds = true };
         coverGrid.Children.Add(new Border
         {
             Background = new SolidColorBrush(Color.FromArgb(12, 255, 255, 255)),
@@ -636,7 +812,7 @@ public partial class MediaLibPage : UserControl
                 Padding = new Thickness(6, 1, 6, 1),
                 HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top,
                 Margin = new Thickness(4),
-                MaxWidth = WorkCoverW - 80,
+                MaxWidth = _cardWidth - CoverWidthDelta - 80,
                 Child = new TextBlock
                 {
                     Text = workType, FontSize = 11, Foreground = Brushes.WhiteSmoke,
@@ -671,7 +847,8 @@ public partial class MediaLibPage : UserControl
         var rows = Db.Select(
             "SELECT \"work_id\", \"work_name\", \"maker_name\", \"sell_date\", \"series\", " +
             "\"scenario\", \"illust\", \"voice_actor\", \"age_category\", \"work_type\", " +
-            "\"genre\", \"file_size\", \"intro_s\", \"folder\" FROM \"works\" WHERE \"work_id\" = @w",
+            "\"genre\", \"file_size\", \"intro_s\", \"folder\", \"read_flag\", \"favorite\" " +
+            "FROM \"works\" WHERE \"work_id\" = @w",
             ("@w", _currentWork));
         if (rows is not { Count: > 0 })
             return;
@@ -691,6 +868,12 @@ public partial class MediaLibPage : UserControl
             ViewFilesButton.Visibility = Visibility.Visible;
             MoveLibButton.Visibility = Visibility.Visible;
         }
+        // 已读 / 收藏 切换按钮
+        _currentRead = r[14] as string == "1";
+        _currentFav = r[15] as string == "1";
+        ReadButton.Visibility = Visibility.Visible;
+        FavButton.Visibility = Visibility.Visible;
+        UpdateReadFavButtons();
 
         var root = new Border
         {
@@ -875,6 +1058,7 @@ public partial class MediaLibPage : UserControl
                         _currentGenre = captured;
                         _currentLib = null;
                         _currentMaker = null;
+                        _currentType = null;
                         ShowMakers();
                     };
                     tb.Inlines.Add(link);
@@ -955,144 +1139,329 @@ public partial class MediaLibPage : UserControl
         return tb;
     }
 
-    // ---------- 文件树 ----------
+    // ---------- 文件列表（仿下载页样式） ----------
 
-    /// <summary>文件树面板：左列目录树 + 右列内嵌预览（图片/视频），整体高度不超过左侧轮播图。</summary>
+    /// <summary>文件列表：每个顶层文件夹一张卡片（可展开/收起），整体高度不超过左侧轮播图。</summary>
     private FrameworkElement BuildFileTree(string root)
     {
-        var panel = new Grid();
-        panel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        panel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        // 限高：跟随左侧轮播图实际高度，树内容超出时自行滚动
-        if (_detailSlider != null)
-            panel.SetBinding(MaxHeightProperty,
-                new Binding(nameof(ActualHeight)) { Source = _detailSlider });
-        else
-            panel.MaxHeight = 480;
-
-        var tree = new TreeView
-        {
-            Background = Brushes.Transparent,
-            BorderThickness = new Thickness(0),
-        };
-        PopulateTree(tree.Items, root, depth: 0);
-        tree.SelectedItemChanged += (_, e) =>
-        {
-            if (e.NewValue is TreeViewItem { Tag: string path } && File.Exists(path))
-                ShowPreview(path);
-        };
-        panel.Children.Add(tree);
-
-        var previewHost = new Border
-        {
-            Background = new SolidColorBrush(Color.FromRgb(0x11, 0x11, 0x11)),
-            CornerRadius = new CornerRadius(4),
-            Margin = new Thickness(12, 0, 0, 0),
-            Child = MakePreviewPlaceholder(),
-        };
-        Grid.SetColumn(previewHost, 1);
-        panel.Children.Add(previewHost);
-        _previewHost = previewHost;
-        return panel;
-    }
-
-    /// <summary>递归填充：文件夹在前、文件在后，各自按名称排序；根层级默认展开。</summary>
-    private void PopulateTree(ItemCollection items, string path, int depth)
-    {
-        string[] entries;
+        var list = new StackPanel();
+        string[] dirs = [], files = [];
         try
         {
-            entries = Directory.GetFileSystemEntries(path);
+            dirs = Directory.GetDirectories(root);
+            files = Directory.GetFiles(root);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+        }
+
+        // 根目录散文件合并为一张无标题卡片
+        var rootFiles = files.OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase).ToList();
+        if (rootFiles.Count > 0)
+        {
+            var card = new Border
+            {
+                Style = (Style)FindResource("Card"),
+                Margin = new Thickness(0, 3, 0, 3),
+            };
+            var stack = new StackPanel();
+            foreach (var file in rootFiles)
+                stack.Children.Add(MakeFileRow(file));
+            card.Child = stack;
+            list.Children.Add(card);
+        }
+        foreach (var dir in dirs.OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase))
+            list.Children.Add(MakeFolderCard(dir));
+
+        var scroll = new ScrollViewer
+        {
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            Content = list,
+        };
+        // 限高：跟随左侧轮播图实际高度，内容超出时滚动
+        if (_detailSlider != null)
+            scroll.SetBinding(MaxHeightProperty,
+                new Binding(nameof(ActualHeight)) { Source = _detailSlider });
+        else
+            scroll.MaxHeight = 480;
+        return scroll;
+    }
+
+    /// <summary>顶层文件夹卡片：标题行（▾ + 名称 + 项数）+ 缩进的子项列表，默认展开。</summary>
+    private Border MakeFolderCard(string dir)
+    {
+        var card = new Border
+        {
+            Style = (Style)FindResource("Card"),
+            Margin = new Thickness(0, 3, 0, 3),
+        };
+        var stack = new StackPanel();
+        var children = new StackPanel { Margin = new Thickness(24, 4, 0, 0) };
+        PopulateEntries(children, dir);
+        stack.Children.Add(MakeFolderHeader(dir, children, expanded: true));
+        stack.Children.Add(children);
+        card.Child = stack;
+        return card;
+    }
+
+    /// <summary>递归填充目录内容：子文件夹在前（默认收起）、文件在后，各自按名称排序。</summary>
+    private void PopulateEntries(StackPanel panel, string dir)
+    {
+        string[] subDirs, files;
+        try
+        {
+            subDirs = Directory.GetDirectories(dir);
+            files = Directory.GetFiles(dir);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
             return;
         }
-        foreach (var entry in entries
-                     .OrderBy(p => Directory.Exists(p) ? 0 : 1)
-                     .ThenBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase))
+        foreach (var sub in subDirs.OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase))
         {
-            var item = new TreeViewItem
-            {
-                Header = Path.GetFileName(entry),
-                Tag = entry,
-                Foreground = (Brush)FindResource("TextBrush"),
-                IsExpanded = depth == 0,
-            };
-            if (Directory.Exists(entry))
-                PopulateTree(item.Items, entry, depth + 1);
-            else
-                item.MouseDoubleClick += (_, e2) =>
-                {
-                    e2.Handled = true;
-                    OpenTreeFile(entry);
-                };
-            items.Add(item);
+            var children = new StackPanel { Margin = new Thickness(24, 0, 0, 0) };
+            PopulateEntries(children, sub);
+            panel.Children.Add(MakeFolderHeader(sub, children, expanded: false));
+            panel.Children.Add(children);
         }
+        foreach (var file in files.OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase))
+            panel.Children.Add(MakeFileRow(file));
     }
 
-    private TextBlock MakePreviewPlaceholder() => new()
+    /// <summary>文件夹标题行：点击整行切换子项显示，箭头与下载页父行一致（▸/▾）。</summary>
+    private Grid MakeFolderHeader(string dir, StackPanel children, bool expanded)
     {
-        Text = I18n.Tr("单击图片或视频文件预览"),
-        Style = (Style)FindResource("CaptionText"),
-        HorizontalAlignment = HorizontalAlignment.Center,
-        VerticalAlignment = VerticalAlignment.Center,
-        Margin = new Thickness(12),
-        TextWrapping = TextWrapping.Wrap,
+        children.Visibility = expanded ? Visibility.Visible : Visibility.Collapsed;
+        var row = new Grid { Cursor = Cursors.Hand, Background = Brushes.Transparent };
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(24) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        var arrow = new TextBlock
+        {
+            Text = expanded ? "▾" : "▸",
+            Foreground = (Brush)FindResource("CaptionBrush"),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        row.Children.Add(arrow);
+        var name = new TextBlock
+        {
+            Text = Path.GetFileName(dir),
+            FontWeight = FontWeights.SemiBold,
+            VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        };
+        Grid.SetColumn(name, 1);
+        row.Children.Add(name);
+        var count = 0;
+        try
+        {
+            count = Directory.GetFileSystemEntries(dir).Length;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+        }
+        var countText = new TextBlock
+        {
+            Text = I18n.Format(I18n.Tr("{count} 项"), ("count", count)),
+            Style = (Style)FindResource("CaptionText"),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        Grid.SetColumn(countText, 2);
+        row.Children.Add(countText);
+
+        row.MouseLeftButtonUp += (_, _) =>
+        {
+            var show = children.Visibility != Visibility.Visible;
+            children.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+            arrow.Text = show ? "▾" : "▸";
+        };
+        row.MouseEnter += (_, _) => row.Background = RowHoverBrush;
+        row.MouseLeave += (_, _) => row.Background = Brushes.Transparent;
+        return row;
+    }
+
+    /// <summary>文件行：名称 + 大小。图片/视频单击整页预览；音频/其它双击交给播放器弹窗或系统程序。</summary>
+    private Grid MakeFileRow(string path)
+    {
+        var row = new Grid { Margin = new Thickness(0, 2, 0, 2), Background = Brushes.Transparent };
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        var ext = Path.GetExtension(path).ToLowerInvariant();
+        var previewable = DlsitePage.ImageExts.Contains(ext) || VideoExts.Contains(ext);
+        var name = new TextBlock
+        {
+            Text = Path.GetFileName(path),
+            Foreground = (Brush)FindResource(previewable ? "TextBrush" : "CaptionBrush"),
+            VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        };
+        row.Children.Add(name);
+        long size = 0;
+        try
+        {
+            size = new FileInfo(path).Length;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+        }
+        var sizeText = new TextBlock
+        {
+            Text = FormatSize(size),
+            Style = (Style)FindResource("CaptionText"),
+            Margin = new Thickness(12, 0, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        Grid.SetColumn(sizeText, 1);
+        row.Children.Add(sizeText);
+
+        if (previewable)
+        {
+            row.Cursor = Cursors.Hand;
+            row.MouseLeftButtonUp += (_, _) => ShowPreview(path);
+        }
+        else
+        {
+            row.MouseLeftButtonDown += (_, e) =>
+            {
+                if (e.ClickCount != 2)
+                    return;
+                e.Handled = true;
+                OpenTreeFile(path);
+            };
+        }
+        row.MouseEnter += (_, _) => row.Background = RowHoverBrush;
+        row.MouseLeave += (_, _) => row.Background = Brushes.Transparent;
+        return row;
+    }
+
+    private static string FormatSize(long bytes) => bytes switch
+    {
+        >= 1L << 30 => $"{bytes / (double)(1L << 30):0.##} GB",
+        >= 1L << 20 => $"{bytes / (double)(1L << 20):0.#} MB",
+        >= 1L << 10 => $"{bytes / (double)(1L << 10):0.#} KB",
+        _ => $"{bytes} B",
     };
 
-    /// <summary>停止内嵌播放并把预览区恢复为占位提示。</summary>
-    private void StopPreview()
-    {
-        _inlinePlayer?.Shutdown();
-        _inlinePlayer = null;
-        if (_previewHost != null)
-            _previewHost.Child = MakePreviewPlaceholder();
-    }
-
-    /// <summary>单击选中文件：图片/视频直接在详情页右侧预览区显示，其它类型不改变预览。</summary>
-    private void ShowPreview(string path)
-    {
-        if (_previewHost == null)
-            return;
-        var ext = Path.GetExtension(path).ToLowerInvariant();
-        if (DlsitePage.ImageExts.Contains(ext))
-        {
-            _inlinePlayer?.Shutdown();
-            _inlinePlayer = null;
-            try
-            {
-                var bmp = new BitmapImage();
-                bmp.BeginInit();
-                bmp.CacheOption = BitmapCacheOption.OnLoad;
-                bmp.UriSource = new Uri(path);
-                bmp.EndInit();
-                bmp.Freeze();
-                _previewHost.Child = new Image { Source = bmp, Stretch = Stretch.Uniform };
-            }
-            catch (Exception)
-            {
-                // 单张预览图加载失败保持原内容
-            }
-        }
-        else if (VideoExts.Contains(ext))
-        {
-            _inlinePlayer?.Shutdown();
-            _inlinePlayer = new InlineMediaPlayer(path);
-            _previewHost.Child = _inlinePlayer;
-        }
-    }
-
-    /// <summary>双击文件：图片/视频已由单击内嵌预览；音频→播放器弹窗；其它→系统默认程序。</summary>
+    /// <summary>双击文件：音频→播放器弹窗，其它→系统默认程序（图片/视频由单击整页预览）。</summary>
     private void OpenTreeFile(string path)
     {
         var ext = Path.GetExtension(path).ToLowerInvariant();
-        if (DlsitePage.ImageExts.Contains(ext) || VideoExts.Contains(ext))
-            return;
         if (AudioExts.Contains(ext))
             new MediaPlayerDialog(path, isVideo: false) { Owner = Window.GetWindow(this) }
                 .ShowDialog();
         else
             Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+    }
+
+    // ---------- 整页预览 ----------
+
+    /// <summary>整页覆盖预览：图片支持同文件夹左右切换，视频用内嵌播放器。</summary>
+    private void ShowPreview(string path)
+    {
+        var ext = Path.GetExtension(path).ToLowerInvariant();
+        _inlinePlayer?.Shutdown();
+        _inlinePlayer = null;
+        if (DlsitePage.ImageExts.Contains(ext))
+        {
+            var dir = Path.GetDirectoryName(path)!;
+            try
+            {
+                _previewImages = Directory.GetFiles(dir)
+                    .Where(f => DlsitePage.ImageExts.Contains(Path.GetExtension(f).ToLowerInvariant()))
+                    .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                _previewImages = [path];
+            }
+            _previewIndex = Math.Max(0, _previewImages.IndexOf(path));
+            PreviewNavBar.Visibility = _previewImages.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
+            LoadPreviewImage();
+        }
+        else if (VideoExts.Contains(ext))
+        {
+            _previewImages = [];
+            PreviewNavBar.Visibility = Visibility.Collapsed;
+            PreviewTitle.Text = Path.GetFileName(path);
+            _inlinePlayer = new InlineMediaPlayer(path);
+            PreviewContent.Child = _inlinePlayer;
+        }
+        else
+        {
+            return;
+        }
+        PreviewOverlay.Visibility = Visibility.Visible;
+        PreviewOverlay.Focus();
+    }
+
+    private void LoadPreviewImage()
+    {
+        if (_previewImages.Count == 0)
+            return;
+        var path = _previewImages[_previewIndex];
+        PreviewTitle.Text = _previewImages.Count > 1
+            ? $"{Path.GetFileName(path)}　{_previewIndex + 1} / {_previewImages.Count}"
+            : Path.GetFileName(path);
+        try
+        {
+            var bmp = new BitmapImage();
+            bmp.BeginInit();
+            bmp.CacheOption = BitmapCacheOption.OnLoad;
+            bmp.UriSource = new Uri(path);
+            bmp.EndInit();
+            bmp.Freeze();
+            PreviewContent.Child = new Image { Source = bmp, Stretch = Stretch.Uniform };
+        }
+        catch (Exception)
+        {
+            PreviewContent.Child = null;
+        }
+    }
+
+    private void StepPreview(int delta)
+    {
+        if (_previewImages.Count == 0)
+            return;
+        _previewIndex = ((_previewIndex + delta) % _previewImages.Count + _previewImages.Count)
+                        % _previewImages.Count;
+        LoadPreviewImage();
+    }
+
+    /// <summary>关闭整页预览：停止播放、释放图片，回到详情页。</summary>
+    private void ClosePreview()
+    {
+        _inlinePlayer?.Shutdown();
+        _inlinePlayer = null;
+        _previewImages = [];
+        PreviewContent.Child = null;
+        PreviewOverlay.Visibility = Visibility.Collapsed;
+    }
+
+    private void PreviewClose_Click(object sender, RoutedEventArgs e) => ClosePreview();
+
+    private void PreviewPrev_Click(object sender, RoutedEventArgs e) => StepPreview(-1);
+
+    private void PreviewNext_Click(object sender, RoutedEventArgs e) => StepPreview(1);
+
+    private void PreviewOverlay_KeyDown(object sender, KeyEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case Key.Escape:
+                ClosePreview();
+                e.Handled = true;
+                break;
+            case Key.Left:
+                StepPreview(-1);
+                e.Handled = true;
+                break;
+            case Key.Right:
+                StepPreview(1);
+                e.Handled = true;
+                break;
+        }
     }
 }

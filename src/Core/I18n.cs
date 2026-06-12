@@ -80,6 +80,9 @@ public static class I18n
         ["已下载"] = new() { ["zh_TW"] = "已下載", ["ja"] = "ダウンロード済み", ["en"] = "Downloaded" },
         ["媒体库"] = new() { ["zh_TW"] = "媒體庫", ["ja"] = "ライブラリ", ["en"] = "Library" },
         ["标签"] = new() { ["zh_TW"] = "標籤", ["ja"] = "タグ", ["en"] = "Tags" },
+        ["收藏夹"] = new() { ["zh_TW"] = "收藏夾", ["ja"] = "お気に入り", ["en"] = "Favorites" },
+        ["已读"] = new() { ["zh_TW"] = "已讀", ["ja"] = "既読", ["en"] = "Read" },
+        ["收藏"] = new() { ["zh_TW"] = "收藏", ["ja"] = "お気に入り", ["en"] = "Favorite" },
         ["设置"] = new() { ["zh_TW"] = "設定", ["ja"] = "設定", ["en"] = "Settings" },
         ["保存"] = new() { ["zh_TW"] = "儲存", ["ja"] = "保存", ["en"] = "Save" },
         ["取消"] = new() { ["zh_TW"] = "取消", ["ja"] = "キャンセル", ["en"] = "Cancel" },
@@ -216,12 +219,7 @@ public static class I18n
         ["查看作品"] = new() { ["zh_TW"] = "查看作品", ["ja"] = "作品を見る", ["en"] = "Browse files" },
         ["作品信息"] = new() { ["zh_TW"] = "作品資訊", ["ja"] = "作品情報", ["en"] = "Work info" },
         ["查看图片"] = new() { ["zh_TW"] = "查看圖片", ["ja"] = "画像を表示", ["en"] = "View image" },
-        ["单击图片或视频文件预览"] = new()
-        {
-            ["zh_TW"] = "點選圖片或影片檔案預覽",
-            ["ja"] = "画像・動画ファイルをクリックでプレビュー",
-            ["en"] = "Click an image or video file to preview"
-        },
+        ["{count} 项"] = new() { ["zh_TW"] = "{count} 項", ["ja"] = "{count} 件", ["en"] = "{count} items" },
         ["上一张"] = new() { ["zh_TW"] = "上一張", ["ja"] = "前へ", ["en"] = "Previous" },
         ["下一张"] = new() { ["zh_TW"] = "下一張", ["ja"] = "次へ", ["en"] = "Next" },
         ["无法显示该图片"] = new() { ["zh_TW"] = "無法顯示該圖片", ["ja"] = "この画像を表示できません", ["en"] = "Cannot display this image" },
@@ -276,6 +274,7 @@ public static class I18n
         ["个媒体库"] = new() { ["zh_TW"] = "個媒體庫", ["ja"] = "ライブラリ", ["en"] = "libraries" },
         ["个社团"] = new() { ["zh_TW"] = "個社團", ["ja"] = "サークル", ["en"] = "makers" },
         ["个标签"] = new() { ["zh_TW"] = "個標籤", ["ja"] = "タグ", ["en"] = "tags" },
+        ["个形式"] = new() { ["zh_TW"] = "個形式", ["ja"] = "形式", ["en"] = "types" },
         ["共 {total} {unit}，匹配 {shown} 个"] = new()
         {
             ["zh_TW"] = "共 {total} {unit}，相符 {shown} 個",

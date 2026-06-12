@@ -12,30 +12,34 @@
         <Grid Grid.Row="0" Margin="0,0,0,10">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <Button x:Name="BackButton" Click="BackButton_Click" Content="← 返回"
-                    Visibility="Collapsed" Margin="0,0,8,0" />
-            <TextBlock x:Name="CountLabel" Grid.Column="1" VerticalAlignment="Center"
-                       Style="{StaticResource CaptionText}" Margin="0,0,12,0" />
-            <TextBox x:Name="SearchBox" Grid.Column="2" MaxWidth="320" HorizontalAlignment="Left"
+            <TextBox x:Name="SearchBox" Grid.Column="0" MaxWidth="320" HorizontalAlignment="Left"
                      MinWidth="220" TextChanged="SearchBox_TextChanged" />
-            <Button x:Name="GenreButton" Grid.Column="3" Margin="8,0,0,0"
-                    Click="GenreButton_Click" Content="作品标签" />
-            <Button x:Name="OpenFolderButton" Grid.Column="4" Margin="8,0,0,0" Visibility="Collapsed"
+            <Button x:Name="OpenFolderButton" Grid.Column="2" Margin="8,0,0,0" Visibility="Collapsed"
                     Click="OpenFolderButton_Click" Content="打开文件夹" />
-            <Button x:Name="ViewFilesButton" Grid.Column="5" Margin="8,0,0,0" Visibility="Collapsed"
+            <Button x:Name="ViewFilesButton" Grid.Column="3" Margin="8,0,0,0" Visibility="Collapsed"
                     Click="ViewFilesButton_Click" Content="查看作品" />
-            <Button x:Name="MoveLibButton" Grid.Column="6" Margin="8,0,0,0" Visibility="Collapsed"
+            <Button x:Name="MoveLibButton" Grid.Column="4" Margin="8,0,0,0" Visibility="Collapsed"
                     Click="MoveLibButton_Click" Content="移动媒体库" />
-            <Button x:Name="LibSettingButton" Grid.Column="7" Margin="8,0,0,0"
+            <Button x:Name="ReadButton" Grid.Column="5" Margin="8,0,0,0" Visibility="Collapsed"
+                    Click="ReadButton_Click" Content="☆ 已读" />
+            <Button x:Name="FavButton" Grid.Column="6" Margin="8,0,0,0" Visibility="Collapsed"
+                    Click="FavButton_Click" Content="♡ 收藏" />
+            <Button x:Name="LibSettingButton" Grid.Column="7" Margin="8,0,0,0" Visibility="Collapsed"
                     Click="LibSettingButton_Click" Content="媒体库设置" />
+            <TextBlock x:Name="CountLabel" Grid.Column="8" VerticalAlignment="Center"
+                       Style="{StaticResource CaptionText}" Margin="12,0,12,0" />
+            <Button x:Name="BackButton" Grid.Column="9" Click="BackButton_Click" Content="← 返回"
+                    Visibility="Collapsed" />
         </Grid>
 
         <!-- 卡片区 / 详情区 -->
@@ -43,5 +47,31 @@
                       ScrollChanged="CardsScroll_ScrollChanged">
             <ContentPresenter x:Name="ContentHost" />
         </ScrollViewer>
+
+        <!-- 整页预览覆盖层（图片/视频），盖住顶栏与详情区 -->
+        <Grid x:Name="PreviewOverlay" Grid.Row="0" Grid.RowSpan="2" Visibility="Collapsed"
+              Background="{StaticResource WindowBrush}" Focusable="True"
+              KeyDown="PreviewOverlay_KeyDown">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <Grid Margin="0,0,0,10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Button x:Name="PreviewCloseButton" Click="PreviewClose_Click" Content="← 返回" />
+                <TextBlock x:Name="PreviewTitle" Grid.Column="1" VerticalAlignment="Center"
+                           Margin="12,0" TextTrimming="CharacterEllipsis" />
+                <StackPanel x:Name="PreviewNavBar" Grid.Column="2" Orientation="Horizontal">
+                    <Button x:Name="PreviewPrevButton" Click="PreviewPrev_Click" Content="‹ 上一张" />
+                    <Button x:Name="PreviewNextButton" Click="PreviewNext_Click" Content="下一张 ›"
+                            Margin="8,0,0,0" />
+                </StackPanel>
+            </Grid>
+            <Border x:Name="PreviewContent" Grid.Row="1" Background="#111111" CornerRadius="4" />
+        </Grid>
     </Grid>
 </UserControl>
