@@ -437,8 +437,9 @@ class SelectWindown(QMainWindow):
     def record_work(self):
         """把 DL API 返回的作品数据写入 works 表，状态为下载中，全部下载完成后由下载线程改为已下载。
         用 UPSERT 而不是 INSERT OR REPLACE：重复入队时只刷新本次下载相关的列，
-        保留已有的元数据（cover、genre、library 等）；folder/target/target_lib 重置为
-        空让本次下载重新选择缓存目录与媒体库目标。"""
+        保留已有的元数据（genre、library 等）；folder/target/target_lib 重置为
+        空让本次下载重新选择缓存目录与媒体库目标；cover/meta_scanned 一并重置，
+        重新下载会替换作品文件夹，数据源须在解压移动到最终目录后重新获取。"""
         work = self.work_data or {}
 
         def esc(value):
@@ -455,7 +456,8 @@ class SelectWindown(QMainWindow):
                f'"maker_name" = excluded."maker_name", "work_type" = excluded."work_type", '
                f'"intro_s" = excluded."intro_s", "age_category" = excluded."age_category", '
                f'"is_ana" = excluded."is_ana", "state" = excluded."state", "down_time" = excluded."down_time", '
-               f'"folder" = NULL, "target" = NULL, "target_lib" = NULL')
+               f'"folder" = NULL, "target" = NULL, "target_lib" = NULL, '
+               f'"cover" = NULL, "meta_scanned" = NULL')
         SQLiteDB().insert(sql)
 
     def clear_display(self):

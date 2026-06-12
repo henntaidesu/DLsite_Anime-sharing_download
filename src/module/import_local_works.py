@@ -45,9 +45,11 @@ def scan_top_rj_folders(root):
 def _import_rj_list(rj_list, state, library=None, folders=None):
     """把 RJ 号列表写入 works 表并标记状态（可附带所属媒体库名与
     folders 提供的 {RJ号: 作品文件夹路径}），返回新增数"""
+    from src.DLsite.DLsite_page import download_work_images
+
     db = SQLiteDB()
-    result = db.select('SELECT "work_id" FROM "main"."works"')
-    existing = {row[0] for row in result[1]} if result is not False else set()
+    result = db.select('SELECT "work_id", "cover" FROM "main"."works"')
+    existing = {row[0]: row[1] for row in result[1]} if result is not False else {}
     now = Time_a().now_time()
     folders = folders or {}
     set_lib = ''
@@ -59,11 +61,19 @@ def _import_rj_list(rj_list, state, library=None, folders=None):
     for rj in rj_list:
         folder_value = 'NULL'
         set_folder = ''
+        set_cover = ''
         if folders.get(rj):
             folder_value = "'" + folders[rj].replace("'", "''") + "'"
             set_folder = f', "folder" = {folder_value}'
+            # 作品文件夹在程序外被移动过时封面路径失效（meta_scanned 已置位不会重新补全）：
+            # 从新文件夹的 DataSource 重新定位封面（不联网，仅查本地已有图片）
+            cover = existing.get(rj)
+            if rj in existing and (not cover or not os.path.exists(cover)):
+                new_cover = download_work_images(rj, [], folders[rj])
+                if new_cover:
+                    set_cover = ''', "cover" = '%s' ''' % new_cover.replace("'", "''")
         if rj in existing:
-            db.update(f'''UPDATE "main"."works" SET "state" = '{state}'{set_lib}{set_folder}
+            db.update(f'''UPDATE "main"."works" SET "state" = '{state}'{set_lib}{set_folder}{set_cover}
                           WHERE "work_id" = '{rj}' ''')
         else:
             db.insert(f'''INSERT INTO "main"."works" ("work_id", "state", "library", "folder", "down_time")
@@ -98,7 +108,10 @@ def move_work_to_library(work_id, target_lib, target_folder):
 
     lib_esc = str(target_lib).replace("'", "''")
     dest_esc = dest.replace("'", "''")
-    db.update(f'''UPDATE "main"."works" SET "library" = '{lib_esc}', "folder" = '{dest_esc}'
+    src_esc = src.replace("'", "''")
+    # cover（DataSource 里的封面）随文件夹一起被移动，数据库里的绝对路径必须同步改写，否则主图无法显示
+    db.update(f'''UPDATE "main"."works" SET "library" = '{lib_esc}', "folder" = '{dest_esc}',
+                  "cover" = REPLACE("cover", '{src_esc}', '{dest_esc}')
                   WHERE "work_id" = '{work_id}' ''')
     logger.write_log(f'{work_id} 已移动到媒体库 {target_lib}: {dest}', 'info')
 

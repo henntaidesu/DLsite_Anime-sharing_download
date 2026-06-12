@@ -195,8 +195,12 @@ def move_to_target_folder(work_id, cache_folder):
         stop.set()
         monitor.join()  # 等监控线程退出，确保返回后不会再写 UNZIP_PROGRESS
     esc = str(dest).replace("'", "''")
+    esc_src = str(cache_folder).replace("'", "''")
+    # cover（DataSource 里的封面）随文件夹一起被移动，数据库里的绝对路径必须同步改写，否则主图无法显示
     SQLiteDB().update(
-        f'''UPDATE "main"."works" SET "folder" = '{esc}' WHERE "work_id" = '{work_id}' ''')
+        f'''UPDATE "main"."works" SET "folder" = '{esc}',
+            "cover" = REPLACE("cover", '{esc_src}', '{esc}')
+            WHERE "work_id" = '{work_id}' ''')
     logger.write_log(f'{work_id} 解压完成，已移动到媒体库: {dest}', 'info')
     return dest
 
