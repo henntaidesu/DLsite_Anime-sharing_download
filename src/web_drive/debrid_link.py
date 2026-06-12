@@ -125,9 +125,22 @@ def _read_work_target(work_id):
     return None
 
 
+def _folder_size(folder):
+    """目录下所有文件的总字节数（目录不存在时为 0），用于估算移动进度"""
+    total = 0
+    for root, _dirs, files in os.walk(folder):
+        for name in files:
+            try:
+                total += os.path.getsize(os.path.join(root, name))
+            except OSError:
+                pass
+    return total
+
+
 def move_to_target_folder(work_id, cache_folder):
     """解压完成后把作品从缓存目录移动到媒体库目标目录，并更新 works.folder，返回最终目录路径。
-    未设置目标、目标即缓存、或移动失败时，保持在缓存目录。"""
+    未设置目标、目标即缓存、或移动失败时，保持在缓存目录。
+    移动期间把进度写入 UNZIP_PROGRESS（state='moving'）供下载页显示。"""
     from src.module.datebase_execution import SQLiteDB
     target_root = _read_work_target(work_id)
     if not target_root:
@@ -136,16 +149,36 @@ def move_to_target_folder(work_id, cache_folder):
     dest = os.path.join(target_root, leaf)
     if os.path.abspath(dest) == os.path.abspath(cache_folder):
         return cache_folder  # 缓存路径就是媒体库目录，无需移动
+
+    # 移动进度：跨盘移动是复制+删除，用目标目录已写入字节数 / 源目录总字节数估算；
+    # 同盘移动是瞬时改名，监控线程来不及跑也无妨
+    total = _folder_size(cache_folder) or 1
+    UNZIP_PROGRESS[work_id] = {'state': 'moving', 'pct': 0}
+    stop = threading.Event()
+
+    def _monitor():
+        while not stop.wait(1):
+            try:
+                pct = min(99, int(_folder_size(dest) * 100 / total))
+            except OSError:
+                continue
+            UNZIP_PROGRESS[work_id] = {'state': 'moving', 'pct': pct}
+
+    monitor = threading.Thread(target=_monitor, daemon=True, name=f'move-mon-{work_id}')
+    monitor.start()
     try:
         os.makedirs(target_root, exist_ok=True)
         if os.path.exists(dest):
             logger.write_log(f'{work_id} 媒体库已存在同名目录，先删除再移动: {dest}', 'warning')
             shutil.rmtree(dest)
+        logger.write_log(f'{work_id} 开始移动到媒体库: {dest}', 'info')
         shutil.move(cache_folder, dest)
     except Exception as e:
         err1(e)
         logger.write_log(f'{work_id} 移动到媒体库失败，保留在缓存目录: {cache_folder}', 'error')
         return cache_folder
+    finally:
+        stop.set()
     esc = str(dest).replace("'", "''")
     SQLiteDB().update(
         f'''UPDATE "main"."works" SET "folder" = '{esc}' WHERE "work_id" = '{work_id}' ''')
@@ -482,6 +515,20 @@ def QTUI_debrid_down():
     # 上次运行中断时遗留的"下载中"任务重新排队，靠断点续传从已下载部分继续
     SQLiteDB().update('''UPDATE "main"."download_list" SET "status" = '0' WHERE "status" = '3' ''')
 
+    # 上次解压中途中断（崩溃/异常）的作品：分卷已全部下载完但还未解压入库（状态仍为
+    # 下载中/已下载，未到已品悦），重新触发解压 → 移动 → 入库流程
+    result = SQLiteDB().select('''
+        SELECT w."work_id" FROM "main"."works" w
+        WHERE w."state" IN ('下载中', '已下载')
+        AND EXISTS (SELECT 1 FROM "main"."download_list" d WHERE d."work_id" = w."work_id")
+        AND NOT EXISTS (SELECT 1 FROM "main"."download_list" d
+                        WHERE d."work_id" = w."work_id" AND d."status" != '1')''')
+    if result is not False:
+        for (stuck_id,) in result[1]:
+            logger.write_log(f'{stuck_id} 分卷已全部下载但未完成解压入库，重新触发解压', 'info')
+            _mark_work_downloaded(stuck_id)
+            _auto_unzip_if_done(stuck_id)
+
     open_proxy, proxies = Config().read_proxy()
     workers = []
     for _ in range(_worker_count()):
@@ -562,6 +609,9 @@ def _run_unzip(work_id):
 
     def _monitor():
         while not stop.wait(1):
+            current = UNZIP_PROGRESS.get(work_id)
+            if current and current.get('state') == 'moving':
+                continue  # 已进入移动阶段，进度改由移动逻辑维护
             if not os.path.isdir(folder):
                 continue  # 解压完成后已移动到媒体库，保持上次进度直到解压线程收尾
             try:

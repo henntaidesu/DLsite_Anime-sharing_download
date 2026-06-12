@@ -1,12 +1,19 @@
+import os
 import sys
 import sqlite3
+
+# 数据库固定为项目根目录下 DASD.db 的绝对路径。
+# 进程工作目录是全局共享的，可能被第三方代码（解压、文件对话框等）改变，
+# 相对路径会在错误位置创建/读取空库，表现为页面数据"丢失"。
+_DB_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'DASD.db')
 
 
 class SQLiteDB:
     def __init__(self):
         self._print_log = None
         self.db = None
-        self.db_path = "DASD.db"
+        self.db_path = _DB_PATH
         self.connect_db()
         self.create_tables()
 
@@ -19,9 +26,14 @@ class SQLiteDB:
         return self._print_log
 
     def connect_db(self):
-        """连接SQLite数据库（文件不存在时自动创建）"""
+        """连接SQLite数据库（文件不存在时自动创建）。
+        timeout=30：写锁冲突时等待重试，而不是立刻报 database is locked；
+        WAL 模式：读写互不阻塞，多线程（UI 刷新 + 下载线程 + 元数据补全）并发安全，
+        数据库目录下出现 DASD.db-wal / DASD.db-shm 缓存文件属正常现象，不要删除。"""
         try:
-            self.db = sqlite3.connect(self.db_path)
+            self.db = sqlite3.connect(self.db_path, timeout=30)
+            self.db.execute('PRAGMA journal_mode=WAL')
+            self.db.execute('PRAGMA synchronous=NORMAL')
         except sqlite3.Error as e:
             print(f"数据库连接失败: {str(e)}")
             sys.exit()

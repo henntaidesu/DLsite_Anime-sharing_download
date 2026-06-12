@@ -16,16 +16,18 @@ BANDIZIP_BZ = r"C:\Program Files\Bandizip\bz.exe"
 
 
 def rename(work_path):  # 输入一个目录，解决该目录下所有文件名的乱码。
+    # 注意：全程使用绝对路径，绝不调用 os.chdir —— 进程工作目录是全局共享的，
+    # 解压在后台线程进行，改动它会让 UI 线程按相对路径打开错误/空的 DASD.db（下载列表丢失）。
     try:
         encode = Config().read_sys_encoding()
         decode = "Shift_JIS"
-        CurrentPath = os.getcwd()
-        os.chdir(work_path)
-        for path in os.listdir():
-            if os.path.isdir(path):
-                rename(path)
-            os.rename(path, path.encode(encode).decode(encoding=decode, errors="ignore"))
-        os.chdir(CurrentPath)
+        for name in os.listdir(work_path):
+            full = os.path.join(work_path, name)
+            if os.path.isdir(full):
+                rename(full)  # 先处理子目录内容，再重命名子目录本身
+            fixed = name.encode(encode).decode(encoding=decode, errors="ignore")
+            if fixed and fixed != name:
+                os.rename(full, os.path.join(work_path, fixed))
         return True
     except Exception as e:
         if type(e).__name__ == 'UnicodeEncodeError':

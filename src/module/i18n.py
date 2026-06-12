@@ -95,6 +95,7 @@ TRANSLATIONS = {
     '已完成': {'zh_TW': '已完成', 'ja': '完了', 'en': 'Completed'},
     '待解压': {'zh_TW': '待解壓', 'ja': '解凍待ち', 'en': 'Pending extract'},
     '解压中 {pct}%': {'zh_TW': '解壓中 {pct}%', 'ja': '解凍中 {pct}%', 'en': 'Extracting {pct}%'},
+    '移动中 {pct}%': {'zh_TW': '移動中 {pct}%', 'ja': '移動中 {pct}%', 'en': 'Moving {pct}%'},
     '解析失败': {'zh_TW': '解析失敗', 'ja': '解析失敗', 'en': 'Parse failed'},
     '下载中 {done}/{total}': {
         'zh_TW': '下載中 {done}/{total}', 'ja': 'ダウンロード中 {done}/{total}', 'en': 'Downloading {done}/{total}'},

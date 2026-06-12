@@ -413,7 +413,8 @@ class SelectWindown(QMainWindow):
                 set_work_target_path(self.select_ID, dlg.selected_folder)
 
         for down_url in self.host_groups.get(host, []):
-            sql = f'''INSERT INTO "main"."download_list" ("UUID", "work_id", "url", "status", "long", "delete")
+            # url 为主键：重复加入同一作品时覆盖旧记录并重置为待下载（用户已在搜索时确认过）
+            sql = f'''INSERT OR REPLACE INTO "main"."download_list" ("UUID", "work_id", "url", "status", "long", "delete")
              VALUES ('{uuid.uuid4()}', '{self.select_ID}', '{down_url}', '0', '0', '1');'''
             SQLiteDB().insert(sql)
         self.record_work()

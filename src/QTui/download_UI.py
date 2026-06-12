@@ -221,11 +221,13 @@ class DownloadWindow(QMainWindow):
             return tr('等待下载 {done}/{total}').format(done=done, total=len(statuses)), '#facc15'
         if '2' in statuses:
             return tr('{n} 个解析失败').format(n=statuses.count("2")), '#f87171'
-        # 全部分卷已下载完成：解压前/解压中显示对应状态，解压完成（或未开启自动解压）才算已完成
+        # 全部分卷已下载完成：解压前/解压中/移动中显示对应状态，全部结束（或未开启自动解压）才算已完成
         unzip = UNZIP_PROGRESS.get(work_id)
         if unzip:
             if unzip.get('state') == 'pending':
                 return tr('待解压'), '#facc15'
+            if unzip.get('state') == 'moving':
+                return tr('移动中 {pct}%').format(pct=unzip.get('pct', 0)), '#a78bfa'
             return tr('解压中 {pct}%').format(pct=unzip.get('pct', 0)), '#60a5fa'
         return tr('已完成'), '#4ade80'
 
