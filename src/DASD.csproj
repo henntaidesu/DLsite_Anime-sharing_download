@@ -9,6 +9,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- MainWindow 放在仓库根目录，需手动链接进项目 -->
+    <Page Include="..\MainWindow.xaml" Link="MainWindow.xaml" />
+    <Compile Include="..\MainWindow.xaml.cs" Link="MainWindow.xaml.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="HtmlAgilityPack" Version="1.12.4" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />

@@ -198,6 +198,7 @@ public static class I18n
         ["类型"] = new() { ["zh_TW"] = "類型", ["ja"] = "ジャンル", ["en"] = "Genre" },
         ["下载时间"] = new() { ["zh_TW"] = "下載時間", ["ja"] = "ダウンロード日時", ["en"] = "Download time" },
         ["标记为已品悦"] = new() { ["zh_TW"] = "標記為已品悦", ["ja"] = "鑑賞済みにする", ["en"] = "Mark as enjoyed" },
+        ["全部"] = new() { ["zh_TW"] = "全部", ["ja"] = "すべて", ["en"] = "All" },
         ["已品悦"] = new() { ["zh_TW"] = "已品悦", ["ja"] = "鑑賞済み", ["en"] = "Enjoyed" },
         ["共 {n} 个作品"] = new() { ["zh_TW"] = "共 {n} 個作品", ["ja"] = "作品 {n} 件", ["en"] = "{n} works total" },
 
@@ -215,6 +216,12 @@ public static class I18n
         ["查看作品"] = new() { ["zh_TW"] = "查看作品", ["ja"] = "作品を見る", ["en"] = "Browse files" },
         ["作品信息"] = new() { ["zh_TW"] = "作品資訊", ["ja"] = "作品情報", ["en"] = "Work info" },
         ["查看图片"] = new() { ["zh_TW"] = "查看圖片", ["ja"] = "画像を表示", ["en"] = "View image" },
+        ["单击图片或视频文件预览"] = new()
+        {
+            ["zh_TW"] = "點選圖片或影片檔案預覽",
+            ["ja"] = "画像・動画ファイルをクリックでプレビュー",
+            ["en"] = "Click an image or video file to preview"
+        },
         ["上一张"] = new() { ["zh_TW"] = "上一張", ["ja"] = "前へ", ["en"] = "Previous" },
         ["下一张"] = new() { ["zh_TW"] = "下一張", ["ja"] = "次へ", ["en"] = "Next" },
         ["无法显示该图片"] = new() { ["zh_TW"] = "無法顯示該圖片", ["ja"] = "この画像を表示できません", ["en"] = "Cannot display this image" },

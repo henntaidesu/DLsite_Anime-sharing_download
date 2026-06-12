@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -71,6 +72,11 @@ public partial class MediaLibPage : UserControl
     private FrameworkElement? _detailInfoPanel;
     private FrameworkElement? _detailFileTree;
     private bool _showingFileTree;
+
+    // 文件树视图：左侧轮播图（限高基准）/ 右侧内嵌预览
+    private FrameworkElement? _detailSlider;
+    private Border? _previewHost;
+    private InlineMediaPlayer? _inlinePlayer;
 
     public MediaLibPage(bool rootGenres)
     {
@@ -234,6 +240,7 @@ public partial class MediaLibPage : UserControl
         }
         else
         {
+            StopPreview();
             _detailRightHost.Children.Clear();
             if (_detailInfoPanel != null)
                 _detailRightHost.Children.Add(_detailInfoPanel);
@@ -285,6 +292,10 @@ public partial class MediaLibPage : UserControl
         _detailFileTree = null;
         _showingFileTree = false;
         _currentWorkFolder = null;
+        _inlinePlayer?.Shutdown();
+        _inlinePlayer = null;
+        _previewHost = null;
+        _detailSlider = null;
     }
 
     private Border MakeClickCard(string title, string caption, Action onClick)
@@ -766,6 +777,7 @@ public partial class MediaLibPage : UserControl
             var slider = new ImageSliderControl(sliderPaths) { VerticalAlignment = VerticalAlignment.Top };
             Grid.SetColumn(slider, 0);
             content.Children.Add(slider);
+            _detailSlider = slider;
         }
         var rightHost = new Grid { Margin = new Thickness(20, 0, 0, 0) };
         rightHost.Children.Add(infoPanel);
@@ -945,20 +957,47 @@ public partial class MediaLibPage : UserControl
 
     // ---------- 文件树 ----------
 
-    private TreeView BuildFileTree(string root)
+    /// <summary>文件树面板：左列目录树 + 右列内嵌预览（图片/视频），整体高度不超过左侧轮播图。</summary>
+    private FrameworkElement BuildFileTree(string root)
     {
+        var panel = new Grid();
+        panel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        panel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        // 限高：跟随左侧轮播图实际高度，树内容超出时自行滚动
+        if (_detailSlider != null)
+            panel.SetBinding(MaxHeightProperty,
+                new Binding(nameof(ActualHeight)) { Source = _detailSlider });
+        else
+            panel.MaxHeight = 480;
+
         var tree = new TreeView
         {
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
-            MinHeight = 360,
         };
-        PopulateTree(tree.Items, root);
-        return tree;
+        PopulateTree(tree.Items, root, depth: 0);
+        tree.SelectedItemChanged += (_, e) =>
+        {
+            if (e.NewValue is TreeViewItem { Tag: string path } && File.Exists(path))
+                ShowPreview(path);
+        };
+        panel.Children.Add(tree);
+
+        var previewHost = new Border
+        {
+            Background = new SolidColorBrush(Color.FromRgb(0x11, 0x11, 0x11)),
+            CornerRadius = new CornerRadius(4),
+            Margin = new Thickness(12, 0, 0, 0),
+            Child = MakePreviewPlaceholder(),
+        };
+        Grid.SetColumn(previewHost, 1);
+        panel.Children.Add(previewHost);
+        _previewHost = previewHost;
+        return panel;
     }
 
-    /// <summary>递归填充：文件夹在前、文件在后，各自按名称排序。</summary>
-    private void PopulateTree(ItemCollection items, string path)
+    /// <summary>递归填充：文件夹在前、文件在后，各自按名称排序；根层级默认展开。</summary>
+    private void PopulateTree(ItemCollection items, string path, int depth)
     {
         string[] entries;
         try
@@ -978,9 +1017,10 @@ public partial class MediaLibPage : UserControl
                 Header = Path.GetFileName(entry),
                 Tag = entry,
                 Foreground = (Brush)FindResource("TextBrush"),
+                IsExpanded = depth == 0,
             };
             if (Directory.Exists(entry))
-                PopulateTree(item.Items, entry);
+                PopulateTree(item.Items, entry, depth + 1);
             else
                 item.MouseDoubleClick += (_, e2) =>
                 {
@@ -991,28 +1031,68 @@ public partial class MediaLibPage : UserControl
         }
     }
 
-    /// <summary>双击文件：图片→程序内看图（左右切换），视频/音频→内嵌播放器，其它→系统默认程序。</summary>
-    private void OpenTreeFile(string path)
+    private TextBlock MakePreviewPlaceholder() => new()
     {
+        Text = I18n.Tr("单击图片或视频文件预览"),
+        Style = (Style)FindResource("CaptionText"),
+        HorizontalAlignment = HorizontalAlignment.Center,
+        VerticalAlignment = VerticalAlignment.Center,
+        Margin = new Thickness(12),
+        TextWrapping = TextWrapping.Wrap,
+    };
+
+    /// <summary>停止内嵌播放并把预览区恢复为占位提示。</summary>
+    private void StopPreview()
+    {
+        _inlinePlayer?.Shutdown();
+        _inlinePlayer = null;
+        if (_previewHost != null)
+            _previewHost.Child = MakePreviewPlaceholder();
+    }
+
+    /// <summary>单击选中文件：图片/视频直接在详情页右侧预览区显示，其它类型不改变预览。</summary>
+    private void ShowPreview(string path)
+    {
+        if (_previewHost == null)
+            return;
         var ext = Path.GetExtension(path).ToLowerInvariant();
         if (DlsitePage.ImageExts.Contains(ext))
         {
-            var dir = Path.GetDirectoryName(path)!;
-            var images = Directory.GetFiles(dir)
-                .Where(f => DlsitePage.ImageExts.Contains(Path.GetExtension(f).ToLowerInvariant()))
-                .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
-                .ToList();
-            new ImageViewerDialog(images, images.IndexOf(path)) { Owner = Window.GetWindow(this) }
-                .ShowDialog();
+            _inlinePlayer?.Shutdown();
+            _inlinePlayer = null;
+            try
+            {
+                var bmp = new BitmapImage();
+                bmp.BeginInit();
+                bmp.CacheOption = BitmapCacheOption.OnLoad;
+                bmp.UriSource = new Uri(path);
+                bmp.EndInit();
+                bmp.Freeze();
+                _previewHost.Child = new Image { Source = bmp, Stretch = Stretch.Uniform };
+            }
+            catch (Exception)
+            {
+                // 单张预览图加载失败保持原内容
+            }
         }
-        else if (VideoExts.Contains(ext) || AudioExts.Contains(ext))
+        else if (VideoExts.Contains(ext))
         {
-            new MediaPlayerDialog(path, VideoExts.Contains(ext)) { Owner = Window.GetWindow(this) }
-                .ShowDialog();
+            _inlinePlayer?.Shutdown();
+            _inlinePlayer = new InlineMediaPlayer(path);
+            _previewHost.Child = _inlinePlayer;
         }
+    }
+
+    /// <summary>双击文件：图片/视频已由单击内嵌预览；音频→播放器弹窗；其它→系统默认程序。</summary>
+    private void OpenTreeFile(string path)
+    {
+        var ext = Path.GetExtension(path).ToLowerInvariant();
+        if (DlsitePage.ImageExts.Contains(ext) || VideoExts.Contains(ext))
+            return;
+        if (AudioExts.Contains(ext))
+            new MediaPlayerDialog(path, isVideo: false) { Owner = Window.GetWindow(this) }
+                .ShowDialog();
         else
-        {
             Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
-        }
     }
 }

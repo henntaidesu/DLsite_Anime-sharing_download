@@ -134,12 +134,102 @@
         </Setter>
     </Style>
 
+    <!-- 下拉项 -->
+    <Style TargetType="ComboBoxItem">
+        <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+        <Setter Property="Padding" Value="8,6" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ComboBoxItem">
+                    <Border x:Name="border" Background="Transparent" CornerRadius="4"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="border" Property="Background"
+                                    Value="{StaticResource ButtonHoverBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsHighlighted" Value="True">
+                            <Setter TargetName="border" Property="Background"
+                                    Value="{StaticResource ButtonHoverBrush}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- 下拉框 -->
     <Style TargetType="ComboBox">
         <Setter Property="Background" Value="{StaticResource ButtonBrush}" />
         <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
         <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
         <Setter Property="Padding" Value="8,5" />
+        <Setter Property="Height" Value="32" />
+        <Setter Property="HorizontalContentAlignment" Value="Left" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ComboBox">
+                    <Grid>
+                        <!-- 把 ComboBox 的背景透传给 ToggleButton，否则会落回系统默认浅色 -->
+                        <ToggleButton x:Name="ToggleButton" Focusable="False" ClickMode="Press"
+                                      Background="{TemplateBinding Background}"
+                                      IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                            <ToggleButton.Template>
+                                <ControlTemplate TargetType="ToggleButton">
+                                    <Border x:Name="border" Background="{TemplateBinding Background}"
+                                            BorderBrush="{StaticResource BorderBrush}"
+                                            BorderThickness="1" CornerRadius="6">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="22" />
+                                            </Grid.ColumnDefinitions>
+                                            <Path Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                  Data="M 0 0 L 4 4 L 8 0 Z" Fill="{StaticResource CaptionBrush}" />
+                                        </Grid>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="border" Property="BorderBrush"
+                                                    Value="{StaticResource AccentBrush}" />
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </ToggleButton.Template>
+                        </ToggleButton>
+                        <ContentPresenter x:Name="ContentSite" IsHitTestVisible="False"
+                                          Content="{TemplateBinding SelectionBoxItem}"
+                                          ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                          ContentStringFormat="{TemplateBinding SelectionBoxItemStringFormat}"
+                                          Margin="{TemplateBinding Padding}"
+                                          HorizontalAlignment="Left" VerticalAlignment="Center" />
+                        <Popup x:Name="Popup" Placement="Bottom" Focusable="False"
+                               IsOpen="{TemplateBinding IsDropDownOpen}"
+                               AllowsTransparency="True" PopupAnimation="Slide">
+                            <Border x:Name="DropDownBorder" Background="{StaticResource CardBrush}"
+                                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                                    CornerRadius="6" Margin="0,4,0,0"
+                                    MinWidth="{Binding ActualWidth, ElementName=ToggleButton}"
+                                    MaxHeight="{TemplateBinding MaxDropDownHeight}">
+                                <ScrollViewer>
+                                    <StackPanel IsItemsHost="True"
+                                                KeyboardNavigation.DirectionalNavigation="Contained" />
+                                </ScrollViewer>
+                            </Border>
+                        </Popup>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <!-- 列表 -->

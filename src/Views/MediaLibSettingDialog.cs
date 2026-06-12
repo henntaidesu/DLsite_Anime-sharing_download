@@ -45,10 +45,15 @@ public class MediaLibSettingDialog : Window
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         _status.Foreground = (Brush)Application.Current.Resources["CaptionBrush"];
         header.Children.Add(_status);
-        var createButton = new Button { Content = I18n.Tr("新建媒体库"), MinWidth = 108 };
+        var headerButtons = new StackPanel { Orientation = Orientation.Horizontal };
+        var scanAllButton = new Button { Content = I18n.Tr("扫描全部数据源"), MinWidth = 120 };
+        scanAllButton.Click += (_, _) => ScanAll();
+        headerButtons.Children.Add(scanAllButton);
+        var createButton = new Button { Content = I18n.Tr("新建媒体库"), MinWidth = 108, Margin = new Thickness(8, 0, 0, 0) };
         createButton.Click += (_, _) => CreateLib();
-        Grid.SetColumn(createButton, 1);
-        header.Children.Add(createButton);
+        headerButtons.Children.Add(createButton);
+        Grid.SetColumn(headerButtons, 1);
+        header.Children.Add(headerButtons);
         layout.Children.Add(header);
 
         var scroll = new ScrollViewer
@@ -105,31 +110,40 @@ public class MediaLibSettingDialog : Window
         };
         var panel = new StackPanel();
 
-        var header = new StackPanel { Orientation = Orientation.Horizontal };
-        header.Children.Add(new TextBlock
+        var header = new Grid();
+        header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        var headerText = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+        headerText.Children.Add(new TextBlock
         {
             Text = lib.Name, FontWeight = FontWeights.SemiBold, FontSize = 14,
             VerticalAlignment = VerticalAlignment.Center,
         });
-        header.Children.Add(new TextBlock
+        headerText.Children.Add(new TextBlock
         {
             Text = I18n.Format(I18n.Tr("{n} 个文件夹"), ("n", lib.Folders.Count)),
             Foreground = (Brush)Application.Current.Resources["CaptionBrush"],
             Margin = new Thickness(8, 0, 0, 0),
             VerticalAlignment = VerticalAlignment.Center,
         });
-        var addButton = new Button { Content = I18n.Tr("添加文件夹"), Margin = new Thickness(16, 0, 0, 0) };
+        header.Children.Add(headerText);
+
+        var headerActions = new StackPanel { Orientation = Orientation.Horizontal };
+        var addButton = new Button { Content = I18n.Tr("添加文件夹") };
         addButton.Click += (_, _) => AddFolder(lib.Name);
-        header.Children.Add(addButton);
+        headerActions.Children.Add(addButton);
         var scanButton = new Button { Content = I18n.Tr("扫描元数据"), Margin = new Thickness(6, 0, 0, 0) };
         scanButton.Click += (_, _) => ScanLib(lib.Name, force: false);
-        header.Children.Add(scanButton);
+        headerActions.Children.Add(scanButton);
         var rescanButton = new Button { Content = I18n.Tr("重新扫描元数据"), Margin = new Thickness(6, 0, 0, 0) };
         rescanButton.Click += (_, _) => ScanLib(lib.Name, force: true);
-        header.Children.Add(rescanButton);
+        headerActions.Children.Add(rescanButton);
         var deleteButton = new Button { Content = I18n.Tr("删除"), Margin = new Thickness(6, 0, 0, 0) };
         deleteButton.Click += (_, _) => DeleteLib(lib.Name);
-        header.Children.Add(deleteButton);
+        headerActions.Children.Add(deleteButton);
+        Grid.SetColumn(headerActions, 1);
+        header.Children.Add(headerActions);
         panel.Children.Add(header);
 
         foreach (var folder in lib.Folders)
@@ -224,6 +238,14 @@ public class MediaLibSettingDialog : Window
         _pending.RemoveAll(p => p.Lib == libName);
         SaveLibs();
         Db.Execute("UPDATE \"works\" SET \"library\" = NULL WHERE \"library\" = @l", ("@l", libName));
+    }
+
+    /// <summary>对所有媒体库依次触发数据源扫描。</summary>
+    private void ScanAll()
+    {
+        foreach (var lib in _libs)
+            if (lib.Folders.Count > 0)
+                ScanLib(lib.Name, force: false);
     }
 
     /// <summary>扫描媒体库下的全部文件夹；force 为 True 时强制重新获取全部元数据。</summary>

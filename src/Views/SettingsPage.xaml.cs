@@ -35,8 +35,6 @@ public partial class SettingsPage : UserControl
         AutoDownloadCombo.Items.Add(I18n.Tr("关闭"));
         AutoUnzipCombo.Items.Add(I18n.Tr("开启"));
         AutoUnzipCombo.Items.Add(I18n.Tr("关闭"));
-        FolderNameCombo.Items.Add(I18n.Tr("RJ号"));
-        FolderNameCombo.Items.Add(I18n.Tr("作品名称"));
         foreach (var level in new[] { "info", "error", "debug" })
             LogLevelCombo.Items.Add(level);
         foreach (var (_, name) in I18n.Languages)
@@ -56,7 +54,6 @@ public partial class SettingsPage : UserControl
         PathChooseButton.Content = I18n.Tr("保存");
         AutoDownloadLabel.Text = I18n.Tr("自动下载");
         AutoUnzipLabel.Text = I18n.Tr("自动解压");
-        FolderNameLabel.Text = I18n.Tr("文件夹命名");
         ProxyStatusLabel.Text = I18n.Tr("代理");
         DebridTestButton.Content = I18n.Tr("测试");
         DownProcLabel.Text = I18n.Tr("单文件线程数");
@@ -76,8 +73,6 @@ public partial class SettingsPage : UserControl
         AutoDownloadCombo.Items[1] = I18n.Tr("关闭");
         AutoUnzipCombo.Items[0] = I18n.Tr("开启");
         AutoUnzipCombo.Items[1] = I18n.Tr("关闭");
-        FolderNameCombo.Items[0] = I18n.Tr("RJ号");
-        FolderNameCombo.Items[1] = I18n.Tr("作品名称");
         _loading = false;
     }
 
@@ -121,7 +116,6 @@ public partial class SettingsPage : UserControl
         DebridKeyBox.Text = AppConfig.DebridApiKey;
         AutoDownloadCombo.SelectedIndex = AppConfig.AutoDownload ? 0 : 1;
         AutoUnzipCombo.SelectedIndex = AppConfig.AutoUnzip ? 0 : 1;
-        FolderNameCombo.SelectedIndex = AppConfig.FolderNameMode == "work_name" ? 1 : 0;
         DownProcBox.Text = AppConfig.DownloadProcesses.ToString();
         MinSpeedBox.Text = AppConfig.MinSpeedKb.ToString();
         SpeedLimitBox.Text = AppConfig.SpeedLimitKb.ToString();
@@ -233,13 +227,6 @@ public partial class SettingsPage : UserControl
         if (_loading)
             return;
         AppConfig.Write("down_list", "auto_unzip", AutoUnzipCombo.SelectedIndex == 0 ? "True" : "False");
-    }
-
-    private void FolderNameCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (_loading)
-            return;
-        AppConfig.Write("down_list", "folder_name", FolderNameCombo.SelectedIndex == 1 ? "work_name" : "rj");
     }
 
     private void DownProcBox_LostFocus(object sender, RoutedEventArgs e)
