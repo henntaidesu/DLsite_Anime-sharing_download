@@ -54,6 +54,7 @@ class SettingWindow(QMainWindow):
             self.debrid_api_key_text = self.findChild(QLineEdit, 'debrid_api_key_benner')
             self.download_processes_text = self.findChild(QLineEdit, 'download_processes_benner')
             self.min_speed_text = self.findChild(QLineEdit, 'min_speed_benner')
+            self.speed_limit_text = self.findChild(QLineEdit, 'speed_limit_benner')
             self.processes_text = self.findChild(QLineEdit, 'processes_benner')
             self.encoding_text = self.findChild(QLineEdit, 'encoding_benner')
             self.api_address_text = self.findChild(QLineEdit, 'api_address_benner')
@@ -66,6 +67,7 @@ class SettingWindow(QMainWindow):
             self.debrid_api_key_text.editingFinished.connect(self.save_debrid)
             self.download_processes_text.editingFinished.connect(self.save_download_processes)
             self.min_speed_text.editingFinished.connect(self.save_min_speed)
+            self.speed_limit_text.editingFinished.connect(self.save_speed_limit)
             self.processes_text.editingFinished.connect(self.save_processes)
             self.encoding_text.editingFinished.connect(self.save_encoding)
             self.api_address_text.editingFinished.connect(self.save_api)
@@ -87,9 +89,10 @@ class SettingWindow(QMainWindow):
                 if group is not None:
                     group.setTitle(tr(key))
 
-            labels = {'label': '下载路径', 'label_4': '自动下载', 'autoUnzipLabel': '自动解压',
+            labels = {'label': '缓存路径', 'label_4': '自动下载', 'autoUnzipLabel': '自动解压',
                       'folderNameLabel': '文件夹命名', 'label_5': '单文件线程数',
                       'label_6': '查询线程数', 'minSpeedLabel': '最低速度 (KB/s)',
+                      'speedLimitLabel': '速度限制 (KB/s)',
                       'label_lang': '语言', 'label_7': '日志级别', 'label_8': '解压编码',
                       'label_9': 'API 地址'}
             for name, key in labels.items():
@@ -107,6 +110,7 @@ class SettingWindow(QMainWindow):
             self.download_processes_text.setToolTip(
                 tr('单个文件分成多少段并发下载（多线程下载），1 为不分段，最大 16'))
             self.min_speed_text.setToolTip(tr('持续低于该速度 30 秒后自动重试，0 表示不限制'))
+            self.speed_limit_text.setToolTip(tr('下载总速度上限，0 表示不限速'))
 
             # 下拉框选项文案（保持 itemData 不变，仅更新显示文本）
             for combo in (self.proxy_status_choose, self.auto_download_choose, self.auto_unzip_choose):
@@ -160,6 +164,7 @@ class SettingWindow(QMainWindow):
             self.folder_name_choose.setCurrentIndex(1 if self.conf.read_folder_name() == 'work_name' else 0)
             self.download_processes_text.setText(str(download_processes))
             self.min_speed_text.setText(str(self.conf.read_min_speed()))
+            self.speed_limit_text.setText(str(self.conf.read_speed_limit()))
             self.processes_text.setText(str(self.conf.read_processes()))
 
             log_level = self.conf.read_log_level()
@@ -194,6 +199,10 @@ class SettingWindow(QMainWindow):
         def save_min_speed(self):
             value = self.min_speed_text.text().strip()
             self.conf.write_value('down_list', 'min_speed', value if value.isdigit() else '0')
+
+        def save_speed_limit(self):
+            value = self.speed_limit_text.text().strip()
+            self.conf.write_value('down_list', 'speed_limit', value if value.isdigit() else '0')
 
         def save_processes(self):
             self.conf.write_value('processes', 'processes', self.processes_text.text())
@@ -281,7 +290,7 @@ class SettingWindow(QMainWindow):
             """打开 Windows 文件夹选择对话框，选择后保存为下载路径"""
             current = self.path_banner_text.text()
             start_dir = current if os.path.isdir(current) else self.default_down_path()
-            path = QFileDialog.getExistingDirectory(self, tr('选择下载路径'), start_dir)
+            path = QFileDialog.getExistingDirectory(self, tr('选择缓存路径'), start_dir)
             if path:
                 path = os.path.normpath(path)
                 self.path_banner_text.setText(path)

@@ -1,13 +1,48 @@
 from PyQt5.QtWidgets import (QMainWindow, QPushButton, QTreeWidget, QTreeWidgetItem,
                              QHeaderView, QMessageBox, QProgressBar, QLabel)
-from PyQt5.QtGui import QColor
-from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal
+from PyQt5.QtGui import QColor, QPainter, QFont
+from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal, QRectF
 from PyQt5.uic import loadUi
 from src.module.datebase_execution import SQLiteDB
 from src.module.i18n import tr, notifier
 from src.web_drive.debrid_link import (start_download_worker, stop_download_worker,
                                        download_worker_running, stop_requested,
-                                       DOWNLOAD_PROGRESS)
+                                       DOWNLOAD_PROGRESS, UNZIP_PROGRESS)
+
+class RoundProgressBar(QProgressBar):
+    """自绘圆角进度条：填充始终保持药丸形，最小宽度等于高度，
+    避免低百分比时 QSS 的 ::chunk 圆角塌成方块/圆点。"""
+
+    def __init__(self, track, chunk, fg, parent=None):
+        super().__init__(parent)
+        self._track = QColor(track)
+        self._chunk = QColor(chunk)
+        self._fg = QColor(fg)
+        self.setTextVisible(False)  # 文字自己画，避免与自绘填充错位
+        # 关掉控件自身背景，圆角外的四角露出行底色而不是方形底
+        self.setStyleSheet('QProgressBar { background: transparent; border: none; }')
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+        radius = rect.height() / 2
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(self._track)
+        painter.drawRoundedRect(rect, radius, radius)
+
+        span = max(1, self.maximum() - self.minimum())
+        frac = min(1.0, max(0.0, (self.value() - self.minimum()) / span))
+        if frac > 0:
+            # 最小宽度取高度，保证再小的进度也是圆角药丸而不是方块
+            fill_w = min(rect.width(), max(rect.height(), frac * rect.width()))
+            painter.setBrush(self._chunk)
+            painter.drawRoundedRect(
+                QRectF(rect.left(), rect.top(), fill_w, rect.height()), radius, radius)
+
+        painter.setPen(self._fg)
+        painter.drawText(rect, Qt.AlignCenter, self.text())
+
 
 # download_list.status -> 显示文本（中文原文，渲染时经 tr() 翻译）与颜色
 STATUS_MAP = {
@@ -178,7 +213,7 @@ class DownloadWindow(QMainWindow):
         return min(pct, 100), None
 
     @staticmethod
-    def _aggregate_status(statuses):
+    def _aggregate_status(work_id, statuses):
         done = statuses.count('1')
         if '3' in statuses:
             return tr('下载中 {done}/{total}').format(done=done, total=len(statuses)), '#60a5fa'
@@ -186,15 +221,28 @@ class DownloadWindow(QMainWindow):
             return tr('等待下载 {done}/{total}').format(done=done, total=len(statuses)), '#facc15'
         if '2' in statuses:
             return tr('{n} 个解析失败').format(n=statuses.count("2")), '#f87171'
+        # 全部分卷已下载完成：解压前/解压中显示对应状态，解压完成（或未开启自动解压）才算已完成
+        unzip = UNZIP_PROGRESS.get(work_id)
+        if unzip:
+            if unzip.get('state') == 'pending':
+                return tr('待解压'), '#facc15'
+            return tr('解压中 {pct}%').format(pct=unzip.get('pct', 0)), '#60a5fa'
         return tr('已完成'), '#4ade80'
 
     @staticmethod
-    def _make_progress_bar(pct):
-        bar = QProgressBar()
+    def _make_progress_bar(pct, is_parent=True):
+        """番号(父行)用更高更亮的进度条，文件(子行)用更矮更暗的，靠颜色与高度区分层级"""
+        if is_parent:
+            height, track, chunk, fg = 20, '#232834', '#4f7cff', '#e6e9ef'
+        else:
+            height, track, chunk, fg = 12, '#1c2130', '#39507e', '#9aa3b2'
+        bar = RoundProgressBar(track, chunk, fg)
         bar.setRange(0, 100)
         bar.setValue(pct)
-        bar.setAlignment(Qt.AlignCenter)
-        bar.setFixedHeight(16)
+        bar.setFixedHeight(height)
+        font = QFont(bar.font())
+        font.setPixelSize(11 if is_parent else 10)
+        bar.setFont(font)
         return bar
 
     def refresh(self):
@@ -222,7 +270,7 @@ class DownloadWindow(QMainWindow):
         self.download_tree.clear()
         for work_id, items in groups.items():
             statuses = [status for _, _, status, _ in items]
-            agg_text, agg_color = self._aggregate_status(statuses)
+            agg_text, agg_color = self._aggregate_status(work_id, statuses)
 
             parent = QTreeWidgetItem([work_id, '', '', agg_text])
             parent.setForeground(3, QColor(agg_color))
@@ -242,17 +290,26 @@ class DownloadWindow(QMainWindow):
                 child.setForeground(0, QColor('#9aa3b2'))
                 child.setForeground(3, QColor(color))
                 parent.addChild(child)
-                self.download_tree.setItemWidget(child, 1, self._make_progress_bar(pct))
+                self.download_tree.setItemWidget(child, 1, self._make_progress_bar(pct, is_parent=False))
 
             parent.setText(2, format_speed(total_speed) if total_speed else '')
+            # 解压中时父进度条改为显示解压进度，否则显示分卷下载进度均值
+            unzip = UNZIP_PROGRESS.get(work_id)
+            parent_pct = unzip.get('pct', 0) if unzip else total_pct // len(items)
             self.download_tree.setItemWidget(
-                parent, 1, self._make_progress_bar(total_pct // len(items)))
+                parent, 1, self._make_progress_bar(parent_pct, is_parent=True))
             parent.setExpanded(work_id in expanded)
 
         self.download_tree.verticalScrollBar().setValue(scroll_pos)
 
     def clear_done(self):
-        SQLiteDB().delete('''DELETE FROM "main"."download_list" WHERE "status" = '1' ''')
+        # 正在解压（待解压/解压中）的番号其分卷虽已是 '1'，但还未真正完成，保留不清除
+        sql = '''DELETE FROM "main"."download_list" WHERE "status" = '1' '''
+        unzipping = list(UNZIP_PROGRESS.keys())
+        if unzipping:
+            keep = ','.join("'" + w.replace("'", "''") + "'" for w in unzipping)
+            sql += f''' AND "work_id" NOT IN ({keep}) '''
+        SQLiteDB().delete(sql)
         self.refresh()
 
     def clear_all(self):

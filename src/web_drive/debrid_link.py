@@ -1,4 +1,5 @@
 import os
+import shutil
 import threading
 import time
 
@@ -15,6 +16,10 @@ API_BASE = 'https://debrid-link.fr/api/v2'
 # 正在下载任务的实时进度：UUID -> {'downloaded': 字节数, 'total': 总字节数, 'speed': B/s}
 # 由下载线程写入、下载页 UI 读取（同进程内共享）
 DOWNLOAD_PROGRESS = {}
+
+# 正在解压作品的实时进度：work_id -> {'state': 'pending'|'extracting', 'pct': 0~100}
+# 下载完成后由解压线程写入、下载页 UI 读取，全部分卷已下载完成才会出现在此
+UNZIP_PROGRESS = {}
 
 # 暂停信号：置位后下载线程停止当前文件（保留断点）并退出
 _stop_event = threading.Event()
@@ -34,13 +39,14 @@ _work_name_cache = {}
 
 CHUNK = 1024 * 64           # 每次读取的块大小
 
-# UI 指定的每作品下载根目录：work_id -> 文件夹路径（覆盖全局设置）
-_work_base_paths = {}
+# UI 指定的每作品媒体库目标根目录：work_id -> 文件夹路径
+# 下载/解压都在缓存目录进行，解压完成后再移动到此目标目录
+_work_target_paths = {}
 
 
-def set_work_base_path(work_id, path):
-    """由 UI 在加入队列前设定作品的下载根目录"""
-    _work_base_paths[work_id] = path
+def set_work_target_path(work_id, path):
+    """由 UI 在加入队列前设定作品解压完成后要移动到的媒体库目标目录"""
+    _work_target_paths[work_id] = path
 
 
 def _folder_leaf_name(work_id):
@@ -67,16 +73,15 @@ def _folder_leaf_name(work_id):
 
 
 def _resolve_work_folder(work_id):
-    """按 UI 指定根目录（或全局设置）+ 子文件夹名计算作品下载文件夹完整路径"""
-    base = _work_base_paths.get(work_id) or Config().read_file_down_path()
+    """按缓存路径（设置中的“缓存路径”）+ 子文件夹名计算作品缓存文件夹完整路径"""
+    base = Config().read_file_down_path()
     return f"{base}\\{_folder_leaf_name(work_id)}"
 
 
 def work_folder_path(work_id):
-    """返回作品的下载文件夹完整路径。
+    """返回作品的缓存文件夹完整路径（下载与解压都在此进行）。
     优先使用 works 表中已持久化的路径，保证同一作品的所有分卷、以及进程重启后的
-    续传与解压都落在同一目录（UI 选择的下载位置只存在内存里，重启即丢失）；
-    未持久化时再按 UI 选择或全局设置计算。"""
+    续传与解压都落在同一目录；未持久化时再按缓存路径设置计算。"""
     from src.module.datebase_execution import SQLiteDB
     result = SQLiteDB().select(
         f'''SELECT "folder" FROM "main"."works" WHERE "work_id" = '{work_id}' ''')
@@ -86,13 +91,66 @@ def work_folder_path(work_id):
 
 
 def persist_work_folder(work_id, path):
-    """把作品的下载文件夹完整路径写入 works 表（仅在尚未写入时），
+    """把作品的缓存文件夹完整路径写入 works 表（仅在尚未写入时），
     使重启后的续传、解压都能找到同一目录。"""
     from src.module.datebase_execution import SQLiteDB
     esc = str(path).replace("'", "''")
     SQLiteDB().update(
         f'''UPDATE "main"."works" SET "folder" = '{esc}'
             WHERE "work_id" = '{work_id}' AND ("folder" IS NULL OR "folder" = '') ''')
+
+
+def persist_work_target(work_id):
+    """把 UI 选择的媒体库目标目录写入 works 表（仅在尚未写入时），
+    使下载跨重启续传后，解压完成仍能找到要移动到的媒体库目录。"""
+    target = _work_target_paths.get(work_id)
+    if not target:
+        return
+    from src.module.datebase_execution import SQLiteDB
+    esc = str(target).replace("'", "''")
+    SQLiteDB().update(
+        f'''UPDATE "main"."works" SET "target" = '{esc}'
+            WHERE "work_id" = '{work_id}' AND ("target" IS NULL OR "target" = '') ''')
+
+
+def _read_work_target(work_id):
+    """读取作品的媒体库目标根目录：优先本次会话的内存选择，其次 works.target（重启后续传用）"""
+    if _work_target_paths.get(work_id):
+        return _work_target_paths[work_id]
+    from src.module.datebase_execution import SQLiteDB
+    result = SQLiteDB().select(
+        f'''SELECT "target" FROM "main"."works" WHERE "work_id" = '{work_id}' ''')
+    if result is not False and result[1] and result[1][0][0]:
+        return result[1][0][0]
+    return None
+
+
+def move_to_target_folder(work_id, cache_folder):
+    """解压完成后把作品从缓存目录移动到媒体库目标目录，并更新 works.folder，返回最终目录路径。
+    未设置目标、目标即缓存、或移动失败时，保持在缓存目录。"""
+    from src.module.datebase_execution import SQLiteDB
+    target_root = _read_work_target(work_id)
+    if not target_root:
+        return cache_folder
+    leaf = os.path.basename(os.path.normpath(cache_folder))
+    dest = os.path.join(target_root, leaf)
+    if os.path.abspath(dest) == os.path.abspath(cache_folder):
+        return cache_folder  # 缓存路径就是媒体库目录，无需移动
+    try:
+        os.makedirs(target_root, exist_ok=True)
+        if os.path.exists(dest):
+            logger.write_log(f'{work_id} 媒体库已存在同名目录，先删除再移动: {dest}', 'warning')
+            shutil.rmtree(dest)
+        shutil.move(cache_folder, dest)
+    except Exception as e:
+        err1(e)
+        logger.write_log(f'{work_id} 移动到媒体库失败，保留在缓存目录: {cache_folder}', 'error')
+        return cache_folder
+    esc = str(dest).replace("'", "''")
+    SQLiteDB().update(
+        f'''UPDATE "main"."works" SET "folder" = '{esc}' WHERE "work_id" = '{work_id}' ''')
+    logger.write_log(f'{work_id} 解压完成，已移动到媒体库: {dest}', 'info')
+    return dest
 
 
 class DebridLink:
@@ -189,6 +247,43 @@ def _clear_meta(file_path):
         pass
 
 
+class _RateLimiter:
+    """全局下载限速器（令牌桶）：所有下载线程共享同一总速度上限，0 表示不限速。"""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._rate = 0          # 字节/秒，0=不限速
+        self._allowance = 0.0   # 当前可用令牌（字节）
+        self._last = None
+
+    def set_rate(self, bytes_per_sec):
+        with self._lock:
+            self._rate = max(0, bytes_per_sec)
+            if self._rate == 0:
+                self._allowance = 0.0
+                self._last = None
+
+    def consume(self, nbytes):
+        """登记本次已下载 nbytes，返回需要 sleep 的秒数（计算在锁内，睡眠在锁外）"""
+        if self._rate <= 0:
+            return 0.0
+        with self._lock:
+            now = time.time()
+            if self._last is None:
+                self._last = now
+            self._allowance += (now - self._last) * self._rate
+            self._last = now
+            if self._allowance > self._rate:   # 突发上限：最多积累 1 秒额度
+                self._allowance = self._rate
+            self._allowance -= nbytes
+            if self._allowance >= 0:
+                return 0.0
+            return -self._allowance / self._rate
+
+
+_rate_limiter = _RateLimiter()
+
+
 def _download_single(session, url, file_path, filename, key, set_status):
     """单连接下载（断点续传 + 暂停 + 低速重试），返回 done/paused/slow/failed"""
     headers = {}
@@ -217,6 +312,9 @@ def _download_single(session, url, file_path, filename, key, set_status):
     speed_time, speed_bytes = time.time(), downloaded
     low_speed_start = None
     min_speed_bytes = Config().read_min_speed() * 1024
+    # 全局限速：所有下载线程共享同一总上限；限速时关闭低速重试，避免被限的速度误判为卡死
+    speed_limited = Config().read_speed_limit() > 0
+    _rate_limiter.set_rate(Config().read_speed_limit() * 1024)
     result = 'done'
     with open(file_path, mode) as file:
         for chunk in response.iter_content(CHUNK):
@@ -226,11 +324,14 @@ def _download_single(session, url, file_path, filename, key, set_status):
             progress_bar.update(len(chunk))
             file.write(chunk)
             downloaded += len(chunk)
+            sleep_for = _rate_limiter.consume(len(chunk))
+            if sleep_for > 0:
+                time.sleep(sleep_for)
             now = time.time()
             if now - speed_time >= 1:
                 speed = (downloaded - speed_bytes) / (now - speed_time)
                 speed_time, speed_bytes = now, downloaded
-                if min_speed_bytes > 0 and speed > 0:
+                if min_speed_bytes > 0 and speed > 0 and not speed_limited:
                     if speed < min_speed_bytes:
                         if low_speed_start is None:
                             low_speed_start = now
@@ -339,8 +440,10 @@ def _download_worker_loop(session):
             direct_url = value['downloadUrl']
             filename = value.get('name') or direct_url.rstrip('/').rsplit('/', 1)[-1]
             download_path = work_folder_path(work_id)
-            # 首个分卷处理时落库下载目录，保证后续分卷与重启后续传都用同一目录
+            # 首个分卷处理时落库缓存目录与媒体库目标目录，
+            # 保证后续分卷、以及重启续传后的解压与移动都用同一目录
             persist_work_folder(work_id, download_path)
+            persist_work_target(work_id)
             os.makedirs(download_path, exist_ok=True)
             file_path = os.path.join(download_path, filename)
 
@@ -410,8 +513,23 @@ _unzip_lock = threading.Lock()
 _unzipping = set()
 
 
+def _extracted_size(folder):
+    """目录下所有非压缩包文件的总字节数，作为解压产出量估算解压进度"""
+    total = 0
+    for root, _dirs, files in os.walk(folder):
+        for name in files:
+            if os.path.splitext(name)[1].lower() in ('.zip', '.rar', '.exe'):
+                continue
+            try:
+                total += os.path.getsize(os.path.join(root, name))
+            except OSError:
+                pass
+    return total
+
+
 def _auto_unzip_if_done(work_id):
-    """开启自动解压时，该番号的所有任务都下载完成后在后台线程解压（每个番号只解压一次）"""
+    """开启自动解压时，该番号的所有任务都下载完成后在后台线程解压（每个番号只解压一次）。
+    解压期间把进度写入 UNZIP_PROGRESS 供下载页显示：待解压 -> 解压中(X%) -> 解压完成移除。"""
     from src.module.datebase_execution import SQLiteDB
 
     if not Config().read_auto_unzip():
@@ -427,17 +545,41 @@ def _auto_unzip_if_done(work_id):
             return  # 已有线程在解压该番号（并发完成时去重）
         _unzipping.add(work_id)
 
-    from src.module.unzip import unzip
+    # 立即置为“待解压”，避免下载完成到解压线程启动之间 UI 短暂显示“已完成”
+    UNZIP_PROGRESS[work_id] = {'state': 'pending', 'pct': 0}
     logger.write_log(f'{work_id} 下载完成，开始自动解压', 'info')
+    threading.Thread(target=_run_unzip, args=(work_id,), daemon=True, name=f'unzip-{work_id}').start()
 
-    def _run():
-        try:
-            unzip(work_id)
-        finally:
-            with _unzip_lock:
-                _unzipping.discard(work_id)
 
-    threading.Thread(target=_run, daemon=True, name=f'unzip-{work_id}').start()
+def _run_unzip(work_id):
+    """在后台解压一个作品，并用独立线程按解压产出量估算进度写入 UNZIP_PROGRESS"""
+    from src.module.unzip import unzip, get_all_archive_files
+
+    folder = work_folder_path(work_id)
+    archives = get_all_archive_files(folder)
+    total = sum(os.path.getsize(f) for f in archives if os.path.exists(f)) or 1
+    stop = threading.Event()
+
+    def _monitor():
+        while not stop.wait(1):
+            if not os.path.isdir(folder):
+                continue  # 解压完成后已移动到媒体库，保持上次进度直到解压线程收尾
+            try:
+                pct = min(99, int(_extracted_size(folder) * 100 / total))
+            except OSError:
+                pct = UNZIP_PROGRESS.get(work_id, {}).get('pct', 0)
+            UNZIP_PROGRESS[work_id] = {'state': 'extracting', 'pct': pct}
+
+    UNZIP_PROGRESS[work_id] = {'state': 'extracting', 'pct': 0}
+    monitor = threading.Thread(target=_monitor, daemon=True, name=f'unzip-mon-{work_id}')
+    monitor.start()
+    try:
+        unzip(work_id)
+    finally:
+        stop.set()
+        UNZIP_PROGRESS.pop(work_id, None)
+        with _unzip_lock:
+            _unzipping.discard(work_id)
 
 
 _download_thread = None

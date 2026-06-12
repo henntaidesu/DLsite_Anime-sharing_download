@@ -1,8 +1,9 @@
 import html
 import os
 from PyQt5.QtWidgets import (QMainWindow, QPushButton, QLabel, QLineEdit, QWidget,
-                             QFrame, QScrollArea, QGridLayout, QVBoxLayout, QHBoxLayout)
-from PyQt5.QtCore import Qt, QTimer
+                             QFrame, QScrollArea, QGridLayout, QVBoxLayout, QHBoxLayout,
+                             QDialog, QStackedWidget, QMessageBox)
+from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal
 from PyQt5.QtGui import QPixmap
 from PyQt5.uic import loadUi
 from src.module.conf_operate import Config
@@ -227,6 +228,113 @@ class ImageSlider(QFrame):
                 w, h, Qt.KeepAspectRatio, Qt.SmoothTransformation))
 
 
+class _MoveLibDialog(QDialog):
+    """移动媒体库对话框：选择目标媒体库（排除当前库），多文件夹时再选具体文件夹"""
+
+    def __init__(self, current_lib, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(tr('移动媒体库'))
+        self.setModal(True)
+        self.setMinimumWidth(420)
+        self.selected = None  # (媒体库名, 文件夹)
+
+        self._stack = QStackedWidget(self)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.addWidget(self._stack)
+        self._build_lib_page(current_lib)
+
+    def _build_lib_page(self, current_lib):
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(20, 16, 20, 16)
+        layout.setSpacing(8)
+
+        title = QLabel(tr('选择要移动到的媒体库'))
+        title.setStyleSheet('font-weight: 600; font-size: 14px;')
+        layout.addWidget(title)
+
+        has_target = False
+        for lib in Config().read_media_libs():
+            if lib['name'] == current_lib:
+                continue  # 排除当前所在媒体库
+            folders = [f for f in lib.get('folders', []) if f]
+            if not folders:
+                continue
+            has_target = True
+            label = (f"{lib['name']}　{tr('{n} 个文件夹').format(n=len(folders))}"
+                     if len(folders) > 1 else lib['name'])
+            btn = QPushButton(label)
+            btn.setMinimumHeight(40)
+            btn.clicked.connect(lambda checked, n=lib['name'], f=folders: self._pick_lib(n, f))
+            layout.addWidget(btn)
+        if not has_target:
+            layout.addWidget(QLabel(tr('没有可移动到的其它媒体库')))
+
+        layout.addStretch()
+        cancel_btn = QPushButton(tr('取消'))
+        cancel_btn.clicked.connect(self.reject)
+        layout.addWidget(cancel_btn)
+        self._stack.addWidget(page)
+
+    def _pick_lib(self, lib_name, folders):
+        if len(folders) == 1:
+            self.selected = (lib_name, folders[0])
+            self.accept()
+        else:
+            self._show_folder_page(lib_name, folders)
+
+    def _show_folder_page(self, lib_name, folders):
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(20, 16, 20, 16)
+        layout.setSpacing(8)
+
+        title = QLabel(tr('选择目标文件夹'))
+        title.setStyleSheet('font-weight: 600; font-size: 14px;')
+        layout.addWidget(title)
+
+        for folder in folders:
+            btn = QPushButton(folder)
+            btn.setMinimumHeight(40)
+            btn.setToolTip(folder)
+            btn.clicked.connect(lambda checked, f=folder: self._pick_folder(lib_name, f))
+            layout.addWidget(btn)
+
+        layout.addStretch()
+        back_btn = QPushButton(tr('← 返回'))
+        back_btn.clicked.connect(lambda: self._stack.setCurrentIndex(0))
+        layout.addWidget(back_btn)
+
+        if self._stack.count() > 1:
+            old = self._stack.widget(1)
+            self._stack.removeWidget(old)
+            old.deleteLater()
+        self._stack.addWidget(page)
+        self._stack.setCurrentIndex(1)
+
+    def _pick_folder(self, lib_name, folder):
+        self.selected = (lib_name, folder)
+        self.accept()
+
+
+class _MoveWorker(QThread):
+    """后台执行作品文件夹移动 + 元数据同步，避免大文件夹移动卡住界面"""
+    done = pyqtSignal(bool, str)
+
+    def __init__(self, work_id, target_lib, target_folder, parent=None):
+        super().__init__(parent)
+        self._args = (work_id, target_lib, target_folder)
+
+    def run(self):
+        from src.module.import_local_works import move_work_to_library
+        try:
+            ok, msg = move_work_to_library(*self._args)
+        except Exception as e:
+            ok, msg = False, str(e)
+        self.done.emit(ok, msg)
+
+
 class MediaLibWindow(QMainWindow):
     """媒体库页面：媒体库卡片 → 社团卡片 → 作品卡片 三级浏览"""
 
@@ -240,6 +348,7 @@ class MediaLibWindow(QMainWindow):
         self.genre_button = self.findChild(QPushButton, 'genre_button')
         self.lib_setting_button = self.findChild(QPushButton, 'lib_setting_button')
         self.open_folder_button = self.findChild(QPushButton, 'open_folder_button')
+        self.move_lib_button = self.findChild(QPushButton, 'move_lib_button')
         self.cards_scroll = self.findChild(QScrollArea, 'cards_scroll')
         self.cards_container = self.cards_scroll.widget()
 
@@ -272,6 +381,9 @@ class MediaLibWindow(QMainWindow):
         self.lib_setting_button.clicked.connect(self.open_lib_settings)
         self.open_folder_button.clicked.connect(self._open_work_folder)
         self.open_folder_button.setVisible(False)
+        self.move_lib_button.clicked.connect(self._move_work_library)
+        self.move_lib_button.setVisible(False)
+        self._move_worker = None
         self.search_edit.textChanged.connect(self._apply_filter)
         self.cards_scroll.verticalScrollBar().valueChanged.connect(self._on_scroll)
 
@@ -284,6 +396,7 @@ class MediaLibWindow(QMainWindow):
         self.genre_button.setText(tr('作品标签'))
         self.lib_setting_button.setText(tr('媒体库设置'))
         self.open_folder_button.setText(tr('打开文件夹'))
+        self.move_lib_button.setText(tr('移动媒体库'))
         self.search_edit.setPlaceholderText(tr('搜索 RJ号 / 作品名 / 社团'))
         self.refresh()
 
@@ -364,6 +477,44 @@ class MediaLibWindow(QMainWindow):
         if self._current_work_folder and os.path.isdir(self._current_work_folder):
             os.startfile(self._current_work_folder)
 
+    def _move_work_library(self):
+        """把当前作品移动到另一个媒体库：移动文件夹 + 改库 + 同步元数据，旧库自动移除"""
+        work_id = self._current_work
+        if not work_id:
+            return
+        if not (self._current_work_folder and os.path.isdir(self._current_work_folder)):
+            QMessageBox.warning(self, tr('移动媒体库'), tr('作品文件夹不存在，无法移动'))
+            return
+        result = SQLiteDB().select(
+            f'''SELECT "library" FROM "main"."works" WHERE "work_id" = '{work_id}' ''')
+        current_lib = result[1][0][0] if result is not False and result[1] else None
+
+        dlg = _MoveLibDialog(current_lib, self)
+        if dlg.exec_() != QDialog.Accepted or not dlg.selected:
+            return
+        target_lib, target_folder = dlg.selected
+        answer = QMessageBox.question(
+            self, tr('移动媒体库'),
+            tr('确定将 {id} 移动到媒体库“{lib}”吗？').format(id=work_id, lib=target_lib),
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if answer != QMessageBox.Yes:
+            return
+
+        self.move_lib_button.setEnabled(False)
+        self.move_lib_button.setText(tr('移动中…'))
+        self._move_worker = _MoveWorker(work_id, target_lib, target_folder, self)
+        self._move_worker.done.connect(self._on_move_done)
+        self._move_worker.start()
+
+    def _on_move_done(self, ok, msg):
+        self.move_lib_button.setEnabled(True)
+        self.move_lib_button.setText(tr('移动媒体库'))
+        if ok:
+            QMessageBox.information(self, tr('移动媒体库'), tr('已移动到新媒体库'))
+            self.refresh()  # 重新载入详情，反映新的媒体库与文件夹
+        else:
+            QMessageBox.warning(self, tr('移动媒体库'), msg)
+
     def _open_filter(self, column, value):
         """点击详情页可跳转字段：按列过滤作品"""
         self._filter_col = column
@@ -436,6 +587,7 @@ class MediaLibWindow(QMainWindow):
             self._detail_widget.deleteLater()
             self._detail_widget = None
         self.open_folder_button.setVisible(False)
+        self.move_lib_button.setVisible(False)
         self._current_work_folder = None
 
     def _show_libs(self):
@@ -564,6 +716,7 @@ class MediaLibWindow(QMainWindow):
         if work_folder and os.path.isdir(work_folder):
             self._current_work_folder = work_folder
             self.open_folder_button.setVisible(True)
+            self.move_lib_button.setVisible(True)
 
         widget = QFrame(self.cards_container)
         widget.setProperty('class', 'card')

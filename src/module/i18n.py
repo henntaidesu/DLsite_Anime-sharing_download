@@ -93,6 +93,8 @@ TRANSLATIONS = {
     '等待下载': {'zh_TW': '等待下載', 'ja': '待機中', 'en': 'Waiting'},
     '下载中': {'zh_TW': '下載中', 'ja': 'ダウンロード中', 'en': 'Downloading'},
     '已完成': {'zh_TW': '已完成', 'ja': '完了', 'en': 'Completed'},
+    '待解压': {'zh_TW': '待解壓', 'ja': '解凍待ち', 'en': 'Pending extract'},
+    '解压中 {pct}%': {'zh_TW': '解壓中 {pct}%', 'ja': '解凍中 {pct}%', 'en': 'Extracting {pct}%'},
     '解析失败': {'zh_TW': '解析失敗', 'ja': '解析失敗', 'en': 'Parse failed'},
     '下载中 {done}/{total}': {
         'zh_TW': '下載中 {done}/{total}', 'ja': 'ダウンロード中 {done}/{total}', 'en': 'Downloading {done}/{total}'},
@@ -127,6 +129,26 @@ TRANSLATIONS = {
     '作品标签': {'zh_TW': '作品標籤', 'ja': '作品タグ', 'en': 'Tags'},
     '媒体库设置': {'zh_TW': '媒體庫設定', 'ja': 'ライブラリ設定', 'en': 'Library settings'},
     '打开文件夹': {'zh_TW': '開啟資料夾', 'ja': 'フォルダを開く', 'en': 'Open folder'},
+    '移动媒体库': {'zh_TW': '移動媒體庫', 'ja': 'ライブラリを移動', 'en': 'Move library'},
+    '移动中…': {'zh_TW': '移動中…', 'ja': '移動中…', 'en': 'Moving…'},
+    '选择要移动到的媒体库': {
+        'zh_TW': '選擇要移動到的媒體庫',
+        'ja': '移動先のライブラリを選択',
+        'en': 'Choose the library to move to'},
+    '选择目标文件夹': {'zh_TW': '選擇目標資料夾', 'ja': '移動先フォルダを選択', 'en': 'Choose target folder'},
+    '没有可移动到的其它媒体库': {
+        'zh_TW': '沒有可移動到的其它媒體庫',
+        'ja': '移動できる他のライブラリがありません',
+        'en': 'No other library to move to'},
+    '确定将 {id} 移动到媒体库“{lib}”吗？': {
+        'zh_TW': '確定將 {id} 移動到媒體庫「{lib}」嗎？',
+        'ja': '{id} をライブラリ「{lib}」へ移動しますか？',
+        'en': 'Move {id} to library "{lib}"?'},
+    '已移动到新媒体库': {'zh_TW': '已移動到新媒體庫', 'ja': '新しいライブラリへ移動しました', 'en': 'Moved to the new library'},
+    '作品文件夹不存在，无法移动': {
+        'zh_TW': '作品資料夾不存在，無法移動',
+        'ja': '作品フォルダが存在しないため移動できません',
+        'en': 'Work folder does not exist; cannot move'},
     '全年龄': {'zh_TW': '全年齡', 'ja': '全年齢', 'en': 'All ages'},
     '社团': {'zh_TW': '社團', 'ja': 'サークル', 'en': 'Maker'},
     '系列': {'zh_TW': '系列', 'ja': 'シリーズ', 'en': 'Series'},
@@ -211,6 +233,7 @@ TRANSLATIONS = {
 
     # ---------- 设置页 ----------
     '下载路径': {'zh_TW': '下載路徑', 'ja': 'ダウンロード先', 'en': 'Download path'},
+    '缓存路径': {'zh_TW': '快取路徑', 'ja': 'キャッシュ先', 'en': 'Cache path'},
     '代理': {'zh_TW': '代理', 'ja': 'プロキシ', 'en': 'Proxy'},
     'Debrid-Link 下载中转站': {'zh_TW': 'Debrid-Link 下載中轉站', 'ja': 'Debrid-Link 中継', 'en': 'Debrid-Link relay'},
     '下载选项': {'zh_TW': '下載選項', 'ja': 'ダウンロード設定', 'en': 'Download options'},
@@ -232,6 +255,11 @@ TRANSLATIONS = {
         'zh_TW': '持續低於該速度 30 秒後自動重試，0 表示不限制',
         'ja': 'この速度を 30 秒下回ると自動で再試行。0 は無制限',
         'en': 'Auto-retry after staying below this speed for 30s; 0 means no limit'},
+    '速度限制 (KB/s)': {'zh_TW': '速度限制 (KB/s)', 'ja': '速度制限 (KB/s)', 'en': 'Speed limit (KB/s)'},
+    '下载总速度上限，0 表示不限速': {
+        'zh_TW': '下載總速度上限，0 表示不限速',
+        'ja': 'ダウンロード総速度の上限。0 は無制限',
+        'en': 'Total download speed cap; 0 means unlimited'},
     '系统': {'zh_TW': '系統', 'ja': 'システム', 'en': 'System'},
     '日志级别': {'zh_TW': '日誌等級', 'ja': 'ログレベル', 'en': 'Log level'},
     '解压编码': {'zh_TW': '解壓編碼', 'ja': '解凍エンコード', 'en': 'Extract encoding'},
@@ -250,6 +278,7 @@ TRANSLATIONS = {
         'ja': 'API Key が無効か、ネットワークが利用できません',
         'en': 'Invalid API Key or network unavailable'},
     '选择下载路径': {'zh_TW': '選擇下載路徑', 'ja': 'ダウンロード先を選択', 'en': 'Choose download path'},
+    '选择缓存路径': {'zh_TW': '選擇快取路徑', 'ja': 'キャッシュ先を選択', 'en': 'Choose cache path'},
 }
 
 

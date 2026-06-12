@@ -409,8 +409,8 @@ class SelectWindown(QMainWindow):
             if dlg.exec_() != QDialog.Accepted:
                 return
             if dlg.selected_folder:
-                from src.web_drive.debrid_link import set_work_base_path
-                set_work_base_path(self.select_ID, dlg.selected_folder)
+                from src.web_drive.debrid_link import set_work_target_path
+                set_work_target_path(self.select_ID, dlg.selected_folder)
 
         for down_url in self.host_groups.get(host, []):
             sql = f'''INSERT INTO "main"."download_list" ("UUID", "work_id", "url", "status", "long", "delete")

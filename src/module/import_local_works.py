@@ -1,9 +1,10 @@
 import os
 import re
+import shutil
 import time
 from src.module.datebase_execution import SQLiteDB
 from src.module.time import Time_a
-from src.module.log import Log
+from src.module.log import Log, err2
 
 logger = Log()
 
@@ -71,6 +72,45 @@ def _import_rj_list(rj_list, state, library=None, folders=None):
     return added
 
 
+def move_work_to_library(work_id, target_lib, target_folder):
+    """把作品文件夹移动到目标媒体库文件夹，并把 works 表的 library/folder 改为新库，
+    旧库因 library 列被改写而自动不再包含该作品。移动成功后补全(同步)该作品元数据。
+    返回 (是否成功, 新路径 或 失败原因)。"""
+    db = SQLiteDB()
+    result = db.select(f'''SELECT "folder" FROM "main"."works" WHERE "work_id" = '{work_id}' ''')
+    if result is False or not result[1] or not result[1][0][0]:
+        return False, '作品当前文件夹未知，无法移动'
+    src = result[1][0][0]
+    if not os.path.isdir(src):
+        return False, f'作品文件夹不存在: {src}'
+    leaf = os.path.basename(os.path.normpath(src))
+    dest = os.path.join(target_folder, leaf)
+    if os.path.abspath(dest) == os.path.abspath(src):
+        return False, '目标位置与当前位置相同'
+    if os.path.exists(dest):
+        return False, f'目标媒体库已存在同名文件夹: {dest}'
+    try:
+        os.makedirs(target_folder, exist_ok=True)
+        shutil.move(src, dest)
+    except Exception as e:
+        err2(e)
+        return False, str(e)
+
+    lib_esc = str(target_lib).replace("'", "''")
+    dest_esc = dest.replace("'", "''")
+    db.update(f'''UPDATE "main"."works" SET "library" = '{lib_esc}', "folder" = '{dest_esc}'
+                  WHERE "work_id" = '{work_id}' ''')
+    logger.write_log(f'{work_id} 已移动到媒体库 {target_lib}: {dest}', 'info')
+
+    # 新媒体库自动同步元数据：缺失时补全(图片已随文件夹一并移动)
+    try:
+        backfill_works_from_api(delay=0.0, work_ids=[work_id])
+        backfill_work_pages(delay=0.0, work_ids=[work_id])
+    except Exception as e:
+        err2(e)
+    return True, dest
+
+
 def import_local_works(root):
     """递归扫描本地已下载作品目录写入 works 表并标记为已品悦，返回 (新增数, 扫描到的总数)"""
     if not os.path.isdir(root):
@@ -95,23 +135,33 @@ def import_media_lib(root, lib_name=None):
     return added, len(rj_list)
 
 
-def backfill_works_from_api(delay=0.5, progress=None, library=None, force=False):
+def _work_ids_cond(work_ids):
+    """把限定的 work_id 列表转成 SQL 条件；传入空列表时返回永假条件"""
+    if work_ids is None:
+        return ''
+    ids = ','.join("'" + str(w).replace("'", "''") + "'" for w in work_ids)
+    return f''' AND "work_id" IN ({ids})''' if ids else ' AND 1=0'
+
+
+def backfill_works_from_api(delay=0.5, progress=None, library=None, force=False, work_ids=None):
     """对 works 表中缺少作品名的记录逐个调用 DL API 补全字段，
     返回 (补全数, 未获取到数, 总数)。delay 为每次调用间隔秒数（限速）。
-    library 限定只处理该媒体库的作品；force 为 True 时无视已有数据强制重新获取。"""
+    library 限定只处理该媒体库的作品；work_ids 限定只处理这些作品；
+    force 为 True 时无视已有数据强制重新获取。"""
     from src.DLsite.DLapi_call import get_work_data
 
     db = SQLiteDB()
     lib_cond = ''
     if library is not None:
         lib_cond = f''' AND "library" = '{str(library).replace("'", "''")}' '''
+    id_cond = _work_ids_cond(work_ids)
     if force:
-        sql = f'''SELECT "work_id" FROM "main"."works" WHERE "state" = '已品悦'{lib_cond}'''
+        sql = f'''SELECT "work_id" FROM "main"."works" WHERE "state" = '已品悦'{lib_cond}{id_cond}'''
     else:
         # 已扫描过元数据（meta_scanned = '1'）的作品不再重新获取
         sql = f'''SELECT "work_id" FROM "main"."works"
                   WHERE ("work_name" IS NULL OR "work_name" = '')
-                  AND COALESCE("meta_scanned", '') != '1'{lib_cond}'''
+                  AND COALESCE("meta_scanned", '') != '1'{lib_cond}{id_cond}'''
     result = db.select(sql)
     if result is False:
         return 0, 0, 0
@@ -154,12 +204,13 @@ PAGE_COLUMNS = ('work_name', 'maker_name', 'sell_date', 'series', 'scenario', 'i
                 'voice_actor', 'age_category', 'work_type', 'genre', 'file_size')
 
 
-def backfill_work_pages(delay=1.0, progress=None, library=None, force=False):
+def backfill_work_pages(delay=1.0, progress=None, library=None, force=False, work_ids=None):
     """对未标记 meta_scanned 的已品悦作品逐个抓取 DLsite 作品页，
     补全字段、保存正文与标签，并下载全部图片到作品文件夹的数据源目录。
     抓取成功的作品标记 meta_scanned = '1'，下次扫描不再重新获取。
     返回 (补全数, 失败数, 总数)。delay 为每次抓取间隔秒数（限速）。
-    library 限定只处理该媒体库的作品；force 为 True 时无视标记选取全部作品：
+    library 限定只处理该媒体库的作品；work_ids 限定只处理这些作品；
+    force 为 True 时无视标记选取全部作品：
     作品页仍可访问的删除旧数据源后全量重新下载，获取不到的保留原有元数据。"""
     from src.DLsite.DLsite_page import (get_work_page, download_work_images,
                                         save_work_description, remove_work_data_source)
@@ -168,13 +219,14 @@ def backfill_work_pages(delay=1.0, progress=None, library=None, force=False):
     lib_cond = ''
     if library is not None:
         lib_cond = f''' AND "library" = '{str(library).replace("'", "''")}' '''
+    id_cond = _work_ids_cond(work_ids)
     if force:
-        sql = f'''SELECT "work_id", "folder" FROM "main"."works" WHERE "state" = '已品悦'{lib_cond}'''
+        sql = f'''SELECT "work_id", "folder" FROM "main"."works" WHERE "state" = '已品悦'{lib_cond}{id_cond}'''
     else:
         # meta_scanned 是"已完整扫描"（字段+图片+正文+标签）的唯一标记：
         # 旧版扫描过、字段已齐但缺正文/标签的作品也会被选中补全
         sql = f'''SELECT "work_id", "folder" FROM "main"."works" WHERE "state" = '已品悦'
-                  AND COALESCE("meta_scanned", '') != '1'{lib_cond}'''
+                  AND COALESCE("meta_scanned", '') != '1'{lib_cond}{id_cond}'''
     result = db.select(sql)
     if result is False:
         return 0, 0, 0

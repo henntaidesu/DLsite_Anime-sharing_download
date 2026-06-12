@@ -128,9 +128,13 @@ def move_to_root(work_id, folder_path):
 
 
 def _post_extract(work_id, folder_path):
-    """解压成功后：将作品标记为已品悦，关联所属媒体库和文件夹，然后后台补全详细元数据"""
+    """解压成功后：从缓存目录移动到媒体库目标目录，标记为已品悦，
+    关联所属媒体库和文件夹，然后后台补全详细元数据"""
     from src.module.import_local_works import (_import_rj_list, backfill_works_from_api,
                                                backfill_work_pages)
+    from src.web_drive.debrid_link import move_to_target_folder
+    # 解压完成后把作品从缓存目录移动到媒体库目标目录，后续都用最终目录
+    folder_path = move_to_target_folder(work_id, folder_path)
     # 通过父目录匹配媒体库文件夹
     lib_name = None
     parent = os.path.dirname(os.path.abspath(folder_path))
@@ -148,10 +152,13 @@ def _post_extract(work_id, folder_path):
     _import_rj_list([work_id], '已品悦', lib_name, {work_id: os.path.abspath(folder_path)})
     logger.write_log(f'{work_id} 已标记为已品悦，媒体库: {lib_name or "未关联"}', 'info')
 
+    # 移动到媒体库后只补全本作品的元数据（DL API 字段 + 作品页正文/标签/图片）
     def _backfill():
         try:
-            backfill_works_from_api(delay=0.5)
-            backfill_work_pages(delay=1.0)
+            logger.write_log(f'{work_id} 开始获取元数据', 'info')
+            backfill_works_from_api(delay=0.5, work_ids=[work_id])
+            backfill_work_pages(delay=1.0, work_ids=[work_id])
+            logger.write_log(f'{work_id} 元数据获取完成', 'info')
         except Exception as e:
             err2(e)
 

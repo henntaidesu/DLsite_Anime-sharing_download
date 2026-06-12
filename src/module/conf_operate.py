@@ -13,7 +13,7 @@ DEFAULT_CONF = {
     'loglevel': {'level': 'info'},
     'encoding': {'encoding': 'cp437'},
     'max_key': {'rj': '0', 'vj': '0'},
-    'down_list': {'auto_download': 'False', 'auto_unzip': 'False', 'download_processes': '5', 'folder_name': 'rj', 'min_speed': '256'},
+    'down_list': {'auto_download': 'False', 'auto_unzip': 'False', 'download_processes': '5', 'folder_name': 'rj', 'min_speed': '256', 'speed_limit': '0'},
     'api': {'address': '127.0.0.1', 'port': '5000'},
     'media_lib': {'libs': '[]'},
     'language': {'lang': 'zh_CN'},
@@ -156,6 +156,13 @@ class Config:
             return max(0, int(self.read_value('down_list', 'min_speed', '256')))
         except (TypeError, ValueError):
             return 256
+
+    def read_speed_limit(self):
+        """下载总速度上限（KB/s），所有并发下载共享此上限；0 表示不限速"""
+        try:
+            return max(0, int(self.read_value('down_list', 'speed_limit', '0')))
+        except (TypeError, ValueError):
+            return 0
 
     def read_media_libs(self):
         """媒体库列表：[{'name': 名称, 'folders': [文件夹, ...]}, ...]"""

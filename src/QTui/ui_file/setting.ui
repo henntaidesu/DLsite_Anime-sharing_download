@@ -408,6 +408,38 @@
           </widget>
          </item>
          <item>
+          <widget class="QLabel" name="speedLimitLabel">
+           <property name="text">
+            <string>速度限制 (KB/s)</string>
+           </property>
+           <property name="class" stdset="0">
+            <string>caption</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLineEdit" name="speed_limit_benner">
+           <property name="minimumSize">
+            <size>
+             <width>0</width>
+             <height>32</height>
+            </size>
+           </property>
+           <property name="maximumSize">
+            <size>
+             <width>80</width>
+             <height>16777215</height>
+            </size>
+           </property>
+           <property name="placeholderText">
+            <string>0</string>
+           </property>
+           <property name="toolTip">
+            <string>下载总速度上限，0 表示不限速</string>
+           </property>
+          </widget>
+         </item>
+         <item>
           <spacer name="minSpeedSpacer">
            <property name="orientation">
             <enum>Qt::Horizontal</enum>
