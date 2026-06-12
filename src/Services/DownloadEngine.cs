@@ -47,6 +47,9 @@ public static class DownloadEngine
     // 作品名缓存：同一作品的多个分卷只调一次 DL API
     private static readonly ConcurrentDictionary<string, string> WorkNameCache = new();
 
+    // 被用户单独"停止"的作品：下载线程检测到后停到断点并退出当前文件，且其分卷置为已暂停('4')不再领取
+    private static readonly ConcurrentDictionary<string, byte> PausedWorks = new();
+
     // 领取任务与占位需原子进行，避免多个下载线程领到同一条记录
     private static readonly object ClaimLock = new();
 
@@ -238,7 +241,7 @@ public static class DownloadEngine
 
     /// <summary>
     /// 重新搜索前清理该作品：删除已下载的分卷文件与作品文件夹，并清空其
-    /// download_list 记录与未完成（下载中）的 works 行，使其可从头重新下载。
+    /// download_list 记录与对应的 works 行（无论何种状态），使其可从头重新下载。
     /// </summary>
     public static bool PurgeWorkDownload(string workId)
     {
@@ -252,11 +255,76 @@ public static class DownloadEngine
             Logger.Info($"{workId} 重新搜索，删除已下载文件夹: {folder}");
         }
         Db.Execute("DELETE FROM \"download_list\" WHERE \"work_id\" = @w", ("@w", workId));
-        Db.Execute("DELETE FROM \"works\" WHERE \"work_id\" = @w AND \"state\" = '下载中'", ("@w", workId));
+        // 重新搜索要彻底清除该作品记录，含已完成/已品悦，避免重复或残留
+        Db.Execute("DELETE FROM \"works\" WHERE \"work_id\" = @w", ("@w", workId));
+        Db.Execute("DELETE FROM \"work_genres\" WHERE \"work_id\" = @w", ("@w", workId));
         WorkTargetPaths.TryRemove(workId, out _);
         WorkTargetLibs.TryRemove(workId, out _);
         WorkNameCache.TryRemove(workId, out _);
+        PausedWorks.TryRemove(workId, out _);
         return removed;
+    }
+
+    /// <summary>单独停止某作品：其待下载分卷置为已暂停('4')，正在下载的分卷由下载线程停到断点。</summary>
+    public static void PauseWork(string workId)
+    {
+        PausedWorks[workId] = 0;
+        Db.Execute(
+            "UPDATE \"download_list\" SET \"status\" = '4' WHERE \"work_id\" = @w AND \"status\" = '0'",
+            ("@w", workId));
+        Logger.Info($"{workId} 已单独停止下载");
+    }
+
+    /// <summary>单独（继续）下载某作品：解除暂停，把已暂停分卷重新排队并启动下载引擎。</summary>
+    public static void ResumeWork(string workId)
+    {
+        PausedWorks.TryRemove(workId, out _);
+        Db.Execute(
+            "UPDATE \"download_list\" SET \"status\" = '0' WHERE \"work_id\" = @w AND \"status\" = '4'",
+            ("@w", workId));
+        Start();
+        Logger.Info($"{workId} 已继续下载");
+    }
+
+    /// <summary>
+    /// 单独删除某作品：停止其下载，删除 download_list / works / work_genres 记录；
+    /// 若文件仍在下载缓存目录则一并删除（不动已移入媒体库的文件）。
+    /// </summary>
+    public static void DeleteWork(string workId)
+    {
+        PausedWorks[workId] = 0;   // 让正在下载该作品的线程停下，避免边删边写
+        var folder = Db.Scalar(
+            "SELECT \"folder\" FROM \"works\" WHERE \"work_id\" = @w", ("@w", workId)) as string;
+        Db.Execute("DELETE FROM \"download_list\" WHERE \"work_id\" = @w", ("@w", workId));
+        Db.Execute("DELETE FROM \"works\" WHERE \"work_id\" = @w", ("@w", workId));
+        Db.Execute("DELETE FROM \"work_genres\" WHERE \"work_id\" = @w", ("@w", workId));
+        if (!string.IsNullOrEmpty(folder) && IsUnderDownloadCache(folder) && Directory.Exists(folder))
+        {
+            try { Directory.Delete(folder, true); } catch (IOException) { }
+            Logger.Info($"{workId} 已删除下载缓存目录: {folder}");
+        }
+        WorkTargetPaths.TryRemove(workId, out _);
+        WorkTargetLibs.TryRemove(workId, out _);
+        WorkNameCache.TryRemove(workId, out _);
+        PausedWorks.TryRemove(workId, out _);
+        Logger.Info($"{workId} 已从下载列表删除");
+    }
+
+    /// <summary>路径是否位于下载缓存目录下（避免误删已移入媒体库的文件）。</summary>
+    private static bool IsUnderDownloadCache(string folder)
+    {
+        try
+        {
+            var cache = Path.GetFullPath(AppConfig.DownloadPath)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var full = Path.GetFullPath(folder);
+            return full.StartsWith(cache + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+                   || string.Equals(full, cache, StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception e) when (e is ArgumentException or IOException)
+        {
+            return false;
+        }
     }
 
     // ---------- 全局限速（令牌桶）----------
@@ -358,7 +426,7 @@ public static class DownloadEngine
 
     /// <summary>单连接下载（断点续传 + 暂停 + 低速重试），返回 done/paused/slow/failed。</summary>
     private static string DownloadSingle(HttpClient client, string url, string filePath,
-        string filename, string key)
+        string filename, string key, string workId)
     {
         long downloaded = 0;
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
@@ -418,6 +486,11 @@ public static class DownloadEngine
                     result = "paused";
                     break;
                 }
+                if (PausedWorks.ContainsKey(workId))
+                {
+                    result = "workpaused";   // 用户单独停止该作品：停到断点，置为已暂停
+                    break;
+                }
                 int read;
                 try
                 {
@@ -469,10 +542,11 @@ public static class DownloadEngine
                     lastDbWrite = now;
                 }
             }
-            if (result is "paused" or "slow")
+            if (result is "paused" or "slow" or "workpaused")
             {
                 var pct = totalSize > 0 ? (int)(downloaded * 100 / totalSize) : 0;
-                SetStatus(key, "0", pct);
+                // 单独停止：置为已暂停('4')，不再被领取；全局暂停/低速：置为待下载('0')可续传
+                SetStatus(key, result == "workpaused" ? "4" : "0", pct);
                 if (result == "slow")
                     Logger.Warning($"{filename} 速度持续低于 {AppConfig.MinSpeedKb} KB/s，重新排队");
             }
@@ -482,7 +556,7 @@ public static class DownloadEngine
 
     /// <summary>下载单个文件：清理旧版分段下载元数据后单连接下载，返回 done/paused/slow/failed。</summary>
     private static string DownloadFile(HttpClient client, string directUrl, string filePath,
-        string filename, string key)
+        string filename, string key, string workId)
     {
         var (totalSize, _) = ProbeSize(client, directUrl);
 
@@ -498,7 +572,7 @@ public static class DownloadEngine
         if (totalSize > 0 && File.Exists(filePath) && new FileInfo(filePath).Length == totalSize)
             return "done";
 
-        return DownloadSingle(client, directUrl, filePath, filename, key);
+        return DownloadSingle(client, directUrl, filePath, filename, key, workId);
     }
 
     /// <summary>单个下载线程：不断领取队列任务，通过 debrid-link 中转下载（支持断点续传）。</summary>
@@ -550,10 +624,12 @@ public static class DownloadEngine
                 Directory.CreateDirectory(downloadPath);
                 var filePath = Path.Combine(downloadPath, filename);
 
-                var result = DownloadFile(client, directUrl, filePath, filename, key);
+                var result = DownloadFile(client, directUrl, filePath, filename, key, workId);
                 DownloadProgress.TryRemove(key, out _);
                 if (result == "paused")
-                    return;  // 暂停：部分文件保留在磁盘上，下次从断点续传
+                    return;  // 全局暂停：部分文件保留在磁盘上，下次从断点续传
+                if (result == "workpaused")
+                    continue;  // 单独停止该作品：保留断点，本线程继续领取其它作品的任务
                 if (result is "slow" or "failed")
                 {
                     Thread.Sleep(5000);

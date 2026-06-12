@@ -78,8 +78,18 @@ public class DownloadGroupItem : ObservableBase
     private Visibility _actionsVisibility = Visibility.Collapsed;
     public Visibility ActionsVisibility { get => _actionsVisibility; set => Set(ref _actionsVisibility, value); }
 
+    // 单独"停止"（有待下载/下载中分卷时显示）/"下载"（有已暂停分卷时显示）/"删除"（始终显示）
+    private Visibility _pauseVisibility = Visibility.Collapsed;
+    public Visibility PauseVisibility { get => _pauseVisibility; set => Set(ref _pauseVisibility, value); }
+
+    private Visibility _resumeVisibility = Visibility.Collapsed;
+    public Visibility ResumeVisibility { get => _resumeVisibility; set => Set(ref _resumeVisibility, value); }
+
     public string ReparseText => I18n.Tr("重新解析");
     public string ResearchText => I18n.Tr("重新搜索");
+    public string DownloadText => I18n.Tr("下载");
+    public string StopText => I18n.Tr("停止");
+    public string DeleteText => I18n.Tr("删除");
 }
 
 /// <summary>下载页（对应 Python 版 download_UI.py）。</summary>
@@ -101,6 +111,7 @@ public partial class DownloadPage : UserControl
         ["3"] = ("下载中", "#60a5fa"),
         ["1"] = ("已完成", "#4ade80"),
         ["2"] = ("解析失败", "#f87171"),
+        ["4"] = ("已暂停", "#9aa4b2"),
     };
 
     private readonly ObservableCollection<DownloadGroupItem> _groups = [];
@@ -291,6 +302,9 @@ public partial class DownloadPage : UserControl
         if (statuses.Contains("0"))
             return (I18n.Format(I18n.Tr("等待下载 {done}/{total}"),
                 ("done", done), ("total", statuses.Count)), "#facc15");
+        if (statuses.Contains("4"))
+            return (I18n.Format(I18n.Tr("已暂停 {done}/{total}"),
+                ("done", done), ("total", statuses.Count)), "#9aa4b2");
         if (statuses.Contains("2"))
             return (I18n.Format(I18n.Tr("{n} 个解析失败"),
                 ("n", statuses.Count(s => s == "2"))), "#f87171");
@@ -355,6 +369,11 @@ public partial class DownloadPage : UserControl
             group.ActionsVisibility = statuses.Contains("2") && workId.Length > 0
                 ? Visibility.Visible
                 : Visibility.Collapsed;
+            // 单独控制按钮：有下载中/等待分卷时可"停止"；有已暂停分卷时可"下载"（继续）
+            var hasActive = statuses.Any(s => s is "0" or "3");
+            var hasPaused = statuses.Contains("4");
+            group.PauseVisibility = hasActive && workId.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+            group.ResumeVisibility = hasPaused && workId.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
 
             var totalPct = 0;
             var totalSpeed = 0.0;
@@ -424,6 +443,39 @@ public partial class DownloadPage : UserControl
         DownloadEngine.PurgeWorkDownload(group.WorkId);
         Refresh();
         ResearchRequested?.Invoke(group.WorkId);
+    }
+
+    /// <summary>单独下载（继续）该作品：解除暂停并启动下载。</summary>
+    private void DownloadOne_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not DownloadGroupItem group)
+            return;
+        DownloadEngine.ResumeWork(group.WorkId);
+        UpdateStartButton();
+        Refresh();
+    }
+
+    /// <summary>单独停止该作品的下载（停到断点）。</summary>
+    private void StopOne_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not DownloadGroupItem group)
+            return;
+        DownloadEngine.PauseWork(group.WorkId);
+        Refresh();
+    }
+
+    /// <summary>单独删除该作品：从下载列表移除，并删除 works 表记录。</summary>
+    private void DeleteOne_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not DownloadGroupItem group)
+            return;
+        if (!InAppDialog.Confirm(this,
+                I18n.Format(I18n.Tr("将从下载列表删除 {id}，并删除其作品记录与下载缓存。是否继续？"),
+                    ("id", group.WorkId)),
+                I18n.Tr("删除")))
+            return;
+        DownloadEngine.DeleteWork(group.WorkId);
+        Refresh();
     }
 
     private void ClearDoneButton_Click(object sender, RoutedEventArgs e)

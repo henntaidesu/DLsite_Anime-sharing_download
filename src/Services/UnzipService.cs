@@ -232,6 +232,8 @@ public static class UnzipService
             // 与下载逻辑保持同一文件夹命名方式（RJ号 / 作品名称）
             var folderPath = DownloadEngine.WorkFolderPath(workId);
             Logger.Info($"{workId} 正在解压");
+            string? lastSignature = null;   // 上一轮压缩包集合签名，用于检测"无进展"避免死循环
+            var rounds = 0;
             while (true)
             {
                 var archives = GetAllArchiveFiles(folderPath);
@@ -244,8 +246,24 @@ public static class UnzipService
                     PostExtract(workId, folderPath);
                     return;
                 }
+                // 防止无限循环：本轮压缩包集合与上一轮完全相同，说明解压/删除均未推进，中止
+                var signature = string.Join("|",
+                    archives.OrderBy(a => a, StringComparer.OrdinalIgnoreCase));
+                if (signature == lastSignature)
+                {
+                    Logger.Error($"{workId} 解压无进展（压缩包无法删除或反复重现），已中止：{archives[0]}");
+                    return;
+                }
+                lastSignature = signature;
+                // 硬上限兜底：嵌套压缩包异常增殖时也能跳出
+                if (++rounds > 100)
+                {
+                    Logger.Error($"{workId} 解压轮次超过上限（100），已中止");
+                    return;
+                }
                 var fileName = archives[0];
-                if (fileName.Contains("exe") && archives.Count > 1)
+                if (Path.GetExtension(fileName).Equals(".exe", StringComparison.OrdinalIgnoreCase)
+                    && archives.Count > 1)
                     fileName = archives[1];
                 if (!ExtractArchive(fileName, folderPath))
                     return;

@@ -76,7 +76,8 @@ public partial class SearchPage : UserControl
 
     private string? _selectId;
     private DlWork? _workData;     // 当前搜索作品的 DL API 数据，加入下载时写入 works 表
-    private int _searchGeneration;  // 旧一轮缩略图/检测结果作废用
+    private int _searchGeneration;  // 新一轮搜索作废旧缩略图加载（仅在重新查询时递增）
+    private int _hostGeneration;    // 进入/离开详情时作废旧的网站检测，互不影响缩略图加载
 
     /// <summary>点击"← 下载列表"按钮时触发，由主窗口切回下载视图。</summary>
     public event Action? BackToDownloadRequested;
@@ -135,7 +136,8 @@ public partial class SearchPage : UserControl
 
     private void ClearDisplay()
     {
-        _searchGeneration++;
+        _searchGeneration++;   // 作废旧缩略图加载
+        _hostGeneration++;     // 作废旧网站检测
         _results.Clear();
         _hostCards.Clear();
         ShowResultsPage();
@@ -290,7 +292,7 @@ public partial class SearchPage : UserControl
     private void BuildHostCards(List<string> urlList)
     {
         _hostCards.Clear();
-        var generation = ++_searchGeneration;
+        var generation = ++_hostGeneration;
 
         // 按域名分组，保持链接出现顺序
         var groups = new Dictionary<string, List<string>>();
@@ -328,13 +330,13 @@ public partial class SearchPage : UserControl
             checkedCount++;
             if (ok)
                 valid++;
-            if (generation != _searchGeneration)
+            if (generation != _hostGeneration)
                 return;
             if (checkedCount < card.Urls.Count)
                 card.StatusText = I18n.Format(I18n.Tr("检测中… {checked}/{total}"),
                     ("checked", checkedCount), ("total", card.Urls.Count));
         }
-        if (generation != _searchGeneration)
+        if (generation != _hostGeneration)
             return;
         if (valid == card.Urls.Count)
         {

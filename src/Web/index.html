@@ -73,8 +73,10 @@
   .detail { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
   .detail h1 { font-size: 20px; margin: 0 0 12px; }
   .dtop { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr); gap: 18px; align-items: start; }
-  @media (max-width: 720px) { .dtop { grid-template-columns: 1fr; } }
-  .gallery img.main { width: 100%; border-radius: 8px; background: #15151a; cursor: zoom-in; display: block; }
+  /* 单列时也必须用 minmax(0,1fr)：纯 1fr 的最小尺寸是 auto，会被图片固有宽度撑破、横向溢出 */
+  @media (max-width: 720px) { .dtop { grid-template-columns: minmax(0, 1fr); } }
+  .gallery { min-width: 0; }
+  .gallery img.main { width: 100%; max-width: 100%; border-radius: 8px; background: #15151a; cursor: zoom-in; display: block; }
   .thumbs { display: flex; gap: 6px; overflow-x: auto; margin-top: 8px; }
   .thumbs img { height: 54px; border-radius: 5px; cursor: pointer; opacity: .65; border: 2px solid transparent; }
   .thumbs img.sel { opacity: 1; border-color: var(--accent); }
@@ -151,6 +153,18 @@
   .trow .tname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .trow.file .tname { color: var(--text); }
   .trow .tsize { color: var(--muted); font-size: 12.5px; flex: none; }
+
+  /* 文件网格（查看作品：缩略图视图） */
+  .fgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(108px, 1fr)); gap: 10px; }
+  .fcard { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; cursor: pointer; }
+  .fcard:hover { border-color: var(--accent-dim); }
+  .fthumb { width: 100%; aspect-ratio: 1 / 1; background: #15151a; position: relative;
+            display: flex; align-items: center; justify-content: center; }
+  .fthumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .fthumb .big { font-size: 40px; }
+  .fthumb .fcount { position: absolute; right: 6px; bottom: 6px; background: rgba(0,0,0,.6);
+                    color: #eee; border-radius: 6px; padding: 0 6px; font-size: 11px; }
+  .fname { padding: 6px 8px; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   /* 视频整页播放 */
   .voverlay { position: fixed; inset: 0; background: rgba(0,0,0,.95); z-index: 65;
@@ -773,50 +787,51 @@ function fileIcon(ext) {
   if (AUDIO_EXTS.includes(ext)) return '🎵';
   return '📄';
 }
+// 文件夹进入时携带子节点（ctx.nodes），无则首次拉取整棵树；缩略图网格展示
 async function renderFiles(ctx) {
   $('title').textContent = ctx.name || ctx.id;
-  const host = $('content'); host.innerHTML = '<div class="empty"><span class="spin"></span> 加载中…</div>';
-  let d; try { d = await api('/api/files?id=' + enc(ctx.id)); } catch (e) { return; }
-  host.innerHTML = '';
-  if (d.error) { host.appendChild(el('div', 'empty', d.error)); return; }
-  if (!d.nodes || !d.nodes.length) { host.appendChild(el('div', 'empty', '此作品文件夹为空')); return; }
-  const tree = el('div', 'tree');
-  renderNodes(tree, d.nodes, ctx.id, 0);
-  host.appendChild(tree);
-}
-function renderNodes(container, nodes, id, depth) {
-  nodes.forEach(n => {
-    if (n.dir) {
-      const row = el('div', 'trow'); row.style.paddingLeft = (depth * 18 + 4) + 'px';
-      const arrow = el('span', 'arrow', '▸');
-      const kids = el('div', 'tkids'); kids.style.display = 'none';
-      row.append(arrow, el('span', 'ticon', '📁'), el('span', 'tname', n.name), el('span', 'tsize', `${(n.children || []).length} 项`));
-      row.onclick = () => { const open = kids.style.display === 'none'; kids.style.display = open ? 'block' : 'none'; arrow.textContent = open ? '▾' : '▸'; };
-      renderNodes(kids, n.children || [], id, depth + 1);
-      container.append(row, kids);
-    } else {
-      const ext = (n.ext || '').toLowerCase();
-      const row = el('div', 'trow file'); row.style.paddingLeft = (depth * 18 + 22) + 'px';
-      row.append(el('span', 'ticon', fileIcon(ext)), el('span', 'tname', n.name), el('span', 'tsize', fmtSize(n.size)));
-      row.onclick = () => openFile(id, n, nodes);
-      container.appendChild(row);
-    }
-  });
-}
-function openFile(id, node, siblings) {
-  const ext = (node.ext || '').toLowerCase();
-  const url = fileUrl(id, node.rel);
-  if (IMG_EXTS.includes(ext)) {
-    const imgs = siblings.filter(s => !s.dir && IMG_EXTS.includes((s.ext || '').toLowerCase())).map(s => fileUrl(id, s.rel));
-    const idx = imgs.indexOf(url);
-    LB.open(imgs, idx < 0 ? 0 : idx);
-  } else if (VIDEO_EXTS.includes(ext)) {
-    openVideo(url);
-  } else if (AUDIO_EXTS.includes(ext)) {
-    playAudio(url, node.name);
-  } else {
-    window.open(url, '_blank');
+  const host = $('content');
+  let nodes = ctx.nodes;
+  if (!nodes) {
+    host.innerHTML = '<div class="empty"><span class="spin"></span> 加载中…</div>';
+    let d; try { d = await api('/api/files?id=' + enc(ctx.id)); } catch (e) { return; }
+    if (d.error) { host.innerHTML = ''; host.appendChild(el('div', 'empty', d.error)); return; }
+    nodes = d.nodes || [];
   }
+  host.innerHTML = '';
+  if (!nodes.length) { host.appendChild(el('div', 'empty', '此文件夹为空')); return; }
+  host.appendChild(drawFileGrid(nodes, ctx.id));
+}
+function drawFileGrid(nodes, id) {
+  // 本层图片集合：图片缩略图点开后可在它们之间左右滑动
+  const imgs = nodes.filter(n => !n.dir && IMG_EXTS.includes((n.ext || '').toLowerCase())).map(n => fileUrl(id, n.rel));
+  const grid = el('div', 'fgrid');
+  nodes.forEach(n => {
+    const ext = (n.ext || '').toLowerCase();
+    const card = el('div', 'fcard');
+    const thumb = el('div', 'fthumb');
+    if (n.dir) {
+      thumb.appendChild(el('div', 'big', '📁'));
+      thumb.appendChild(el('div', 'fcount', `${(n.children || []).length} 项`));
+      card.onclick = () => pushView('files', { id, name: n.name, nodes: n.children || [] });
+    } else if (IMG_EXTS.includes(ext)) {
+      const img = el('img'); img.loading = 'lazy'; img.src = fileUrl(id, n.rel); thumb.appendChild(img);
+      const url = fileUrl(id, n.rel);
+      card.onclick = () => LB.open(imgs, Math.max(0, imgs.indexOf(url)));
+    } else if (VIDEO_EXTS.includes(ext)) {
+      thumb.appendChild(el('div', 'big', '🎬'));
+      card.onclick = () => openVideo(fileUrl(id, n.rel));
+    } else if (AUDIO_EXTS.includes(ext)) {
+      thumb.appendChild(el('div', 'big', '🎵'));
+      card.onclick = () => playAudio(fileUrl(id, n.rel), n.name);
+    } else {
+      thumb.appendChild(el('div', 'big', '📄'));
+      card.onclick = () => window.open(fileUrl(id, n.rel), '_blank');
+    }
+    card.append(thumb, el('div', 'fname', n.name));
+    grid.appendChild(card);
+  });
+  return grid;
 }
 function openVideo(url) { const v = $('vplayer'); v.src = url; $('videoOverlay').classList.add('show'); v.play().catch(() => {}); }
 function closeVideo() { const v = $('vplayer'); v.pause(); v.removeAttribute('src'); v.load(); $('videoOverlay').classList.remove('show'); }
@@ -832,6 +847,14 @@ const LB = {
   step(d) { if (!this.list.length) return; this.idx = (this.idx + d + this.list.length) % this.list.length; $('lbimg').src = this.list[this.idx]; },
 };
 $('lightbox').addEventListener('click', e => { if (e.target.id === 'lightbox') LB.close(); });
+// 触屏左右滑动切换图片：右滑看上一张、左滑看下一张
+let _lbTouchX = null;
+$('lightbox').addEventListener('touchstart', e => { if (e.touches.length === 1) _lbTouchX = e.touches[0].clientX; }, { passive: true });
+$('lightbox').addEventListener('touchend', e => {
+  if (_lbTouchX == null) return;
+  const dx = e.changedTouches[0].clientX - _lbTouchX; _lbTouchX = null;
+  if (Math.abs(dx) > 40) LB.step(dx > 0 ? -1 : 1);
+}, { passive: true });
 document.addEventListener('keydown', e => { if (!$('lightbox').classList.contains('show')) return; if (e.key === 'Escape') LB.close(); else if (e.key === 'ArrowLeft') LB.step(-1); else if (e.key === 'ArrowRight') LB.step(1); });
 
 // ---------- 卡片区本地搜索 ----------

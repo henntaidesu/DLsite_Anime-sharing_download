@@ -93,12 +93,20 @@
                                     <TextBlock Grid.Column="4" Text="{Binding StatusText}"
                                                Foreground="{Binding StatusBrush}" FontWeight="SemiBold"
                                                VerticalAlignment="Center" />
-                                    <StackPanel Grid.Column="5" Orientation="Horizontal"
-                                                Visibility="{Binding ActionsVisibility}">
+                                    <StackPanel Grid.Column="5" Orientation="Horizontal">
+                                        <Button Content="{Binding DownloadText}" FontSize="12" Padding="10,3"
+                                                Visibility="{Binding ResumeVisibility}" Click="DownloadOne_Click" />
+                                        <Button Content="{Binding StopText}" FontSize="12" Padding="10,3"
+                                                Margin="6,0,0,0" Visibility="{Binding PauseVisibility}"
+                                                Click="StopOne_Click" />
                                         <Button Content="{Binding ReparseText}" FontSize="12" Padding="10,3"
+                                                Margin="6,0,0,0" Visibility="{Binding ActionsVisibility}"
                                                 Click="Reparse_Click" />
                                         <Button Content="{Binding ResearchText}" FontSize="12" Padding="10,3"
-                                                Margin="6,0,0,0" Click="Research_Click" />
+                                                Margin="6,0,0,0" Visibility="{Binding ActionsVisibility}"
+                                                Click="Research_Click" />
+                                        <Button Content="{Binding DeleteText}" FontSize="12" Padding="10,3"
+                                                Margin="6,0,0,0" Click="DeleteOne_Click" />
                                     </StackPanel>
                                 </Grid>
                                 <!-- 子行：分卷文件 -->
