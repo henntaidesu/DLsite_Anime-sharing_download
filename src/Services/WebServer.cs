@@ -308,6 +308,7 @@ public static class WebServer
                 case "/api/file": ApiFile(stream, req); break;
                 // 搜索
                 case "/api/search": ApiSearch(stream, req); break;
+                case "/api/maker": ApiMaker(stream, req); break;
                 case "/api/thumb": ApiThumb(stream, req); break;
                 case "/api/posturls": ApiPostUrls(stream, req); break;
                 case "/api/checkhost": ApiCheckHost(stream, req); break;
@@ -922,6 +923,26 @@ public static class WebServer
             work = new { name = work?.WorkName ?? "", maker = work?.MakerName ?? "", type = work?.WorkType ?? "" },
             existed = exName != null, existedName = exName, existedTime = exTime,
             results,
+        });
+    }
+
+    /// <summary>按社团号（RG）返回该社团作品列表的某一页。</summary>
+    private static void ApiMaker(NetworkStream stream, Request req)
+    {
+        var id = (req.Query.GetValueOrDefault("id") ?? "").Trim().ToUpperInvariant();
+        if (!Regex.IsMatch(id, @"^RG\d+$"))
+        {
+            WriteJson(stream, 400, new { error = "社团号格式错误（RG + 数字）" });
+            return;
+        }
+        var page = GetInt(req, "page");
+        if (page < 1)
+            page = 1;
+        var (works, hasMore) = DlsiteApi.GetMakerWorksAsync(id, page).GetAwaiter().GetResult();
+        WriteJson(stream, 200, new
+        {
+            works = works.Select(w => new { id = w.WorkId, title = w.Title, thumb = w.Thumb }),
+            hasMore,
         });
     }
 

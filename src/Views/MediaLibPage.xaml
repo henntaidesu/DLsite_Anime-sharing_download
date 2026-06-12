@@ -58,6 +58,11 @@
                     VerticalAlignment="Center" Click="LibToggleButton_Click" Content="显示社团" />
             <TextBlock x:Name="RjLabel" Grid.Column="0" VerticalAlignment="Center" HorizontalAlignment="Left"
                        Margin="0,0,8,0" FontWeight="SemiBold" Visibility="Collapsed" />
+            <StackPanel x:Name="ViewModeBar" Grid.Column="3" Orientation="Horizontal" Visibility="Collapsed"
+                        HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,8,0">
+                <Button x:Name="ThumbViewButton" Click="ThumbViewButton_Click" Content="缩略图" />
+                <Button x:Name="ListViewButton" Margin="8,0,0,0" Click="ListViewButton_Click" Content="文件列表" />
+            </StackPanel>
             <Button x:Name="OpenFolderButton" Grid.Column="4" Margin="8,0,0,0" Visibility="Collapsed"
                     Click="OpenFolderButton_Click" Content="打开文件夹" />
             <Button x:Name="ViewFilesButton" Grid.Column="5" Margin="8,0,0,0" Visibility="Collapsed"

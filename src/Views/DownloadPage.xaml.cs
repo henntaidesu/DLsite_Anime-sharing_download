@@ -18,6 +18,9 @@ public class DownloadFileItem : ObservableBase
 {
     public string Uuid { get; init; } = "";
 
+    /// <summary>原始网盘下载链接（点击"复制链接"复制此值）。</summary>
+    public string Url { get; set; } = "";
+
     private string _fileName = "";
     public string FileName { get => _fileName; set => Set(ref _fileName, value); }
 
@@ -32,6 +35,15 @@ public class DownloadFileItem : ObservableBase
 
     private Brush _statusBrush = Brushes.Gray;
     public Brush StatusBrush { get => _statusBrush; set => Set(ref _statusBrush, value); }
+
+    // 解析失败原因（仅解析失败的分卷显示）
+    private string _errorReason = "";
+    public string ErrorReason { get => _errorReason; set => Set(ref _errorReason, value); }
+
+    private Visibility _errorVisibility = Visibility.Collapsed;
+    public Visibility ErrorVisibility { get => _errorVisibility; set => Set(ref _errorVisibility, value); }
+
+    public string CopyUrlText => I18n.Tr("复制链接");
 }
 
 /// <summary>下载页父行：番号分组。</summary>
@@ -174,8 +186,10 @@ public partial class DownloadPage : UserControl
 
     private void UpdateStartButton()
     {
+        // 运行中=暂停按钮(红)；已停止=开始按钮(绿)
         if (DownloadEngine.IsRunning)
         {
+            StartButton.Style = (Style)FindResource("DangerButton");
             if (DownloadEngine.StopRequested)
             {
                 // 已请求暂停，等待当前文件停到断点
@@ -190,6 +204,7 @@ public partial class DownloadPage : UserControl
         }
         else
         {
+            StartButton.Style = (Style)FindResource("SuccessButton");
             StartButton.Content = I18n.Tr("开始下载");
             StartButton.IsEnabled = true;
         }
@@ -327,12 +342,12 @@ public partial class DownloadPage : UserControl
     {
         UpdateStartButton();
         var rows = Db.Select(
-            "SELECT \"UUID\", \"work_id\", \"url\", \"status\", \"long\" FROM \"download_list\" ORDER BY rowid");
+            "SELECT \"UUID\", \"work_id\", \"url\", \"status\", \"long\", \"error\" FROM \"download_list\" ORDER BY rowid");
         if (rows == null)
             return;
 
         // 按番号分组，同一番号合并为一个父条目
-        var groups = new Dictionary<string, List<(string Uuid, string Url, string Status, string Long)>>();
+        var groups = new Dictionary<string, List<(string Uuid, string Url, string Status, string Long, string? Error)>>();
         var order = new List<string>();
         foreach (var row in rows)
         {
@@ -343,7 +358,7 @@ public partial class DownloadPage : UserControl
                 order.Add(workId);
             }
             list.Add((row[0] as string ?? "", row[2] as string ?? "",
-                row[3] as string ?? "", row[4]?.ToString() ?? ""));
+                row[3] as string ?? "", row[4]?.ToString() ?? "", row[5] as string));
         }
 
         // 同步到现有集合（保留展开状态与滚动位置）
@@ -401,11 +416,22 @@ public partial class DownloadPage : UserControl
                     child = new DownloadFileItem { Uuid = it.Uuid };
                     children.Add(child);
                 }
+                child.Url = it.Url;
                 child.FileName = FileNameOf(it.Url);
                 child.Pct = pct;
                 child.SpeedText = speed is { } sp ? FormatSpeed(sp) : "";
                 child.StatusText = text;
                 child.StatusBrush = BrushOf(color);
+                // 解析失败的分卷显示失败原因
+                if (it.Status == "2")
+                {
+                    child.ErrorReason = MapParseError(it.Error);
+                    child.ErrorVisibility = Visibility.Visible;
+                }
+                else
+                {
+                    child.ErrorVisibility = Visibility.Collapsed;
+                }
             }
 
             group.SpeedText = totalSpeed > 0 ? FormatSpeed(totalSpeed) : "";
@@ -424,10 +450,47 @@ public partial class DownloadPage : UserControl
         if ((sender as FrameworkElement)?.DataContext is not DownloadGroupItem group)
             return;
         Db.Execute(
-            "UPDATE \"download_list\" SET \"status\" = '0' WHERE \"work_id\" = @w AND \"status\" = '2'",
+            "UPDATE \"download_list\" SET \"status\" = '0', \"error\" = NULL WHERE \"work_id\" = @w AND \"status\" = '2'",
             ("@w", group.WorkId));
         DownloadEngine.Start();
         Refresh();
+    }
+
+    /// <summary>复制该分卷的原始网盘下载链接到剪贴板。</summary>
+    private void CopyUrl_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not DownloadFileItem file || file.Url.Length == 0)
+            return;
+        try
+        {
+            Clipboard.SetText(file.Url);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error(ex, "复制下载链接");
+        }
+    }
+
+    /// <summary>把 debrid-link 解析失败错误码翻译为可读说明。</summary>
+    private static string MapParseError(string? raw)
+    {
+        if (string.IsNullOrEmpty(raw))
+            return I18n.Tr("解析失败（原因未知，可能是链接失效或网盘不支持）");
+        return raw switch
+        {
+            "badToken" => I18n.Tr("debrid-link API Key 无效或已过期"),
+            "maxData" or "maxDataHost" => I18n.Tr("debrid-link 流量额度已用尽"),
+            "maxLink" or "maxLinkHost" => I18n.Tr("链接数超过 debrid-link 限制"),
+            "hostUnsupported" or "notDebrid" or "hostNotValid" or "noServer"
+                => I18n.Tr("该网盘不被 debrid-link 支持"),
+            "notFreeHost" or "hostNotFree" or "disabledHost" or "disabledServerHost"
+                => I18n.Tr("该网盘需要会员或已停用"),
+            "fileNotFound" or "fileUnavailable" or "notFound" or "fileError"
+                => I18n.Tr("文件已失效或被删除"),
+            "floodDetected" => I18n.Tr("请求过于频繁，请稍后再试"),
+            "badFileType" => I18n.Tr("不支持的文件类型"),
+            _ => I18n.Format(I18n.Tr("解析失败（{code}）"), ("code", raw)),
+        };
     }
 
     /// <summary>重新搜索：先确认并删除已下载的分卷与文件夹，再切回搜索页重新搜索。</summary>

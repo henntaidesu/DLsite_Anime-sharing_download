@@ -140,6 +140,22 @@ public static class Db
                     cmd.ExecuteNonQuery();
                 }
             }
+
+            // 旧版 download_list 缺 error 列时补加（记录解析失败原因）
+            var dlColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = "PRAGMA table_info(\"download_list\")";
+                using var reader = cmd.ExecuteReader();
+                while (reader.Read())
+                    dlColumns.Add(reader.GetString(1));
+            }
+            if (!dlColumns.Contains("error"))
+            {
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "ALTER TABLE \"download_list\" ADD COLUMN \"error\" text";
+                cmd.ExecuteNonQuery();
+            }
             _initialized = true;
         }
     }

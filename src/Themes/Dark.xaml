@@ -30,6 +30,7 @@
     <SolidColorBrush x:Key="YellowBrush" Color="#facc15" />
     <SolidColorBrush x:Key="RedBrush" Color="#f87171" />
     <SolidColorBrush x:Key="PurpleBrush" Color="#a78bfa" />
+    <SolidColorBrush x:Key="OrangeBrush" Color="#fb923c" />
 
     <!-- 默认文本 -->
     <Style TargetType="TextBlock">
@@ -76,6 +77,27 @@
     <!-- 主操作按钮 -->
     <Style x:Key="AccentButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
         <Setter Property="Background" Value="{StaticResource AccentBrush}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Foreground" Value="White" />
+    </Style>
+
+    <!-- 危险/删除按钮（红） -->
+    <Style x:Key="DangerButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="Background" Value="{StaticResource RedBrush}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Foreground" Value="White" />
+    </Style>
+
+    <!-- 成功/开始按钮（绿） -->
+    <Style x:Key="SuccessButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="Background" Value="{StaticResource GreenBrush}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Foreground" Value="White" />
+    </Style>
+
+    <!-- 警示/重试按钮（橙） -->
+    <Style x:Key="WarnButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="Background" Value="{StaticResource OrangeBrush}" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Foreground" Value="White" />
     </Style>

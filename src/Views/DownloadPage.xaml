@@ -103,9 +103,11 @@
                                                 Margin="6,0,0,0" Visibility="{Binding ActionsVisibility}"
                                                 Click="Reparse_Click" />
                                         <Button Content="{Binding ResearchText}" FontSize="12" Padding="10,3"
+                                                Style="{StaticResource WarnButton}"
                                                 Margin="6,0,0,0" Visibility="{Binding ActionsVisibility}"
                                                 Click="Research_Click" />
                                         <Button Content="{Binding DeleteText}" FontSize="12" Padding="10,3"
+                                                Style="{StaticResource DangerButton}"
                                                 Margin="6,0,0,0" Click="DeleteOne_Click" />
                                     </StackPanel>
                                 </Grid>
@@ -114,27 +116,38 @@
                                               Visibility="{Binding ChildrenVisibility}" Margin="24,4,0,0">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
-                                            <Grid Margin="0,2">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*" />
-                                                    <ColumnDefinition Width="220" />
-                                                    <ColumnDefinition Width="110" />
-                                                    <ColumnDefinition Width="130" />
-                                                </Grid.ColumnDefinitions>
-                                                <TextBlock Text="{Binding FileName}"
-                                                           Foreground="{StaticResource CaptionBrush}"
-                                                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                                                <ProgressBar Grid.Column="1" Value="{Binding Pct}" Maximum="100"
-                                                             Height="10" VerticalAlignment="Center"
-                                                             Margin="0,0,12,0"
-                                                             Foreground="#39507e" Background="#1c2130" />
-                                                <TextBlock Grid.Column="2" Text="{Binding SpeedText}"
-                                                           Style="{StaticResource CaptionText}"
-                                                           VerticalAlignment="Center" />
-                                                <TextBlock Grid.Column="3" Text="{Binding StatusText}"
-                                                           Foreground="{Binding StatusBrush}"
-                                                           VerticalAlignment="Center" />
-                                            </Grid>
+                                            <StackPanel Margin="0,2">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="220" />
+                                                        <ColumnDefinition Width="110" />
+                                                        <ColumnDefinition Width="130" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Text="{Binding FileName}"
+                                                               Foreground="{StaticResource CaptionBrush}"
+                                                               ToolTip="{Binding Url}"
+                                                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                                    <ProgressBar Grid.Column="1" Value="{Binding Pct}" Maximum="100"
+                                                                 Height="10" VerticalAlignment="Center"
+                                                                 Margin="0,0,12,0"
+                                                                 Foreground="#39507e" Background="#1c2130" />
+                                                    <TextBlock Grid.Column="2" Text="{Binding SpeedText}"
+                                                               Style="{StaticResource CaptionText}"
+                                                               VerticalAlignment="Center" />
+                                                    <TextBlock Grid.Column="3" Text="{Binding StatusText}"
+                                                               Foreground="{Binding StatusBrush}"
+                                                               VerticalAlignment="Center" />
+                                                    <Button Grid.Column="4" Content="{Binding CopyUrlText}"
+                                                            FontSize="11" Padding="8,2" Margin="8,0,0,0"
+                                                            Click="CopyUrl_Click" />
+                                                </Grid>
+                                                <TextBlock Text="{Binding ErrorReason}"
+                                                           Visibility="{Binding ErrorVisibility}"
+                                                           Foreground="#f87171" FontSize="11"
+                                                           TextWrapping="Wrap" Margin="0,3,0,0" />
+                                            </StackPanel>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>

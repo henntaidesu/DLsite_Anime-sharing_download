@@ -1,4 +1,5 @@
 using System;
+using System.Net;
 using System.Net.Http;
 
 namespace DASD.Core;
@@ -13,7 +14,12 @@ public static class Http
     public static HttpClient CreateClient(TimeSpan? timeout = null)
     {
         var (enabled, proxy) = AppConfig.ReadProxy();
-        var handler = new HttpClientHandler { AllowAutoRedirect = true };
+        // 像浏览器一样自动协商并解压 gzip/deflate/br，否则 Cloudflare 等可能返回压缩内容导致读到乱码
+        var handler = new HttpClientHandler
+        {
+            AllowAutoRedirect = true,
+            AutomaticDecompression = DecompressionMethods.All,
+        };
         if (enabled)
         {
             handler.Proxy = proxy;

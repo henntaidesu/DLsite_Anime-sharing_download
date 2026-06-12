@@ -67,12 +67,50 @@
                                 <StackPanel>
                                     <TextBlock Text="{Binding Host}" FontWeight="SemiBold" FontSize="14" />
                                     <TextBlock Text="{Binding CountText}" Style="{StaticResource CaptionText}" />
+                                    <!-- 具体下载链接（可选中复制）；多分卷逐行显示 -->
+                                    <ItemsControl ItemsSource="{Binding Urls}" Margin="0,6,12,0">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBox Text="{Binding Mode=OneWay}" IsReadOnly="True"
+                                                         BorderThickness="0" Background="Transparent"
+                                                         Padding="0" Margin="0,1,0,1" FontSize="12"
+                                                         Foreground="{StaticResource AccentLightBrush}"
+                                                         TextWrapping="Wrap" ToolTip="{Binding Mode=OneWay}" />
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
                                 </StackPanel>
                                 <TextBlock Grid.Column="1" Text="{Binding StatusText}"
                                            Foreground="{Binding StatusBrush}" FontWeight="SemiBold"
                                            VerticalAlignment="Center" />
                             </Grid>
                         </Border>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+
+            <!-- 社团作品列表（RG 搜索：点击作品后自动用其 RJ 号搜索 AS） -->
+            <ListBox x:Name="MakerList" Visibility="Collapsed"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     ScrollViewer.ScrollChanged="MakerList_ScrollChanged"
+                     SelectionChanged="MakerList_SelectionChanged">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <Grid Margin="2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="120" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Border Width="112" Height="84" Background="{StaticResource CardBrush}"
+                                    CornerRadius="4" VerticalAlignment="Top">
+                                <Image Source="{Binding Thumb}" Stretch="UniformToFill" />
+                            </Border>
+                            <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding WorkId}" Style="{StaticResource CaptionText}" />
+                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap"
+                                           Margin="0,2,0,0" />
+                            </StackPanel>
+                        </Grid>
                     </DataTemplate>
                 </ListBox.ItemTemplate>
             </ListBox>

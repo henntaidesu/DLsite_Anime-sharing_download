@@ -92,6 +92,30 @@ public class DebridLinkClient : IDisposable
         return RequestAsync(HttpMethod.Post, "downloader/add", form);
     }
 
+    /// <summary>提交网盘链接并返回 (结果, 错误码)：解析失败时 error 为 debrid-link 返回的错误码。</summary>
+    public async Task<(JsonElement? Value, string? Error)> AddDownloadDetailedAsync(
+        string url, string? password = null)
+    {
+        var form = new Dictionary<string, string> { ["url"] = url };
+        if (!string.IsNullOrEmpty(password))
+            form["password"] = password;
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"{ApiBase}/downloader/add")
+        {
+            Content = new FormUrlEncodedContent(form),
+        };
+        using var response = await _client.SendAsync(request);
+        var text = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(text);
+        var root = doc.RootElement;
+        if (!root.TryGetProperty("success", out var success) || !success.GetBoolean())
+        {
+            var error = root.TryGetProperty("error", out var e) ? e.ToString() : "unknown";
+            Logger.Error($"debrid-link API 错误: downloader/add -> {error}");
+            return (null, error);
+        }
+        return (root.TryGetProperty("value", out var value) ? value.Clone() : null, null);
+    }
+
     /// <summary>debrid-link 支持的域名列表（每次运行只请求一次 API，失败用兜底列表）。</summary>
     public static async Task<List<string>> SupportedDomainsAsync()
     {

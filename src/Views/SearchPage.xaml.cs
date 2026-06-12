@@ -68,16 +68,43 @@ public class HostCardItem : INotifyPropertyChanged
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }
 
+/// <summary>社团作品列表条目（RG 搜索结果）。</summary>
+public class MakerWorkItem : INotifyPropertyChanged
+{
+    public string WorkId { get; init; } = "";
+    public string Title { get; init; } = "";
+    public string ThumbUrl { get; init; } = "";
+
+    private ImageSource? _thumb;
+    public ImageSource? Thumb
+    {
+        get => _thumb;
+        set { _thumb = value; OnPropertyChanged(); }
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+    private void OnPropertyChanged([CallerMemberName] string? name = null) =>
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+}
+
 /// <summary>搜索页（对应 Python 版 select_UI.py）。</summary>
 public partial class SearchPage : UserControl
 {
     private readonly ObservableCollection<SearchResultItem> _results = [];
     private readonly ObservableCollection<HostCardItem> _hostCards = [];
+    private readonly ObservableCollection<MakerWorkItem> _makerWorks = [];
 
     private string? _selectId;
     private DlWork? _workData;     // 当前搜索作品的 DL API 数据，加入下载时写入 works 表
     private int _searchGeneration;  // 新一轮搜索作废旧缩略图加载（仅在重新查询时递增）
     private int _hostGeneration;    // 进入/离开详情时作废旧的网站检测，互不影响缩略图加载
+
+    // 社团（RG）搜索状态
+    private bool _fromMaker;        // 当前 AS 结果是否来自社团作品列表（决定返回去向）
+    private string? _makerId;
+    private int _makerPage;         // 已加载到第几页（0=未加载）
+    private bool _makerHasMore;
+    private bool _makerLoading;
 
     /// <summary>点击"← 下载列表"按钮时触发，由主窗口切回下载视图。</summary>
     public event Action? BackToDownloadRequested;
@@ -87,13 +114,14 @@ public partial class SearchPage : UserControl
         InitializeComponent();
         ResultList.ItemsSource = _results;
         HostCardList.ItemsSource = _hostCards;
+        MakerList.ItemsSource = _makerWorks;
         RetranslateUi();
         I18n.LanguageChanged += RetranslateUi;
     }
 
     private void RetranslateUi()
     {
-        InputBox.ToolTip = I18n.Tr("输入作品番号，例如 RJ01234567");
+        InputBox.ToolTip = I18n.Tr("输入作品号(RJ/BJ/VJ)、社团号(RG)或 DLsite 链接");
         BackToDownloadButton.Content = I18n.Tr("← 下载列表");
         SearchButton.Content = I18n.Tr("查询");
         BackButton.Content = I18n.Tr("← 返回结果");
@@ -115,7 +143,14 @@ public partial class SearchPage : UserControl
             await RunSearchAsync();
     }
 
-    private void BackButton_Click(object sender, RoutedEventArgs e) => ShowResultsPage();
+    private void BackButton_Click(object sender, RoutedEventArgs e)
+    {
+        // 网盘卡片 → 结果列表；结果列表（来自社团）→ 社团作品列表
+        if (HostCardList.Visibility == Visibility.Visible)
+            ShowResultsPage();
+        else if (ResultList.Visibility == Visibility.Visible && _fromMaker)
+            ShowMakerPage();
+    }
 
     private void BackToDownloadButton_Click(object sender, RoutedEventArgs e) =>
         BackToDownloadRequested?.Invoke();
@@ -124,43 +159,61 @@ public partial class SearchPage : UserControl
     {
         ResultList.Visibility = Visibility.Visible;
         HostCardList.Visibility = Visibility.Collapsed;
-        BackButton.Visibility = Visibility.Collapsed;
+        MakerList.Visibility = Visibility.Collapsed;
+        BackButton.Visibility = _fromMaker ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void ShowDetailPage()
     {
         ResultList.Visibility = Visibility.Collapsed;
         HostCardList.Visibility = Visibility.Visible;
+        MakerList.Visibility = Visibility.Collapsed;
         BackButton.Visibility = Visibility.Visible;
     }
 
-    private void ClearDisplay()
+    private void ShowMakerPage()
+    {
+        ResultList.Visibility = Visibility.Collapsed;
+        HostCardList.Visibility = Visibility.Collapsed;
+        MakerList.Visibility = Visibility.Visible;
+        BackButton.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>搜索入口：识别输入是作品号还是社团号，分流到对应流程。</summary>
+    private async Task RunSearchAsync()
+    {
+        var (kind, id) = DlsiteApi.ParseSearchInput(InputBox.Text);
+        switch (kind)
+        {
+            case SearchKind.Maker:
+                await RunMakerSearchAsync(id);
+                break;
+            case SearchKind.Work:
+                _fromMaker = false;
+                await RunWorkSearchAsync(id);
+                break;
+            default:
+                InAppDialog.Warn(this,
+                    I18n.Tr("请输入有效的作品号（RJ/BJ/VJ + 数字）、社团号（RG + 数字）或 DLsite 链接"),
+                    I18n.Tr("输入错误"));
+                break;
+        }
+    }
+
+    // ---------- 作品搜索（AS 论坛）----------
+
+    /// <summary>按作品号搜索 Anime-sharing 论坛并展示结果。</summary>
+    private async Task RunWorkSearchAsync(string workId)
     {
         _searchGeneration++;   // 作废旧缩略图加载
         _hostGeneration++;     // 作废旧网站检测
         _results.Clear();
         _hostCards.Clear();
-        ShowResultsPage();
-    }
+        _selectId = workId;
 
-    private async Task RunSearchAsync()
-    {
-        ClearDisplay();
-        _selectId = InputBox.Text.Trim().ToUpperInvariant();
-        if (string.IsNullOrEmpty(_selectId))
-            return;
-        // 番号格式校验：支持 RJ / BJ / VJ + 数字
-        if (!Regex.IsMatch(_selectId, @"^(?:RJ|BJ|VJ)\d+$"))
-        {
-            InAppDialog.Warn(this,
-                I18n.Format(I18n.Tr("{id} 不是有效的番号（格式：RJ/BJ/VJ + 数字）"), ("id", _selectId)),
-                I18n.Tr("番号错误"));
-            return;
-        }
         // 已下载过的作品提示用户
         var existed = Db.Select(
-            "SELECT \"work_name\", \"down_time\" FROM \"works\" WHERE \"work_id\" = @w",
-            ("@w", _selectId));
+            "SELECT \"work_name\", \"down_time\" FROM \"works\" WHERE \"work_id\" = @w", ("@w", _selectId));
         if (existed is { Count: > 0 })
         {
             var workName = existed[0][0] as string ?? "";
@@ -170,7 +223,10 @@ public partial class SearchPage : UserControl
                         ("id", _selectId), ("name", workName),
                         ("time", downTime.Length > 19 ? downTime[..19] : downTime)),
                     I18n.Tr("已下载")))
+            {
+                if (_fromMaker) ShowMakerPage();
                 return;
+            }
         }
 
         // 查询期间显示加载遮罩，网络请求在后台执行
@@ -191,6 +247,7 @@ public partial class SearchPage : UserControl
         if (results.Count == 0)
         {
             InAppDialog.Info(this, I18n.Tr("无匹配数据"), I18n.Tr("提示"));
+            if (_fromMaker) ShowMakerPage();
             return;
         }
 
@@ -203,7 +260,125 @@ public partial class SearchPage : UserControl
                 Url = res.Url,
                 ThumbUrl = res.Thumb,
             });
+        ShowResultsPage();
         _ = LoadThumbnailsAsync(_searchGeneration);
+    }
+
+    // ---------- 社团搜索（DLsite 作品列表）----------
+
+    /// <summary>按社团号（RG）拉取该社团作品列表，展示供用户点选。</summary>
+    private async Task RunMakerSearchAsync(string makerId)
+    {
+        _searchGeneration++;
+        _hostGeneration++;
+        _results.Clear();
+        _hostCards.Clear();
+        _makerWorks.Clear();
+        _makerId = makerId;
+        _makerPage = 0;
+        _makerHasMore = true;
+        _fromMaker = false;
+        ShowMakerPage();
+        await LoadMakerPageAsync();
+    }
+
+    /// <summary>加载社团作品的下一页（首页显示遮罩，后续页静默追加）。</summary>
+    private async Task LoadMakerPageAsync()
+    {
+        if (_makerId == null || _makerLoading || !_makerHasMore)
+            return;
+        _makerLoading = true;
+        var gen = _searchGeneration;
+        var firstPage = _makerPage == 0;
+        if (firstPage)
+            LoadingOverlay.Visibility = Visibility.Visible;
+        (List<DlMakerWork> Works, bool HasMore) page;
+        try
+        {
+            page = await DlsiteApi.GetMakerWorksAsync(_makerId, _makerPage + 1);
+        }
+        finally
+        {
+            if (firstPage)
+                LoadingOverlay.Visibility = Visibility.Collapsed;
+        }
+        if (gen != _searchGeneration)   // 期间发起了新搜索，丢弃本次结果
+        {
+            _makerLoading = false;
+            return;
+        }
+        if (page.Works.Count == 0)
+        {
+            if (firstPage)
+                InAppDialog.Info(this, I18n.Tr("未找到该社团的作品"), I18n.Tr("提示"));
+            _makerHasMore = false;
+            _makerLoading = false;
+            return;
+        }
+        _makerPage++;
+        _makerHasMore = page.HasMore;
+        var added = new List<MakerWorkItem>();
+        foreach (var w in page.Works)
+        {
+            var item = new MakerWorkItem { WorkId = w.WorkId, Title = w.Title, ThumbUrl = w.Thumb };
+            _makerWorks.Add(item);
+            added.Add(item);
+        }
+        _makerLoading = false;
+        _ = LoadMakerThumbnailsAsync(added, gen);
+    }
+
+    private void MakerList_ScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        // 下拉接近底部时自动加载下一页
+        if (!_makerHasMore || _makerLoading || e.ExtentHeight <= 0)
+            return;
+        if (e.VerticalOffset >= e.ExtentHeight - e.ViewportHeight - 300)
+            _ = LoadMakerPageAsync();
+    }
+
+    private async void MakerList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        // 点击社团作品 → 自动用其 RJ 号搜索 AS
+        if (MakerList.SelectedItem is not MakerWorkItem item)
+            return;
+        MakerList.SelectedItem = null;
+        InputBox.Text = item.WorkId;
+        _fromMaker = true;
+        await RunWorkSearchAsync(item.WorkId);
+    }
+
+    /// <summary>后台加载社团作品缩略图。</summary>
+    private async Task LoadMakerThumbnailsAsync(List<MakerWorkItem> items, int generation)
+    {
+        using var client = Http.CreateClient(TimeSpan.FromSeconds(15));
+        foreach (var item in items)
+        {
+            if (generation != _searchGeneration)
+                return;
+            if (string.IsNullOrEmpty(item.ThumbUrl))
+                continue;
+            try
+            {
+                var bytes = await client.GetByteArrayAsync(item.ThumbUrl);
+                if (generation != _searchGeneration)
+                    return;
+                var image = new BitmapImage();
+                using (var ms = new MemoryStream(bytes))
+                {
+                    image.BeginInit();
+                    image.CacheOption = BitmapCacheOption.OnLoad;
+                    image.StreamSource = ms;
+                    image.EndInit();
+                }
+                image.Freeze();
+                item.Thumb = image;
+            }
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or NotSupportedException)
+            {
+                // 单张缩略图失败不影响其它
+            }
+        }
     }
 
     /// <summary>整理帖子摘要：去掉空行和多余空白，最多保留 6 行。</summary>

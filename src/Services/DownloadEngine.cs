@@ -386,6 +386,14 @@ public static class DownloadEngine
                 ("@s", status), ("@k", key));
     }
 
+    /// <summary>标记某分卷解析失败('2')，并记录失败原因（debrid-link 错误码）。</summary>
+    private static void SetParseFailed(string key, string? error)
+    {
+        Db.Execute(
+            "UPDATE \"download_list\" SET \"status\" = '2', \"error\" = @e WHERE \"UUID\" = @k",
+            ("@e", error), ("@k", key));
+    }
+
     /// <summary>从队列原子地领取一条待下载任务并立即标记为下载中；无任务返回 null。</summary>
     private static (string Key, string WorkId, string Url)? ClaimNext()
     {
@@ -396,7 +404,10 @@ public static class DownloadEngine
             if (rows is not { Count: > 0 })
                 return null;
             var key = rows[0][0] as string ?? "";
-            SetStatus(key, "3", 0);  // 立即占位，其它线程不会重复领取
+            // 立即占位，其它线程不会重复领取；同时清除上次解析失败原因
+            Db.Execute(
+                "UPDATE \"download_list\" SET \"status\" = '3', \"long\" = '0', \"error\" = NULL WHERE \"UUID\" = @k",
+                ("@k", key));
             return (key, rows[0][1] as string ?? "", rows[0][2] as string ?? "");
         }
     }
@@ -605,13 +616,14 @@ public static class DownloadEngine
                 Logger.Info($"通过 debrid-link 解析: {url}");
 
                 System.Text.Json.JsonElement? value;
+                string? parseError;
                 using (var debrid = new DebridLinkClient())
-                    value = debrid.AddDownloadAsync(url).GetAwaiter().GetResult();
+                    (value, parseError) = debrid.AddDownloadDetailedAsync(url).GetAwaiter().GetResult();
                 var directUrl = value is { } v ? DlsiteApi.JStr(v, "downloadUrl") : "";
                 if (string.IsNullOrEmpty(directUrl))
                 {
-                    Logger.Error($"{workId} debrid-link 解析失败: {url}");
-                    SetStatus(key, "2");
+                    Logger.Error($"{workId} debrid-link 解析失败: {url} ({parseError})");
+                    SetParseFailed(key, parseError);
                     continue;
                 }
 

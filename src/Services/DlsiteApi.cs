@@ -1,8 +1,12 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Net.Http;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using DASD.Core;
+using HtmlAgilityPack;
 
 namespace DASD.Services;
 
@@ -17,6 +21,17 @@ public class DlWork
     public string IntroS { get; init; } = "";
     public string AgeCategory { get; init; } = "";
     public string IsAna { get; init; } = "";
+}
+
+/// <summary>搜索输入的类型：作品号（RJ/BJ/VJ）/ 社团号（RG）/ 无法识别。</summary>
+public enum SearchKind { Work, Maker, Invalid }
+
+/// <summary>社团作品列表中的一条作品。</summary>
+public class DlMakerWork
+{
+    public string WorkId { get; init; } = "";   // RJ/BJ/VJ 号
+    public string Title { get; set; } = "";
+    public string Thumb { get; set; } = "";      // 封面缩略图 URL
 }
 
 /// <summary>DLsite 公开 suggest API 客户端（对应 Python 版 DLapi_call.py）。</summary>
@@ -71,6 +86,153 @@ public static class DlsiteApi
         AgeCategory = JStr(work, "age_category"),
         IsAna = JStr(work, "is_ana"),
     };
+
+    // ---------- 输入识别 ----------
+
+    private static readonly Regex WorkRe = new(@"^(?:RJ|BJ|VJ)\d+$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex MakerRe = new(@"^RG\d+$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex UrlWorkRe = new(@"product_id/((?:RJ|BJ|VJ)\d+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex UrlMakerRe = new(@"maker_id/(RG\d+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>
+    /// 识别搜索框输入：作品号 / 社团号 / DLsite 链接（从中提取 product_id 或 maker_id）。
+    /// 返回归一化后的大写编号。
+    /// </summary>
+    public static (SearchKind Kind, string Id) ParseSearchInput(string raw)
+    {
+        raw = (raw ?? "").Trim();
+        if (raw.Length == 0)
+            return (SearchKind.Invalid, "");
+        // 先看是否为 DLsite 链接
+        var m = UrlWorkRe.Match(raw);
+        if (m.Success)
+            return (SearchKind.Work, m.Groups[1].Value.ToUpperInvariant());
+        m = UrlMakerRe.Match(raw);
+        if (m.Success)
+            return (SearchKind.Maker, m.Groups[1].Value.ToUpperInvariant());
+        // 纯编号
+        var up = raw.ToUpperInvariant();
+        if (WorkRe.IsMatch(up))
+            return (SearchKind.Work, up);
+        if (MakerRe.IsMatch(up))
+            return (SearchKind.Maker, up);
+        return (SearchKind.Invalid, "");
+    }
+
+    // ---------- 社团作品列表 ----------
+
+    /// <summary>每页作品数（DLsite 社团页默认约 30）。</summary>
+    public const int MakerPageSize = 30;
+
+    /// <summary>
+    /// 抓取某社团（RG 号）的作品列表，按页返回（page 从 1 开始）。返回作品列表与是否还有下一页。
+    ///
+    /// 说明：DLsite 无公开的"社团作品"JSON 接口，这里抓取社团页 HTML 解析。
+    /// 页面结构若改版需调整下面的 URL / 解析；逻辑集中在本方法便于维护。
+    /// </summary>
+    public static async Task<(List<DlMakerWork> Works, bool HasMore)> GetMakerWorksAsync(string makerId, int page)
+    {
+        var result = new List<DlMakerWork>();
+        try
+        {
+            using var client = Http.CreateClient(TimeSpan.FromSeconds(20));
+            // 社团作品列表页（服务端渲染，按 /page/N 翻页）
+            var url = page <= 1
+                ? $"https://www.dlsite.com/maniax/circle/profile/=/maker_id/{makerId}.html"
+                : $"https://www.dlsite.com/maniax/circle/profile/=/maker_id/{makerId}/page/{page}.html";
+            var html = await client.GetStringAsync(url);
+            var doc = new HtmlDocument();
+            doc.LoadHtml(html);
+
+            // 找所有指向 product_id 的链接，按编号去重并合并标题/缩略图
+            var byId = new Dictionary<string, DlMakerWork>();
+            var order = new List<string>();
+            var anchors = doc.DocumentNode.SelectNodes("//a[contains(@href,'/product_id/')]");
+            if (anchors != null)
+                foreach (var a in anchors)
+                {
+                    var mm = UrlWorkRe.Match(a.GetAttributeValue("href", ""));
+                    if (!mm.Success)
+                        continue;
+                    var id = mm.Groups[1].Value.ToUpperInvariant();
+                    if (!byId.TryGetValue(id, out var work))
+                    {
+                        work = new DlMakerWork { WorkId = id };
+                        byId[id] = work;
+                        order.Add(id);
+                    }
+                    // 缩略图：优先 data-src（懒加载），其次 src
+                    var img = a.SelectSingleNode(".//img");
+                    if (work.Thumb.Length == 0 && img != null)
+                        work.Thumb = NormalizeThumb(
+                            FirstNonEmpty(img.GetAttributeValue("data-src", ""), img.GetAttributeValue("src", "")));
+                    // 标题：title 属性 / img alt / 链接文本
+                    if (work.Title.Length == 0)
+                    {
+                        var title = FirstNonEmpty(
+                            a.GetAttributeValue("title", ""),
+                            img?.GetAttributeValue("alt", "") ?? "",
+                            HtmlEntity.DeEntitize(a.InnerText)?.Trim() ?? "");
+                        work.Title = title;
+                    }
+                }
+            result = order.Select(id => byId[id]).ToList();
+
+            // 缩略图：DLsite 封面图是懒加载，抓 img 标签往往拿到占位图；
+            // 这里按 DLsite 约定的封面路径直接用 RJ 号构造，更可靠（BJ/VJ 保留抓取到的）。
+            foreach (var w in result)
+            {
+                var computed = ThumbFromWorkId(w.WorkId);
+                if (computed.Length > 0)
+                    w.Thumb = computed;
+            }
+
+            // 是否还有下一页：存在指向 page/(page+1) 的分页链接
+            var hasMore = doc.DocumentNode.SelectSingleNode(
+                $"//a[contains(@href,'/page/{page + 1}')]") != null;
+            return (result, hasMore && result.Count > 0);
+        }
+        catch (Exception e)
+        {
+            Logger.Error(e, "DLsite maker works");
+            return (result, false);
+        }
+    }
+
+    private static string FirstNonEmpty(params string[] values) =>
+        values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v))?.Trim() ?? "";
+
+    private static readonly Regex RjNumRe = new(@"^RJ(\d+)$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>
+    /// 按 DLsite 约定从 RJ 号构造封面图 URL：
+    /// 分组目录 = (编号/1000 + 1) * 1000（保持相同位宽），文件名 = {RJ号}_img_main.jpg。
+    /// 例：RJ267412 → .../RJ268000/RJ267412_img_main.jpg。仅支持 RJ（同人），其它返回空串。
+    /// </summary>
+    private static string ThumbFromWorkId(string id)
+    {
+        var m = RjNumRe.Match(id);
+        if (!m.Success)
+            return "";
+        var numStr = m.Groups[1].Value;
+        if (!long.TryParse(numStr, out var num))
+            return "";
+        var group = (num / 1000 + 1) * 1000;
+        var groupStr = group.ToString().PadLeft(numStr.Length, '0');
+        return $"https://img.dlsite.jp/modpub/images2/work/doujin/RJ{groupStr}/RJ{numStr}_img_main.jpg";
+    }
+
+    /// <summary>补全缩略图 URL：协议相对（//）补 https:，站内相对（/）补域名。</summary>
+    private static string NormalizeThumb(string src)
+    {
+        if (string.IsNullOrWhiteSpace(src))
+            return "";
+        if (src.StartsWith("//"))
+            return "https:" + src;
+        if (src.StartsWith("/"))
+            return "https://www.dlsite.com" + src;
+        return src;
+    }
 
     /// <summary>取 JSON 属性为字符串（数字/布尔等也转为字符串），缺失为空串。</summary>
     internal static string JStr(JsonElement element, string prop)

@@ -501,7 +501,7 @@ function renderSearch() {
   $('title').textContent = '搜索';
   const host = $('content'); host.innerHTML = '';
   const bar = el('div', 'toolbar');
-  const inp = el('input'); inp.placeholder = '输入作品番号，例如 RJ01234567'; inp.className = 'grow'; inp.id = 'sId';
+  const inp = el('input'); inp.placeholder = '作品号(RJ/BJ/VJ)、社团号(RG) 或 DLsite 链接'; inp.className = 'grow'; inp.id = 'sId';
   const btn = el('button', 'icon-btn primary', '查询');
   inp.addEventListener('keydown', e => { if (e.key === 'Enter') runSearch(); });
   btn.onclick = runSearch;
@@ -509,9 +509,25 @@ function renderSearch() {
   host.appendChild(bar);
   host.appendChild(el('div', null)).id = 'searchResult';
 }
+// 识别输入：作品号 / 社团号 / DLsite 链接
+function parseInput(raw) {
+  raw = (raw || '').trim();
+  let m = raw.match(/product_id\/((?:RJ|BJ|VJ)\d+)/i); if (m) return { kind: 'work', id: m[1].toUpperCase() };
+  m = raw.match(/maker_id\/(RG\d+)/i); if (m) return { kind: 'maker', id: m[1].toUpperCase() };
+  const up = raw.toUpperCase();
+  if (/^(?:RJ|BJ|VJ)\d+$/.test(up)) return { kind: 'work', id: up };
+  if (/^RG\d+$/.test(up)) return { kind: 'maker', id: up };
+  return { kind: 'invalid', id: '' };
+}
 async function runSearch() {
-  const id = ($('sId').value || '').trim().toUpperCase();
-  if (!id) return;
+  const p = parseInput($('sId').value);
+  if (p.kind === 'maker') { await runMakerSearch(p.id); return; }
+  if (p.kind !== 'work') { $('searchResult').innerHTML = '<div class="empty">请输入作品号(RJ/BJ/VJ)、社团号(RG) 或 DLsite 链接</div>'; return; }
+  makerReturnId = null;
+  $('sId').value = p.id;
+  await runWorkSearch(p.id);
+}
+async function runWorkSearch(id) {
   const box = $('searchResult'); box.innerHTML = '<div class="empty"><span class="spin"></span> 正在查询…</div>';
   let d;
   try { d = await api('/api/search?id=' + enc(id)); } catch (e) { return; }
@@ -519,6 +535,7 @@ async function runSearch() {
   if (d.existed && !confirm(`${d.id} ${d.existedName || ''}\n该作品已于 ${d.existedTime || ''} 加入过下载，是否继续？`)) { box.innerHTML = ''; return; }
   if (!d.results.length) { box.innerHTML = ''; box.appendChild(el('div', 'empty', '无匹配数据')); return; }
   box.innerHTML = '';
+  if (makerReturnId) { const bk = el('button', 'icon-btn', '← 返回社团作品'); bk.style.marginBottom = '10px'; bk.onclick = () => runMakerSearch(makerReturnId); box.appendChild(bk); }
   $('count').textContent = `${d.work.name || d.id} · ${d.results.length} 个帖子`;
   d.results.forEach(r => {
     const c = el('div', 'res');
@@ -531,6 +548,46 @@ async function runSearch() {
     c.onclick = () => openPost(id, r.url, r.title);
     box.appendChild(c);
   });
+}
+
+// 社团（RG）搜索：作品缩略图网格 + 下拉到底自动加载下一页
+let makerState = null, makerReturnId = null;
+async function runMakerSearch(makerId) {
+  $('count').textContent = '';
+  const box = $('searchResult');
+  box.innerHTML = '<div class="empty"><span class="spin"></span> 正在获取社团作品…</div>';
+  if (makerState && makerState.io) makerState.io.disconnect();
+  makerState = { id: makerId, page: 0, hasMore: true, loading: false };
+  box.innerHTML = '';
+  const grid = el('div', 'grid cards'); box.appendChild(grid); makerState.grid = grid;
+  const sentinel = el('div'); sentinel.style.height = '1px'; box.appendChild(sentinel);
+  await loadMakerPage();
+  const io = new IntersectionObserver(es => { if (es[0].isIntersecting) loadMakerPage(); });
+  io.observe(sentinel); makerState.io = io;
+}
+async function loadMakerPage() {
+  const s = makerState; if (!s || s.loading || !s.hasMore) return;
+  s.loading = true;
+  let d;
+  try { d = await api(`/api/maker?id=${enc(s.id)}&page=${s.page + 1}`); } catch (e) { s.loading = false; return; }
+  if (d.error || !d.works || !d.works.length) {
+    if (s.page === 0) $('searchResult').innerHTML = '<div class="empty">' + (d.error || '未找到该社团的作品') + '</div>';
+    s.hasMore = false; s.loading = false; if (s.io) s.io.disconnect(); return;
+  }
+  s.page++; s.hasMore = d.hasMore;
+  d.works.forEach(w => {
+    const c = el('div', 'card');
+    const cov = el('div', 'cover');
+    if (w.thumb) { const img = el('img'); img.loading = 'lazy'; img.src = '/api/thumb?url=' + enc(w.thumb); cov.appendChild(img); }
+    cov.appendChild(el('div', 'badge rj', w.id));
+    c.appendChild(cov);
+    c.appendChild(el('div', 'wt', w.title || w.id));
+    c.onclick = () => { makerReturnId = s.id; if (s.io) s.io.disconnect(); $('sId').value = w.id; runWorkSearch(w.id); };
+    s.grid.appendChild(c);
+  });
+  $('count').textContent = `${s.grid.children.length} 个作品`;
+  s.loading = false;
+  if (!s.hasMore && s.io) s.io.disconnect();
 }
 async function openPost(id, url, title) {
   const box = $('searchResult'); box.innerHTML = '<div class="empty"><span class="spin"></span> 正在解析下载链接…</div>';

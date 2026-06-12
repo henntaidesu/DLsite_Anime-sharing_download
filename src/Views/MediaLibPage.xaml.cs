@@ -102,6 +102,7 @@ public partial class MediaLibPage : UserControl
 
     // 文件树作为独立页面显示，记录其所属作品文件夹（用于语言切换/重新可见时重建）
     private string? _treeFolder;
+    private bool _treeThumbView = true;   // 查看作品默认采用缩略图视图（false=文件列表）
 
     // 整页预览状态
     private InlineMediaPlayer? _inlinePlayer;
@@ -405,6 +406,7 @@ public partial class MediaLibPage : UserControl
         _cardsPanel.Children.Clear();
         ContentHost.Content = _cardsPanel;
         OpenFolderButton.Visibility = Visibility.Collapsed;
+        ViewModeBar.Visibility = Visibility.Collapsed;   // 仅文件树页显示视图切换
         ViewFilesButton.Visibility = Visibility.Collapsed;
         ViewFilesButton.Content = I18n.Tr("查看作品");
         MoveLibButton.Visibility = Visibility.Collapsed;
@@ -1381,18 +1383,137 @@ public partial class MediaLibPage : UserControl
         // 恢复"打开文件夹"按钮（ClearCards 已置空 _currentWorkFolder）
         _currentWorkFolder = folder;
         OpenFolderButton.Visibility = Visibility.Visible;
+        ViewModeBar.Visibility = Visibility.Visible;
+        UpdateViewModeButtons();
 
-        var list = new StackPanel { Margin = new Thickness(0, 0, 0, 12) };
-        AddTreeLevel(list, folder, depth: 0, isRoot: true);
-        if (list.Children.Count == 0)
-            list.Children.Add(new TextBlock
+        if (_treeThumbView)
+            ContentHost.Content = BuildThumbView(folder);
+        else
+        {
+            var list = new StackPanel { Margin = new Thickness(0, 0, 0, 12) };
+            AddTreeLevel(list, folder, depth: 0, isRoot: true);
+            if (list.Children.Count == 0)
+                list.Children.Add(new TextBlock
+                {
+                    Text = I18n.Tr("此作品文件夹为空"),
+                    Style = (Style)FindResource("CaptionText"),
+                    Margin = new Thickness(TreeRowBaseIndent, 8, 0, 0),
+                });
+            ContentHost.Content = list;
+        }
+        CardsScroll.ScrollToVerticalOffset(0);
+    }
+
+    /// <summary>把缩略图/文件列表按钮按当前视图高亮（选中态用主色按钮样式）。</summary>
+    private void UpdateViewModeButtons()
+    {
+        ThumbViewButton.Style = _treeThumbView
+            ? (Style)FindResource("AccentButton") : (Style)FindResource(typeof(Button));
+        ListViewButton.Style = _treeThumbView
+            ? (Style)FindResource(typeof(Button)) : (Style)FindResource("AccentButton");
+    }
+
+    private void ThumbViewButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_treeThumbView)
+            return;
+        _treeThumbView = true;
+        ShowFileTree();
+    }
+
+    private void ListViewButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_treeThumbView)
+            return;
+        _treeThumbView = false;
+        ShowFileTree();
+    }
+
+    private const double ThumbTileW = 160, ThumbTileH = 160, ThumbGap = 10;
+
+    /// <summary>缩略图视图：递归收集作品内所有图片（排除 DataSource），平铺成缩略图网格，单击整页预览。</summary>
+    private FrameworkElement BuildThumbView(string folder)
+    {
+        List<string> images = [];
+        try
+        {
+            foreach (var f in Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories))
             {
-                Text = I18n.Tr("此作品文件夹为空"),
+                // 排除根目录下的 DataSource（封面/描述图等元数据资源）
+                var rel = Path.GetRelativePath(folder, f);
+                if (rel.StartsWith(DlsitePage.DataSourceDir + Path.DirectorySeparatorChar,
+                        StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (DlsitePage.ImageExts.Contains(Path.GetExtension(f).ToLowerInvariant()))
+                    images.Add(f);
+            }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+        }
+        images.Sort((a, b) => string.Compare(a, b, StringComparison.OrdinalIgnoreCase));
+
+        if (images.Count == 0)
+            return new TextBlock
+            {
+                Text = I18n.Tr("此作品没有可预览的图片"),
                 Style = (Style)FindResource("CaptionText"),
                 Margin = new Thickness(TreeRowBaseIndent, 8, 0, 0),
+            };
+
+        var wrap = new WrapPanel { Margin = new Thickness(0, 0, 0, 12) };
+        foreach (var path in images)
+            wrap.Children.Add(MakeThumbTile(path));
+        return wrap;
+    }
+
+    /// <summary>单张缩略图：图片填充裁切 + 文件名，单击整页预览。</summary>
+    private Border MakeThumbTile(string path)
+    {
+        var tile = new Border
+        {
+            Width = ThumbTileW,
+            Margin = new Thickness(0, 0, ThumbGap, ThumbGap),
+            Cursor = Cursors.Hand,
+            ToolTip = Path.GetFileName(path),
+        };
+        var panel = new StackPanel();
+        var coverGrid = new Grid { Width = ThumbTileW, Height = ThumbTileH, ClipToBounds = true };
+        coverGrid.Children.Add(new Border
+        {
+            Background = new SolidColorBrush(Color.FromArgb(12, 255, 255, 255)),
+            CornerRadius = new CornerRadius(4),
+        });
+        try
+        {
+            var bmp = new BitmapImage();
+            bmp.BeginInit();
+            bmp.CacheOption = BitmapCacheOption.OnLoad;
+            bmp.UriSource = new Uri(path);
+            bmp.DecodePixelWidth = (int)ThumbTileW * 2;  // 控制解码尺寸防内存膨胀
+            bmp.EndInit();
+            bmp.Freeze();
+            coverGrid.Children.Add(new Image
+            {
+                Source = bmp, Stretch = Stretch.UniformToFill,
+                ClipToBounds = true,
             });
-        ContentHost.Content = list;
-        CardsScroll.ScrollToVerticalOffset(0);
+        }
+        catch (Exception)
+        {
+            // 单张缩略图读取失败不影响整页
+        }
+        panel.Children.Add(coverGrid);
+        panel.Children.Add(new TextBlock
+        {
+            Text = Path.GetFileName(path),
+            Style = (Style)FindResource("CaptionText"),
+            Margin = new Thickness(2, 4, 2, 0),
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        });
+        tile.Child = panel;
+        tile.MouseLeftButtonUp += (_, _) => ShowPreview(path);
+        return tile;
     }
 
     /// <summary>递归填充某一层级：子文件夹（默认折叠）在前、文件在后；根目录排除 DataSource。</summary>
