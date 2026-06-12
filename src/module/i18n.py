@@ -11,7 +11,7 @@
 （works.state 的 '已品悦' / '已下载' / '下载中' 等）必须保持原样，不要翻译。
 """
 
-from PyQt5.QtCore import QObject, pyqtSignal
+from PyQt6.QtCore import QObject, pyqtSignal
 
 
 # 语言代码 -> 该语言自我标注的名称（用于设置页下拉框）

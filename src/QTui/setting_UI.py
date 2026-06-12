@@ -1,8 +1,8 @@
 import os
-from PyQt5.QtWidgets import (QMainWindow, QLineEdit, QPushButton, QComboBox, QMessageBox,
+from PyQt6.QtWidgets import (QMainWindow, QLineEdit, QPushButton, QComboBox, QMessageBox,
                              QFileDialog, QGroupBox, QLabel)
-from PyQt5.QtCore import QStandardPaths
-from PyQt5.uic import loadUi
+from PyQt6.QtCore import QStandardPaths
+from PyQt6.uic import loadUi
 from src.module.conf_operate import Config
 from src.module.i18n import tr, notifier, apply_language, current_language, LANGUAGES
 from src.web_drive.debrid_link import DebridLink
@@ -128,7 +128,8 @@ class SettingWindow(QMainWindow):
         @staticmethod
         def default_down_path():
             """用户的“下载”文件夹"""
-            return os.path.normpath(QStandardPaths.writableLocation(QStandardPaths.DownloadLocation))
+            return os.path.normpath(QStandardPaths.writableLocation(
+                QStandardPaths.StandardLocation.DownloadLocation))
 
         def read_conf(self):
             path = self.conf.read_file_down_path().replace(r'\\', '\\')

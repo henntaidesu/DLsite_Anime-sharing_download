@@ -3,11 +3,11 @@ import re
 import uuid
 import urllib.parse
 import requests
-from PyQt5.QtWidgets import (QMainWindow, QLineEdit, QPushButton, QListWidget, QListWidgetItem,
+from PyQt6.QtWidgets import (QMainWindow, QLineEdit, QPushButton, QListWidget, QListWidgetItem,
                              QStackedWidget, QLabel, QFrame, QHBoxLayout, QVBoxLayout, QMessageBox,
                              QWidget, QDialog)
-from PyQt5.QtGui import QPixmap, QIcon, QColor, QPainter, QPen
-from PyQt5.uic import loadUi
+from PyQt6.QtGui import QPixmap, QIcon, QColor, QPainter, QPen
+from PyQt6.uic import loadUi
 from src.Anime_sharing.get_as_work_upgroup_url import as_work_url
 from src.Anime_sharing.get_webdrive_url import get_work_down_url
 from src.DLsite.DLapi_call import get_work_data
@@ -17,7 +17,7 @@ from src.module.i18n import tr, notifier
 from src.module.time import Time_a
 from src.web_drive.doun_url_test import check_url, make_session
 from src.web_drive.debrid_link import start_download_worker
-from PyQt5.QtCore import Qt, QSize, QThread, pyqtSignal, QTimer, QRectF
+from PyQt6.QtCore import Qt, QSize, QThread, pyqtSignal, QTimer, QRectF
 
 
 class _DownTargetDialog(QDialog):
@@ -134,12 +134,12 @@ class LoadingOverlay(QWidget):
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.fillRect(self.rect(), QColor(0, 0, 0, 150))
 
         size = 48
         cx, cy = self.width() / 2, self.height() / 2
-        pen = QPen(QColor('#8fa3ff'), 5, Qt.SolidLine, Qt.RoundCap)
+        pen = QPen(QColor('#8fa3ff'), 5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
         painter.setPen(pen)
         rect = QRectF(cx - size / 2, cy - size / 2, size, size)
         # Qt 角度单位为 1/16 度，画 270 度的弧并随定时器旋转
@@ -147,7 +147,7 @@ class LoadingOverlay(QWidget):
 
         painter.setPen(QColor('#e6e9f0'))
         painter.drawText(QRectF(0, cy + size / 2 + 12, self.width(), 30),
-                         Qt.AlignHCenter, tr('正在查询…'))
+                         Qt.AlignmentFlag.AlignHCenter, tr('正在查询…'))
 
 
 class ThumbLoader(QThread):
@@ -293,7 +293,8 @@ class SelectWindown(QMainWindow):
         pixmap = QPixmap()
         if pixmap.loadFromData(data):
             item.setIcon(QIcon(pixmap.scaled(
-                self.THUMB_SIZE, Qt.KeepAspectRatio, Qt.SmoothTransformation)))
+                self.THUMB_SIZE, Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation)))
 
     @staticmethod
     def _host_of(url):
@@ -322,7 +323,7 @@ class SelectWindown(QMainWindow):
         for host, urls in groups.items():
             widget, status_label, count_label = self._build_host_card(host, len(urls))
             item = QListWidgetItem()
-            item.setData(Qt.UserRole, host)
+            item.setData(Qt.ItemDataRole.UserRole, host)
             item.setSizeHint(widget.sizeHint())
             self.host_card_list.addItem(item)
             self.host_card_list.setItemWidget(item, widget)
@@ -404,7 +405,7 @@ class SelectWindown(QMainWindow):
 
     def host_card_click(self, item):
         """点击检测通过的网站卡片，该网站全部链接通过 debrid-link 中转站下载"""
-        host = item.data(Qt.UserRole)
+        host = item.data(Qt.ItemDataRole.UserRole)
         if self.host_status.get(host) is not True:
             return  # 失效、分卷不全或还在检测中的网站不加入下载
 
@@ -412,7 +413,7 @@ class SelectWindown(QMainWindow):
         target_folder = target_lib = None
         if Config().read_media_libs():
             dlg = _DownTargetDialog(self)
-            if dlg.exec_() != QDialog.Accepted:
+            if dlg.exec() != QDialog.DialogCode.Accepted:
                 return
             target_folder = dlg.selected_folder
             target_lib = dlg.selected_lib
@@ -490,8 +491,9 @@ class SelectWindown(QMainWindow):
                 self, tr('已下载'),
                 tr('{id} {name}\n该作品已于 {time} 加入过下载，是否继续搜索？').format(
                     id=self.select_ID, name=work_name or "", time=str(down_time)[:19]),
-                QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-            if ret != QMessageBox.Yes:
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No)
+            if ret != QMessageBox.StandardButton.Yes:
                 return
         # 查询期间显示全屏转圈遮罩，网络请求放到线程池避免卡死界面
         self.loading_overlay.show_on(self.window())

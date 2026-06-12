@@ -1,9 +1,9 @@
-from PyQt5.QtWidgets import (QMainWindow, QPushButton, QTreeWidget, QTreeWidgetItem,
+from PyQt6.QtWidgets import (QMainWindow, QPushButton, QTreeWidget, QTreeWidgetItem,
                              QHeaderView, QMessageBox, QProgressBar, QLabel,
                              QWidget, QHBoxLayout)
-from PyQt5.QtGui import QColor, QPainter, QFont
-from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal, QRectF
-from PyQt5.uic import loadUi
+from PyQt6.QtGui import QColor, QPainter, QFont
+from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal, QRectF, QSize
+from PyQt6.uic import loadUi
 from src.module.datebase_execution import SQLiteDB
 from src.module.i18n import tr, notifier
 from src.web_drive.debrid_link import (start_download_worker, stop_download_worker,
@@ -26,10 +26,10 @@ class RoundProgressBar(QProgressBar):
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
         radius = rect.height() / 2
-        painter.setPen(Qt.NoPen)
+        painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(self._track)
         painter.drawRoundedRect(rect, radius, radius)
 
@@ -43,8 +43,11 @@ class RoundProgressBar(QProgressBar):
                 QRectF(rect.left(), rect.top(), fill_w, rect.height()), radius, radius)
 
         painter.setPen(self._fg)
-        painter.drawText(rect, Qt.AlignCenter, self.text())
+        painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, self.text())
 
+
+# 列表行高：需高于操作按钮（24px）以免 uniformRowHeights 下按钮被裁切
+ROW_HEIGHT = 34
 
 # download_list.status -> 显示文本（中文原文，渲染时经 tr() 翻译）与颜色
 STATUS_MAP = {
@@ -114,11 +117,11 @@ class DownloadWindow(QMainWindow):
         header = self.download_tree.header()
         # 默认 stretchLastSection=True 会与第 0 列的 Stretch 冲突，导致末列（按钮列）宽度不可控被裁切
         header.setStretchLastSection(False)
-        header.setSectionResizeMode(0, QHeaderView.Stretch)
-        header.setSectionResizeMode(1, QHeaderView.Fixed)
-        header.setSectionResizeMode(2, QHeaderView.Fixed)
-        header.setSectionResizeMode(3, QHeaderView.Fixed)
-        header.setSectionResizeMode(4, QHeaderView.Fixed)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
         self.download_tree.setColumnWidth(1, 220)
         self.download_tree.setColumnWidth(2, 110)
         self.download_tree.setColumnWidth(3, 110)
@@ -271,8 +274,9 @@ class DownloadWindow(QMainWindow):
         answer = QMessageBox.question(
             self, tr('重新搜索'),
             tr('将删除 {id} 已下载的分卷与文件夹，并重新搜索。是否继续？').format(id=work_id),
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-        if answer != QMessageBox.Yes:
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No)
+        if answer != QMessageBox.StandardButton.Yes:
             return
         purge_work_download(work_id)
         self.refresh()
@@ -281,7 +285,7 @@ class DownloadWindow(QMainWindow):
     @staticmethod
     def _make_action_button(text, on_click):
         btn = QPushButton(text)
-        btn.setCursor(Qt.PointingHandCursor)
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn.setFixedHeight(24)
         btn.setStyleSheet(
             'QPushButton { background-color: #2b3140; color: #cdd3de; border: 1px solid #3a4254; '
@@ -330,6 +334,7 @@ class DownloadWindow(QMainWindow):
             agg_text, agg_color = self._aggregate_status(work_id, statuses)
 
             parent = QTreeWidgetItem([work_id, '', '', agg_text])
+            parent.setSizeHint(0, QSize(0, ROW_HEIGHT))
             parent.setForeground(3, QColor(agg_color))
             self.download_tree.addTopLevelItem(parent)
 
@@ -349,6 +354,7 @@ class DownloadWindow(QMainWindow):
                 raw_text, color = STATUS_MAP.get(status, (None, '#cdd3de'))
                 text = tr(raw_text) if raw_text else tr('未知({status})').format(status=status)
                 child = QTreeWidgetItem([file_name_of(url), '', format_speed(speed) if speed else '', text])
+                child.setSizeHint(0, QSize(0, ROW_HEIGHT))
                 child.setForeground(0, QColor('#9aa3b2'))
                 child.setForeground(3, QColor(color))
                 parent.addChild(child)
@@ -380,8 +386,9 @@ class DownloadWindow(QMainWindow):
         answer = QMessageBox.question(
             self, tr('清空下载列表'),
             tr('确定要清空整个下载列表吗？等待中的任务也会被删除。'),
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-        if answer == QMessageBox.Yes:
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No)
+        if answer == QMessageBox.StandardButton.Yes:
             # 没有下载完成就被删除的番号，从已下载（works 表）中移除
             result = SQLiteDB().select(
                 '''SELECT DISTINCT "work_id" FROM "main"."download_list" WHERE "status" != '1' ''')

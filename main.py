@@ -15,7 +15,7 @@ from src.index import Index
 from src.module.create_folder import create_log_folder
 import multiprocessing
 import sys
-from PyQt5.QtWidgets import QApplication
+from PyQt6.QtWidgets import QApplication
 from qasync import QEventLoop
 from src.QTui.select_UI import SelectWindown
 

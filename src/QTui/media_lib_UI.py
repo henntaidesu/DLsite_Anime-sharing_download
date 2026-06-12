@@ -1,12 +1,12 @@
 import html
 import os
-from PyQt5.QtWidgets import (QMainWindow, QPushButton, QLabel, QLineEdit, QWidget,
+from PyQt6.QtWidgets import (QMainWindow, QPushButton, QLabel, QLineEdit, QWidget,
                              QFrame, QScrollArea, QGridLayout, QVBoxLayout, QHBoxLayout,
                              QDialog, QStackedWidget, QMessageBox, QTreeWidget,
                              QTreeWidgetItem, QSlider)
-from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal, QUrl
-from PyQt5.QtGui import QPixmap
-from PyQt5.uic import loadUi
+from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal, QUrl
+from PyQt6.QtGui import QPixmap
+from PyQt6.uic import loadUi
 from src.module.conf_operate import Config
 from src.module.datebase_execution import SQLiteDB
 from src.module.i18n import tr, notifier
@@ -38,7 +38,7 @@ class ClickCard(QFrame):
         super().__init__(parent)
         self.setProperty('class', 'libCard')
         self.setFixedSize(width, height)
-        self.setCursor(Qt.PointingHandCursor)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.search_text = title.lower()
         self._key = key
         self._on_click = on_click
@@ -58,7 +58,7 @@ class ClickCard(QFrame):
         layout.addStretch()
 
     def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
+        if event.button() == Qt.MouseButton.LeftButton:
             self._on_click(self._key)
         super().mousePressEvent(event)
 
@@ -78,7 +78,7 @@ class WorkCard(QFrame):
         super().__init__(parent)
         self.setProperty('class', 'card')
         self.setFixedSize(WORK_CARD_W, WORK_CARD_H)
-        self.setCursor(Qt.PointingHandCursor)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.search_text = f'{work_id} {work_name or ""} {maker_name or ""}'.lower()
         self._work_id = work_id
         self._on_click = on_click
@@ -91,14 +91,15 @@ class WorkCard(QFrame):
         # 封面区固定大小：图片按比例铺满裁切，无封面时显示纯色底
         cover_label = QLabel()
         cover_label.setFixedSize(WORK_COVER_W, WORK_COVER_H)
-        cover_label.setAlignment(Qt.AlignCenter)
+        cover_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         cover_label.setStyleSheet('background: rgba(255, 255, 255, 12); border-radius: 4px;')
         if cover and os.path.exists(cover):
             pixmap = QPixmap(cover)
             if not pixmap.isNull():
                 cover_label.setPixmap(pixmap.scaled(
                     WORK_COVER_W, WORK_COVER_H,
-                    Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation))
+                    Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                    Qt.TransformationMode.SmoothTransformation))
         layout.addWidget(cover_label)
 
         # RJ 号：封面左上角
@@ -119,12 +120,12 @@ class WorkCard(QFrame):
 
         name_label = QLabel(work_name or work_id)
         name_label.setWordWrap(True)
-        name_label.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+        name_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         name_label.setStyleSheet('font-weight: 600;')
         layout.addWidget(name_label, 1)
 
     def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
+        if event.button() == Qt.MouseButton.LeftButton:
             self._on_click(self._work_id)
         super().mousePressEvent(event)
 
@@ -136,10 +137,10 @@ class _SliderThumb(QLabel):
         super().__init__(parent)
         self._index = index
         self._on_click = on_click
-        self.setCursor(Qt.PointingHandCursor)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
 
     def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
+        if event.button() == Qt.MouseButton.LeftButton:
             self._on_click(self._index)
         super().mousePressEvent(event)
 
@@ -162,7 +163,7 @@ class ImageSlider(QFrame):
 
         self.main_label = QLabel()
         self.main_label.setFixedSize(520, 390)  # 初始尺寸，resizeEvent 中随宽度动态更新
-        self.main_label.setAlignment(Qt.AlignCenter)
+        self.main_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.main_label.setStyleSheet('background: rgba(255, 255, 255, 8); border-radius: 4px;')
         layout.addWidget(self.main_label)
 
@@ -175,10 +176,10 @@ class ImageSlider(QFrame):
             bar.addWidget(prev_button)
 
             scroll = QScrollArea()
-            scroll.setFrameShape(QFrame.NoFrame)
+            scroll.setFrameShape(QFrame.Shape.NoFrame)
             scroll.setFixedHeight(self.THUMB_H + 8)
             scroll.setWidgetResizable(True)
-            scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+            scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
             container = QWidget()
             thumbs_layout = QHBoxLayout(container)
             thumbs_layout.setContentsMargins(0, 0, 0, 0)
@@ -186,12 +187,12 @@ class ImageSlider(QFrame):
             for i, path in enumerate(paths):
                 thumb = _SliderThumb(i, self.set_index)
                 thumb.setFixedSize(self.THUMB_W, self.THUMB_H)
-                thumb.setAlignment(Qt.AlignCenter)
+                thumb.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 pixmap = QPixmap(path)
                 if not pixmap.isNull():
                     thumb.setPixmap(pixmap.scaled(
                         self.THUMB_W - 4, self.THUMB_H - 4,
-                        Qt.KeepAspectRatio, Qt.SmoothTransformation))
+                        Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
                 thumbs_layout.addWidget(thumb)
                 self._thumbs.append(thumb)
             thumbs_layout.addStretch()
@@ -230,7 +231,7 @@ class ImageSlider(QFrame):
         w, h = self.main_label.width(), self.main_label.height()
         if w > 0 and h > 0:
             self.main_label.setPixmap(self._pixmap.scaled(
-                w, h, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+                w, h, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
 
 
 class _MoveLibDialog(QDialog):
@@ -355,7 +356,7 @@ class ImageViewerDialog(QDialog):
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(8)
         self._label = QLabel()
-        self._label.setAlignment(Qt.AlignCenter)
+        self._label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._label.setStyleSheet('background: #111; border-radius: 4px;')
         layout.addWidget(self._label, 1)
 
@@ -365,7 +366,7 @@ class ImageViewerDialog(QDialog):
         next_button = QPushButton(tr('下一张') + ' ›')
         next_button.clicked.connect(self._next)
         self._counter = QLabel()
-        self._counter.setAlignment(Qt.AlignCenter)
+        self._counter.setAlignment(Qt.AlignmentFlag.AlignCenter)
         bar.addWidget(prev_button)
         bar.addWidget(self._counter, 1)
         bar.addWidget(next_button)
@@ -384,7 +385,7 @@ class ImageViewerDialog(QDialog):
             self._label.setText(tr('无法显示该图片'))
             return
         self._label.setPixmap(self._pixmap.scaled(
-            self._label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            self._label.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -399,11 +400,11 @@ class ImageViewerDialog(QDialog):
         self._load()
 
     def keyPressEvent(self, event):
-        if event.key() == Qt.Key_Left:
+        if event.key() == Qt.Key.Key_Left:
             self._prev()
-        elif event.key() == Qt.Key_Right:
+        elif event.key() == Qt.Key.Key_Right:
             self._next()
-        elif event.key() == Qt.Key_Escape:
+        elif event.key() == Qt.Key.Key_Escape:
             self.reject()
         else:
             super().keyPressEvent(event)
@@ -414,8 +415,8 @@ class MediaPlayerDialog(QDialog):
 
     def __init__(self, path, is_video, parent=None):
         super().__init__(parent)
-        from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent
-        from PyQt5.QtMultimediaWidgets import QVideoWidget
+        from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
+        from PyQt6.QtMultimediaWidgets import QVideoWidget
 
         self.setWindowTitle(os.path.basename(path))
         self.resize(960, 680) if is_video else self.resize(520, 180)
@@ -425,6 +426,9 @@ class MediaPlayerDialog(QDialog):
         layout.setSpacing(8)
 
         self._player = QMediaPlayer(self)
+        # Qt6 中必须显式设置音频输出，否则没有声音
+        self._audio_output = QAudioOutput()
+        self._player.setAudioOutput(self._audio_output)
         if is_video:
             video = QVideoWidget()
             video.setStyleSheet('background: #000;')
@@ -433,14 +437,14 @@ class MediaPlayerDialog(QDialog):
         else:
             name = QLabel(os.path.basename(path))
             name.setWordWrap(True)
-            name.setAlignment(Qt.AlignCenter)
+            name.setAlignment(Qt.AlignmentFlag.AlignCenter)
             name.setStyleSheet('font-size: 15px;')
             layout.addWidget(name, 1)
 
         self._play_button = QPushButton(tr('暂停'))
         self._play_button.setFixedWidth(72)
         self._play_button.clicked.connect(self._toggle)
-        self._slider = QSlider(Qt.Horizontal)
+        self._slider = QSlider(Qt.Orientation.Horizontal)
         self._slider.setRange(0, 0)
         self._slider.sliderMoved.connect(self._player.setPosition)
         self._time = QLabel('00:00 / 00:00')
@@ -452,21 +456,21 @@ class MediaPlayerDialog(QDialog):
 
         self._player.durationChanged.connect(self._on_duration)
         self._player.positionChanged.connect(self._on_position)
-        self._player.stateChanged.connect(self._on_state)
-        self._player.setMedia(QMediaContent(QUrl.fromLocalFile(path)))
+        self._player.playbackStateChanged.connect(self._on_state)
+        self._player.setSource(QUrl.fromLocalFile(path))
         self._player.play()
 
     def _toggle(self):
-        from PyQt5.QtMultimedia import QMediaPlayer
-        if self._player.state() == QMediaPlayer.PlayingState:
+        from PyQt6.QtMultimedia import QMediaPlayer
+        if self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
             self._player.pause()
         else:
             self._player.play()
 
     def _on_state(self, state):
-        from PyQt5.QtMultimedia import QMediaPlayer
+        from PyQt6.QtMultimedia import QMediaPlayer
         self._play_button.setText(
-            tr('暂停') if state == QMediaPlayer.PlayingState else tr('播放'))
+            tr('暂停') if state == QMediaPlayer.PlaybackState.PlayingState else tr('播放'))
 
     def _on_duration(self, duration):
         self._slider.setRange(0, duration)
@@ -511,7 +515,7 @@ class MediaLibWindow(QMainWindow):
         self.grid = QGridLayout(self.cards_container)
         self.grid.setContentsMargins(0, 0, 6, 0)
         self.grid.setSpacing(CARD_GAP)
-        self.grid.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+        self.grid.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
 
         self.cards = []
         self._columns = 0
@@ -669,14 +673,14 @@ class MediaLibWindow(QMainWindow):
         for name in names:
             full = os.path.join(path, name)
             item = QTreeWidgetItem(parent_item, [name])
-            item.setData(0, Qt.UserRole, full)
+            item.setData(0, Qt.ItemDataRole.UserRole, full)
             if os.path.isdir(full):
                 self._populate_tree(item, full)
 
     def _on_tree_item_clicked(self, item, column):
         """点击文件：图片→程序内看图（左右切换），视频/音频→内嵌播放器，其它→系统默认程序"""
         from src.DLsite.DLsite_page import IMAGE_EXTS
-        path = item.data(0, Qt.UserRole)
+        path = item.data(0, Qt.ItemDataRole.UserRole)
         if not path or os.path.isdir(path):
             return  # 文件夹交给树自身展开/折叠
         ext = os.path.splitext(path)[1].lower()
@@ -684,9 +688,9 @@ class MediaLibWindow(QMainWindow):
             folder = os.path.dirname(path)
             images = [os.path.join(folder, f) for f in sorted(os.listdir(folder))
                       if f.lower().endswith(IMAGE_EXTS)]
-            ImageViewerDialog(images, images.index(path), self).exec_()
+            ImageViewerDialog(images, images.index(path), self).exec()
         elif ext in VIDEO_EXTS or ext in AUDIO_EXTS:
-            MediaPlayerDialog(path, ext in VIDEO_EXTS, self).exec_()
+            MediaPlayerDialog(path, ext in VIDEO_EXTS, self).exec()
         else:
             os.startfile(path)
 
@@ -703,14 +707,15 @@ class MediaLibWindow(QMainWindow):
         current_lib = result[1][0][0] if result is not False and result[1] else None
 
         dlg = _MoveLibDialog(current_lib, self)
-        if dlg.exec_() != QDialog.Accepted or not dlg.selected:
+        if dlg.exec() != QDialog.DialogCode.Accepted or not dlg.selected:
             return
         target_lib, target_folder = dlg.selected
         answer = QMessageBox.question(
             self, tr('移动媒体库'),
             tr('确定将 {id} 移动到媒体库“{lib}”吗？').format(id=work_id, lib=target_lib),
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-        if answer != QMessageBox.Yes:
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No)
+        if answer != QMessageBox.StandardButton.Yes:
             return
 
         self.move_lib_button.setEnabled(False)
@@ -993,7 +998,7 @@ class MediaLibWindow(QMainWindow):
                 f'<a href="{html.escape(tag, quote=True)}">{html.escape(tag)}</a>'
                 for tag, in tags_result[1]))
             genre_links.setWordWrap(True)
-            genre_links.setTextFormat(Qt.RichText)
+            genre_links.setTextFormat(Qt.TextFormat.RichText)
             genre_links.linkActivated.connect(self._open_genre)
 
         fields = [('社团', maker_name), ('販売日', sell_date),
@@ -1015,7 +1020,7 @@ class MediaLibWindow(QMainWindow):
                 value_label = QLabel(
                     f'<a href="{html.escape(str(value), quote=True)}">{html.escape(display)}</a>')
                 value_label.setWordWrap(True)
-                value_label.setTextFormat(Qt.RichText)
+                value_label.setTextFormat(Qt.TextFormat.RichText)
                 value_label.linkActivated.connect(
                     lambda v, c='age_category': self._open_filter(c, v))
             elif label in _LINK_COLS:
@@ -1027,16 +1032,16 @@ class MediaLibWindow(QMainWindow):
                     for p in parts if p)
                 value_label = QLabel(links_html)
                 value_label.setWordWrap(True)
-                value_label.setTextFormat(Qt.RichText)
+                value_label.setTextFormat(Qt.TextFormat.RichText)
                 value_label.linkActivated.connect(
                     lambda v, c=col: self._open_filter(c, v))
             else:
                 value_label = QLabel(str(value))
                 value_label.setWordWrap(True)
-                value_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+                value_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
             key_label = QLabel(tr(label))
             key_label.setProperty('class', 'caption')
-            form.addWidget(key_label, row, 0, Qt.AlignTop)
+            form.addWidget(key_label, row, 0, Qt.AlignmentFlag.AlignTop)
             form.addWidget(value_label, row, 1)
             row += 1
 
@@ -1045,7 +1050,7 @@ class MediaLibWindow(QMainWindow):
         content = QHBoxLayout()
         content.setSpacing(20)
         if slider_paths:
-            content.addWidget(ImageSlider(slider_paths, widget), 1, Qt.AlignTop)
+            content.addWidget(ImageSlider(slider_paths, widget), 1, Qt.AlignmentFlag.AlignTop)
         info_page = QWidget()
         info_layout = QVBoxLayout(info_page)
         info_layout.setContentsMargins(0, 0, 0, 0)
@@ -1065,14 +1070,15 @@ class MediaLibWindow(QMainWindow):
                     continue
                 body_label = QLabel(value)
                 body_label.setWordWrap(True)
-                body_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+                body_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
                 layout.addWidget(body_label)
             else:
                 pixmap = QPixmap(os.path.join(folder, value))
                 if pixmap.isNull():
                     continue
                 if pixmap.width() > max_width:
-                    pixmap = pixmap.scaledToWidth(max_width, Qt.SmoothTransformation)
+                    pixmap = pixmap.scaledToWidth(
+                        max_width, Qt.TransformationMode.SmoothTransformation)
                 image_label = QLabel()
                 image_label.setPixmap(pixmap)
                 layout.addWidget(image_label)

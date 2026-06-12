@@ -33,16 +33,13 @@ class Index:
     def open_GUI():
         while True:
             try:
-                from PyQt5.QtWidgets import QApplication
-                from PyQt5.QtCore import Qt
+                from PyQt6.QtWidgets import QApplication
                 from src.QTui.index_UI import IndexWindow
                 from src.QTui.style.theme import apply_dark_theme
                 import sys
                 import asyncio
                 from qasync import QEventLoop
-                # 跟随 Windows 显示缩放（必须在创建 QApplication 之前设置）
-                QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
-                QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
+                # Qt6 默认启用高 DPI 缩放，无需再设置 AA_EnableHighDpiScaling
                 app = QApplication(sys.argv)
                 apply_dark_theme(app)
                 from src.module.i18n import init_language

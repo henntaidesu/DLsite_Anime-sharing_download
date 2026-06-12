@@ -1,7 +1,7 @@
 import os
-from PyQt5.QtWidgets import (QDialog, QPushButton, QLabel, QFrame, QScrollArea, QWidget,
+from PyQt6.QtWidgets import (QDialog, QPushButton, QLabel, QFrame, QScrollArea, QWidget,
                              QFileDialog, QInputDialog, QMessageBox, QHBoxLayout, QVBoxLayout)
-from PyQt5.QtCore import QStandardPaths, QThread, pyqtSignal
+from PyQt6.QtCore import QStandardPaths, QThread, pyqtSignal
 from src.module.conf_operate import Config
 from src.module.datebase_execution import SQLiteDB
 from src.module.i18n import tr, notifier
@@ -80,7 +80,7 @@ class MediaLibSettingDialog(QDialog):
         layout.addLayout(header)
 
         scroll = QScrollArea()
-        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setWidgetResizable(True)
         container = QWidget()
         self.media_lib_cards_layout = QVBoxLayout(container)
@@ -101,7 +101,8 @@ class MediaLibSettingDialog(QDialog):
     @staticmethod
     def default_down_path():
         """用户的“下载”文件夹"""
-        return os.path.normpath(QStandardPaths.writableLocation(QStandardPaths.DownloadLocation))
+        return os.path.normpath(QStandardPaths.writableLocation(
+            QStandardPaths.StandardLocation.DownloadLocation))
 
     def _find_media_lib(self, name):
         for lib in self.media_libs:
@@ -218,7 +219,7 @@ class MediaLibSettingDialog(QDialog):
         answer = QMessageBox.question(
             self, tr('删除媒体库'),
             tr('确定删除媒体库"{name}"吗？\n不会删除本地文件，已导入的作品记录保留。').format(name=lib_name))
-        if answer != QMessageBox.Yes:
+        if answer != QMessageBox.StandardButton.Yes:
             return
         self.media_libs.remove(lib)
         self.media_lib_pending = [p for p in self.media_lib_pending if p[0] != lib_name]

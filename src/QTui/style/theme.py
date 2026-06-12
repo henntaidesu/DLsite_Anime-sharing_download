@@ -6,24 +6,24 @@ QSS_PATH = os.path.join(os.path.dirname(__file__), 'dark_theme.qss')
 
 def apply_dark_theme(app):
     """对 QApplication 应用全局暗色主题（Fusion 风格 + 暗色调色板 + QSS）"""
-    from PyQt5.QtGui import QPalette, QColor
+    from PyQt6.QtGui import QPalette, QColor
 
     app.setStyle('Fusion')
 
     palette = QPalette()
-    palette.setColor(QPalette.Window, QColor('#15171c'))
-    palette.setColor(QPalette.WindowText, QColor('#e6e9ef'))
-    palette.setColor(QPalette.Base, QColor('#1d2027'))
-    palette.setColor(QPalette.AlternateBase, QColor('#1b1e25'))
-    palette.setColor(QPalette.Text, QColor('#e6e9ef'))
-    palette.setColor(QPalette.Button, QColor('#262b35'))
-    palette.setColor(QPalette.ButtonText, QColor('#e6e9ef'))
-    palette.setColor(QPalette.ToolTipBase, QColor('#1d2027'))
-    palette.setColor(QPalette.ToolTipText, QColor('#e6e9ef'))
-    palette.setColor(QPalette.Highlight, QColor('#4f7cff'))
-    palette.setColor(QPalette.HighlightedText, QColor('#ffffff'))
-    palette.setColor(QPalette.PlaceholderText, QColor('#6b7280'))
-    palette.setColor(QPalette.Link, QColor('#6189ff'))
+    palette.setColor(QPalette.ColorRole.Window, QColor('#15171c'))
+    palette.setColor(QPalette.ColorRole.WindowText, QColor('#e6e9ef'))
+    palette.setColor(QPalette.ColorRole.Base, QColor('#1d2027'))
+    palette.setColor(QPalette.ColorRole.AlternateBase, QColor('#1b1e25'))
+    palette.setColor(QPalette.ColorRole.Text, QColor('#e6e9ef'))
+    palette.setColor(QPalette.ColorRole.Button, QColor('#262b35'))
+    palette.setColor(QPalette.ColorRole.ButtonText, QColor('#e6e9ef'))
+    palette.setColor(QPalette.ColorRole.ToolTipBase, QColor('#1d2027'))
+    palette.setColor(QPalette.ColorRole.ToolTipText, QColor('#e6e9ef'))
+    palette.setColor(QPalette.ColorRole.Highlight, QColor('#4f7cff'))
+    palette.setColor(QPalette.ColorRole.HighlightedText, QColor('#ffffff'))
+    palette.setColor(QPalette.ColorRole.PlaceholderText, QColor('#6b7280'))
+    palette.setColor(QPalette.ColorRole.Link, QColor('#6189ff'))
     app.setPalette(palette)
 
     try:

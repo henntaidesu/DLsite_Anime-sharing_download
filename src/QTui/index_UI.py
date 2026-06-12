@@ -6,8 +6,8 @@ from src.QTui.media_lib_UI import MediaLibWindow, TagWindow
 from src.QTui.setting_UI import SettingWindow
 from src.QTui.style.theme import enable_dark_title_bar
 from src.module.i18n import tr, notifier
-from PyQt5.QtWidgets import QApplication, QMainWindow, QStackedWidget, QPushButton, QVBoxLayout, QWidget, QLabel
-from PyQt5.uic import loadUi
+from PyQt6.QtWidgets import QApplication, QMainWindow, QStackedWidget, QPushButton, QVBoxLayout, QWidget, QLabel
+from PyQt6.uic import loadUi
 
 
 class IndexWindow(QWidget):

@@ -30,9 +30,9 @@ protobuf==4.21.12
 pycparser==2.21
 pyinstaller==6.1.0
 pyinstaller-hooks-contrib==2023.10
-PyQt5==5.15.11
-PyQt5-Qt5==5.15.2
-PyQt5_sip==12.15.0
+PyQt6==6.11.0
+PyQt6-Qt6==6.11.1
+PyQt6_sip==13.11.1
 PySocks==1.7.1
 pywin32-ctypes==0.2.2
 qasync==0.27.1
