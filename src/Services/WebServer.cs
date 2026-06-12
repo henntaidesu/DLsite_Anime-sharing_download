@@ -304,6 +304,8 @@ public static class WebServer
                 case "/api/toggle": ApiToggle(stream, req); break;
                 case "/api/cover": ApiCover(stream, req); break;
                 case "/api/asset": ApiAsset(stream, req); break;
+                case "/api/files": ApiFiles(stream, req); break;
+                case "/api/file": ApiFile(stream, req); break;
                 // 搜索
                 case "/api/search": ApiSearch(stream, req); break;
                 case "/api/thumb": ApiThumb(stream, req); break;
@@ -612,6 +614,7 @@ public static class WebServer
             read = r[14] as string == "1",
             favorite = r[15] as string == "1",
             hasCover = r[16] != null && File.Exists(r[16] as string),
+            hasFiles = r[13] is string wf && Directory.Exists(wf),
             tags,
             slider,
             body,
@@ -704,6 +707,176 @@ public static class WebServer
         ".gif" => "image/gif",
         ".webp" => "image/webp",
         _ => "image/jpeg",
+    };
+
+    // ---------- API：作品文件树（“查看作品”） ----------
+
+    /// <summary>列出作品文件夹的文件树（递归，根目录排除 DataSource，镜像桌面端 ShowFileTree）。</summary>
+    private static void ApiFiles(NetworkStream stream, Request req)
+    {
+        var id = req.Query.GetValueOrDefault("id") ?? "";
+        var folder = Db.Scalar("SELECT \"folder\" FROM \"works\" WHERE \"work_id\" = @w", ("@w", id)) as string;
+        if (folder == null || !Directory.Exists(folder))
+        {
+            WriteJson(stream, 404, new { error = "作品文件夹不存在" });
+            return;
+        }
+        var root = Path.GetFullPath(folder);
+        WriteJson(stream, 200, new { id, nodes = BuildFileTree(root, root, isRoot: true) });
+    }
+
+    private static List<object> BuildFileTree(string dir, string root, bool isRoot)
+    {
+        var nodes = new List<object>();
+        string[] subDirs = [], files = [];
+        try
+        {
+            subDirs = Directory.GetDirectories(dir);
+            files = Directory.GetFiles(dir);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return nodes;
+        }
+        foreach (var sub in subDirs
+                     .Where(d => !(isRoot && string.Equals(Path.GetFileName(d), DlsitePage.DataSourceDir,
+                         StringComparison.OrdinalIgnoreCase)))
+                     .OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase))
+            nodes.Add(new
+            {
+                name = Path.GetFileName(sub), dir = true, rel = RelPath(root, sub),
+                children = BuildFileTree(sub, root, false),
+            });
+        foreach (var f in files.OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase))
+        {
+            long size = 0;
+            try { size = new FileInfo(f).Length; }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+            nodes.Add(new
+            {
+                name = Path.GetFileName(f), dir = false, rel = RelPath(root, f),
+                ext = Path.GetExtension(f).ToLowerInvariant(), size,
+            });
+        }
+        return nodes;
+    }
+
+    private static string RelPath(string root, string path) =>
+        Path.GetRelativePath(root, path).Replace('\\', '/');
+
+    /// <summary>流式发送作品文件夹内的单个文件，支持 HTTP Range（视频/音频拖动、断点续传）。</summary>
+    private static void ApiFile(NetworkStream stream, Request req)
+    {
+        var id = req.Query.GetValueOrDefault("id") ?? "";
+        var rel = req.Query.GetValueOrDefault("path") ?? "";
+        var folder = Db.Scalar("SELECT \"folder\" FROM \"works\" WHERE \"work_id\" = @w", ("@w", id)) as string;
+        if (folder == null || !Directory.Exists(folder))
+        {
+            WriteBytes(stream, 404, "Not Found", "text/plain", []);
+            return;
+        }
+        var root = Path.GetFullPath(folder);
+        string full;
+        try { full = Path.GetFullPath(Path.Combine(root, rel)); }
+        catch (Exception) { WriteBytes(stream, 400, "Bad Request", "text/plain", []); return; }
+        // 路径穿越防护：必须落在作品文件夹内
+        if (!full.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
+            !File.Exists(full))
+        {
+            WriteBytes(stream, 404, "Not Found", "text/plain", []);
+            return;
+        }
+        WriteFileRange(stream, req, full);
+    }
+
+    /// <summary>按 Range 头流式写出文件（206 Partial Content）或整文件（200），分块拷贝不占内存。</summary>
+    private static void WriteFileRange(NetworkStream stream, Request req, string path)
+    {
+        FileStream fs;
+        try { fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read); }
+        catch (Exception) { WriteBytes(stream, 404, "Not Found", "text/plain", []); return; }
+        using (fs)
+        {
+            var length = fs.Length;
+            long start = 0, end = length - 1;
+            var partial = false;
+            if (req.Headers.TryGetValue("Range", out var range) &&
+                range.StartsWith("bytes=", StringComparison.OrdinalIgnoreCase) && length > 0)
+            {
+                var spec = range["bytes=".Length..].Split('-');
+                if (spec.Length == 2)
+                {
+                    if (spec[0].Length == 0)
+                    {
+                        // 后缀形式 bytes=-N：取最后 N 字节
+                        if (long.TryParse(spec[1], out var suffix))
+                            start = Math.Max(0, length - suffix);
+                    }
+                    else
+                    {
+                        long.TryParse(spec[0], out start);
+                        if (spec[1].Length > 0 && long.TryParse(spec[1], out var e))
+                            end = e;
+                    }
+                }
+                if (start < 0) start = 0;
+                if (end >= length) end = length - 1;
+                if (start > end) { start = 0; end = length - 1; }
+                partial = true;
+            }
+            var count = end - start + 1;
+            var sb = new StringBuilder();
+            sb.Append("HTTP/1.1 ").Append(partial ? "206 Partial Content" : "200 OK").Append("\r\n");
+            sb.Append("Content-Type: ").Append(MediaContentType(path)).Append("\r\n");
+            sb.Append("Accept-Ranges: bytes\r\n");
+            sb.Append("Content-Length: ").Append(count).Append("\r\n");
+            if (partial)
+                sb.Append("Content-Range: bytes ").Append(start).Append('-').Append(end).Append('/').Append(length).Append("\r\n");
+            sb.Append("Connection: close\r\n\r\n");
+            var head = Encoding.ASCII.GetBytes(sb.ToString());
+            stream.Write(head, 0, head.Length);
+
+            fs.Seek(start, SeekOrigin.Begin);
+            var buffer = new byte[81920];
+            var remaining = count;
+            int read;
+            while (remaining > 0 &&
+                   (read = fs.Read(buffer, 0, (int)Math.Min(buffer.Length, remaining))) > 0)
+            {
+                stream.Write(buffer, 0, read);
+                remaining -= read;
+            }
+            stream.Flush();
+        }
+    }
+
+    /// <summary>按扩展名给出媒体 MIME 类型（供浏览器原生播放/预览）。</summary>
+    private static string MediaContentType(string path) => Path.GetExtension(path).ToLowerInvariant() switch
+    {
+        ".mp4" or ".m4v" => "video/mp4",
+        ".webm" => "video/webm",
+        ".ogv" => "video/ogg",
+        ".mov" => "video/quicktime",
+        ".mkv" => "video/x-matroska",
+        ".avi" => "video/x-msvideo",
+        ".flv" => "video/x-flv",
+        ".wmv" => "video/x-ms-wmv",
+        ".ts" => "video/mp2t",
+        ".mpg" or ".mpeg" => "video/mpeg",
+        ".mp3" => "audio/mpeg",
+        ".wav" => "audio/wav",
+        ".flac" => "audio/flac",
+        ".m4a" => "audio/mp4",
+        ".aac" => "audio/aac",
+        ".ogg" or ".opus" => "audio/ogg",
+        ".wma" => "audio/x-ms-wma",
+        ".jpg" or ".jpeg" => "image/jpeg",
+        ".png" => "image/png",
+        ".gif" => "image/gif",
+        ".webp" => "image/webp",
+        ".txt" => "text/plain; charset=utf-8",
+        ".pdf" => "application/pdf",
+        _ => "application/octet-stream",
     };
 
     // ---------- API：搜索 ----------

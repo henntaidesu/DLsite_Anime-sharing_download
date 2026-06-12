@@ -185,8 +185,7 @@ public class MediaLibSettingDialog : Window
             return;
         if (FindLib(name) != null)
         {
-            MessageBox.Show(I18n.Tr("已存在同名媒体库。"), I18n.Tr("媒体库"),
-                MessageBoxButton.OK, MessageBoxImage.Information);
+            InAppDialog.Info(this, I18n.Tr("已存在同名媒体库。"), I18n.Tr("媒体库"));
             return;
         }
         _libs.Add(new MediaLib { Name = name });
@@ -205,9 +204,9 @@ public class MediaLibSettingDialog : Window
         foreach (var other in _libs)
             if (other.Folders.Contains(path))
             {
-                MessageBox.Show(
+                InAppDialog.Info(this,
                     I18n.Format(I18n.Tr("该文件夹已在媒体库\"{name}\"中。"), ("name", other.Name)),
-                    I18n.Tr("媒体库"), MessageBoxButton.OK, MessageBoxImage.Information);
+                    I18n.Tr("媒体库"));
                 return;
             }
         // 只登记文件夹，扫描由"扫描元数据"按钮触发
@@ -228,11 +227,10 @@ public class MediaLibSettingDialog : Window
         var lib = FindLib(libName);
         if (lib == null)
             return;
-        var answer = MessageBox.Show(
-            I18n.Format(I18n.Tr("确定删除媒体库\"{name}\"吗？\n不会删除本地文件，已导入的作品记录保留。"),
-                ("name", libName)),
-            I18n.Tr("删除媒体库"), MessageBoxButton.YesNo, MessageBoxImage.Question);
-        if (answer != MessageBoxResult.Yes)
+        if (!InAppDialog.Confirm(this,
+                I18n.Format(I18n.Tr("确定删除媒体库\"{name}\"吗？\n不会删除本地文件，已导入的作品记录保留。"),
+                    ("name", libName)),
+                I18n.Tr("删除媒体库")))
             return;
         _libs.Remove(lib);
         _pending.RemoveAll(p => p.Lib == libName);

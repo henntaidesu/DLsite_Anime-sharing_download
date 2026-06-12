@@ -150,9 +150,9 @@ public partial class SearchPage : UserControl
         // 番号格式校验：支持 RJ / BJ / VJ + 数字
         if (!Regex.IsMatch(_selectId, @"^(?:RJ|BJ|VJ)\d+$"))
         {
-            MessageBox.Show(
+            InAppDialog.Warn(this,
                 I18n.Format(I18n.Tr("{id} 不是有效的番号（格式：RJ/BJ/VJ + 数字）"), ("id", _selectId)),
-                I18n.Tr("番号错误"), MessageBoxButton.OK, MessageBoxImage.Warning);
+                I18n.Tr("番号错误"));
             return;
         }
         // 已下载过的作品提示用户
@@ -163,13 +163,11 @@ public partial class SearchPage : UserControl
         {
             var workName = existed[0][0] as string ?? "";
             var downTime = existed[0][1]?.ToString() ?? "";
-            var answer = MessageBox.Show(
-                I18n.Format(I18n.Tr("{id} {name}\n该作品已于 {time} 加入过下载，是否继续搜索？"),
-                    ("id", _selectId), ("name", workName),
-                    ("time", downTime.Length > 19 ? downTime[..19] : downTime)),
-                I18n.Tr("已下载"), MessageBoxButton.YesNo, MessageBoxImage.Question,
-                MessageBoxResult.No);
-            if (answer != MessageBoxResult.Yes)
+            if (!InAppDialog.Confirm(this,
+                    I18n.Format(I18n.Tr("{id} {name}\n该作品已于 {time} 加入过下载，是否继续搜索？"),
+                        ("id", _selectId), ("name", workName),
+                        ("time", downTime.Length > 19 ? downTime[..19] : downTime)),
+                    I18n.Tr("已下载")))
                 return;
         }
 
@@ -190,8 +188,7 @@ public partial class SearchPage : UserControl
         }
         if (results.Count == 0)
         {
-            MessageBox.Show(I18n.Tr("无匹配数据"), I18n.Tr("提示"),
-                MessageBoxButton.OK, MessageBoxImage.Information);
+            InAppDialog.Info(this, I18n.Tr("无匹配数据"), I18n.Tr("提示"));
             return;
         }
 
@@ -269,8 +266,7 @@ public partial class SearchPage : UserControl
         if (urls.Count == 0)
         {
             // 帖子里没有解析出任何网盘下载链接（如 Request 求档帖），明确提示而不是无反应
-            MessageBox.Show(I18n.Tr("该帖子中没有找到下载链接"), I18n.Tr("提示"),
-                MessageBoxButton.OK, MessageBoxImage.Information);
+            InAppDialog.Info(this, I18n.Tr("该帖子中没有找到下载链接"), I18n.Tr("提示"));
             return;
         }
         BuildHostCards(urls);
@@ -375,8 +371,8 @@ public partial class SearchPage : UserControl
         string? targetFolder = null, targetLib = null;
         if (AppConfig.ReadMediaLibs().Count > 0)
         {
-            var dialog = new DownTargetDialog { Owner = Window.GetWindow(this) };
-            if (dialog.ShowDialog() != true)
+            var dialog = new DownTargetDialog();
+            if (!dialog.Show(this))
                 return;
             targetFolder = dialog.SelectedFolder;
             targetLib = dialog.SelectedLib;

@@ -1,0 +1,203 @@
+using System;
+using System.Linq;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Documents;
+using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Threading;
+using DASD.Core;
+
+namespace DASD.Views;
+
+/// <summary>
+/// 程序内模态对话框：在所属窗口的 AdornerLayer 上覆盖渲染，替代系统 MessageBox（不再弹出程序外窗口）。
+/// 通过嵌套消息泵（DispatcherFrame）实现与 MessageBox 一致的"阻塞到用户操作"语义。
+/// </summary>
+public static class InAppDialog
+{
+    /// <summary>提示信息（仅"确定"）。</summary>
+    public static void Info(DependencyObject? owner, string message, string title) =>
+        Show(owner, message, title, yesNo: false);
+
+    /// <summary>警告信息（仅"确定"）。样式同 Info，仅语义区分。</summary>
+    public static void Warn(DependencyObject? owner, string message, string title) =>
+        Show(owner, message, title, yesNo: false);
+
+    /// <summary>确认对话框（是/否），返回是否选择"是"。</summary>
+    public static bool Confirm(DependencyObject? owner, string message, string title) =>
+        Show(owner, message, title, yesNo: true);
+
+    private static bool Show(DependencyObject? owner, string message, string title, bool yesNo)
+    {
+        var window = ResolveWindow(owner);
+        var root = window?.Content as UIElement;
+        var layer = root != null ? AdornerLayer.GetAdornerLayer(root) : null;
+        if (layer == null || root == null)
+        {
+            // 兜底：无法定位窗口 AdornerLayer 时退回系统弹窗，保证功能不丢失
+            var r = MessageBox.Show(message, title,
+                yesNo ? MessageBoxButton.YesNo : MessageBoxButton.OK);
+            return r is MessageBoxResult.Yes or MessageBoxResult.OK;
+        }
+
+        var result = false;
+        var frame = new DispatcherFrame();
+        OverlayAdorner? adorner = null;
+
+        void Close(bool value)
+        {
+            if (adorner == null)
+                return;
+            result = value;
+            layer.Remove(adorner);
+            adorner = null;
+            frame.Continue = false;
+        }
+
+        var overlay = BuildOverlay(title, message, yesNo, Close);
+        adorner = new OverlayAdorner(root, overlay);
+        layer.Add(adorner);
+        overlay.Loaded += (_, _) => Keyboard.Focus(overlay);
+        overlay.Focus();
+
+        Dispatcher.PushFrame(frame);
+        return result;
+    }
+
+    private static FrameworkElement BuildOverlay(string title, string message, bool yesNo, Action<bool> close)
+    {
+        var dim = new Grid
+        {
+            Background = new SolidColorBrush(Color.FromArgb(0x9A, 0, 0, 0)),
+            Focusable = true,
+        };
+
+        var card = new Border
+        {
+            Background = Res("CardBrush", Brushes.Black),
+            BorderBrush = Res("BorderBrush", Brushes.Gray),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(10),
+            Padding = new Thickness(24, 20, 24, 18),
+            MinWidth = 340,
+            MaxWidth = 480,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        var panel = new StackPanel();
+        panel.Children.Add(new TextBlock
+        {
+            Text = title,
+            FontWeight = FontWeights.SemiBold,
+            FontSize = 16,
+            Foreground = Res("TextBrush", Brushes.White),
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        });
+        panel.Children.Add(new TextBlock
+        {
+            Text = message,
+            TextWrapping = TextWrapping.Wrap,
+            Foreground = Res("TextBrush", Brushes.White),
+            Margin = new Thickness(0, 14, 0, 0),
+            LineHeight = 22,
+        });
+
+        var buttons = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Margin = new Thickness(0, 20, 0, 0),
+        };
+        if (yesNo)
+        {
+            var yes = MakeButton(I18n.Tr("是"), primary: true);
+            yes.Click += (_, _) => close(true);
+            buttons.Children.Add(yes);
+            var no = MakeButton(I18n.Tr("否"), primary: false);
+            no.Margin = new Thickness(10, 0, 0, 0);
+            no.Click += (_, _) => close(false);
+            buttons.Children.Add(no);
+        }
+        else
+        {
+            var ok = MakeButton(I18n.Tr("确定"), primary: true);
+            ok.Click += (_, _) => close(true);
+            buttons.Children.Add(ok);
+        }
+        panel.Children.Add(buttons);
+        card.Child = panel;
+        dim.Children.Add(card);
+
+        dim.KeyDown += (_, e) =>
+        {
+            if (e.Key == Key.Enter)
+            {
+                close(true);   // 回车=确定/是
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Escape)
+            {
+                close(!yesNo);  // Esc：确认框=否；提示框=关闭
+                e.Handled = true;
+            }
+        };
+        return dim;
+    }
+
+    private static Button MakeButton(string text, bool primary)
+    {
+        var button = new Button
+        {
+            Content = text,
+            MinWidth = 76,
+            Padding = new Thickness(14, 5, 14, 5),
+        };
+        if (primary && Application.Current?.TryFindResource("AccentButton") is Style accent)
+            button.Style = accent;
+        return button;
+    }
+
+    private static Brush Res(string key, Brush fallback) =>
+        Application.Current?.TryFindResource(key) as Brush ?? fallback;
+
+    private static Window? ResolveWindow(DependencyObject? owner)
+    {
+        if (owner != null && Window.GetWindow(owner) is { } w)
+            return w;
+        return Application.Current?.Windows.OfType<Window>().FirstOrDefault(x => x.IsActive)
+               ?? Application.Current?.MainWindow;
+    }
+
+    /// <summary>把对话框覆盖层铺满被装饰元素（整窗）的简易 Adorner。</summary>
+    private sealed class OverlayAdorner : Adorner
+    {
+        private readonly VisualCollection _visuals;
+        private readonly FrameworkElement _child;
+
+        public OverlayAdorner(UIElement adornedElement, FrameworkElement child) : base(adornedElement)
+        {
+            _child = child;
+            _visuals = new VisualCollection(this) { child };
+        }
+
+        protected override int VisualChildrenCount => _visuals.Count;
+
+        protected override Visual GetVisualChild(int index) => _visuals[index];
+
+        protected override Size MeasureOverride(Size constraint)
+        {
+            var size = AdornedElement is FrameworkElement fe
+                ? new Size(fe.ActualWidth, fe.ActualHeight)
+                : constraint;
+            _child.Measure(size);
+            return size;
+        }
+
+        protected override Size ArrangeOverride(Size finalSize)
+        {
+            _child.Arrange(new Rect(finalSize));
+            return finalSize;
+        }
+    }
+}

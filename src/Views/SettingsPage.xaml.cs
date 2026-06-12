@@ -222,12 +222,11 @@ public partial class SettingsPage : UserControl
             account = null;
         }
         if (account != null)
-            MessageBox.Show(
+            InAppDialog.Info(this,
                 I18n.Format(I18n.Tr("已连接 debrid-link\n账户: {account}"), ("account", account)),
-                I18n.Tr("测试成功"), MessageBoxButton.OK, MessageBoxImage.Information);
+                I18n.Tr("测试成功"));
         else
-            MessageBox.Show(I18n.Tr("API Key 无效或网络不可用"), I18n.Tr("测试失败"),
-                MessageBoxButton.OK, MessageBoxImage.Warning);
+            InAppDialog.Warn(this, I18n.Tr("API Key 无效或网络不可用"), I18n.Tr("测试失败"));
     }
 
     private void AutoDownloadCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)

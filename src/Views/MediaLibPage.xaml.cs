@@ -303,22 +303,20 @@ public partial class MediaLibPage : UserControl
             return;
         if (_currentWorkFolder == null || !Directory.Exists(_currentWorkFolder))
         {
-            MessageBox.Show(I18n.Tr("作品文件夹不存在，无法移动"), I18n.Tr("移动媒体库"),
-                MessageBoxButton.OK, MessageBoxImage.Warning);
+            InAppDialog.Warn(this, I18n.Tr("作品文件夹不存在，无法移动"), I18n.Tr("移动媒体库"));
             return;
         }
         var currentLib = Db.Scalar(
             "SELECT \"library\" FROM \"works\" WHERE \"work_id\" = @w", ("@w", workId)) as string;
 
-        var dialog = new DownTargetDialog(currentLib, moveMode: true) { Owner = Window.GetWindow(this) };
-        if (dialog.ShowDialog() != true || dialog.SelectedFolder == null)
+        var dialog = new DownTargetDialog(currentLib, moveMode: true);
+        if (!dialog.Show(this) || dialog.SelectedFolder == null)
             return;
         var targetLib = dialog.SelectedLib!;
         var targetFolder = dialog.SelectedFolder;
-        var answer = MessageBox.Show(
-            I18n.Format(I18n.Tr("确定将 {id} 移动到媒体库“{lib}”吗？"), ("id", workId), ("lib", targetLib)),
-            I18n.Tr("移动媒体库"), MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No);
-        if (answer != MessageBoxResult.Yes)
+        if (!InAppDialog.Confirm(this,
+                I18n.Format(I18n.Tr("确定将 {id} 移动到媒体库“{lib}”吗？"), ("id", workId), ("lib", targetLib)),
+                I18n.Tr("移动媒体库")))
             return;
 
         MoveLibButton.IsEnabled = false;
@@ -334,13 +332,12 @@ public partial class MediaLibPage : UserControl
         MoveLibButton.Content = I18n.Tr("移动媒体库");
         if (ok)
         {
-            MessageBox.Show(I18n.Tr("已移动到新媒体库"), I18n.Tr("移动媒体库"),
-                MessageBoxButton.OK, MessageBoxImage.Information);
+            InAppDialog.Info(this, I18n.Tr("已移动到新媒体库"), I18n.Tr("移动媒体库"));
             Refresh();  // 重新载入详情，反映新的媒体库与文件夹
         }
         else
         {
-            MessageBox.Show(message, I18n.Tr("移动媒体库"), MessageBoxButton.OK, MessageBoxImage.Warning);
+            InAppDialog.Warn(this, message, I18n.Tr("移动媒体库"));
         }
     }
 

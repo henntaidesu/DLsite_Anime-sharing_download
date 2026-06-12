@@ -416,12 +416,10 @@ public partial class DownloadPage : UserControl
     {
         if ((sender as FrameworkElement)?.DataContext is not DownloadGroupItem group)
             return;
-        var answer = MessageBox.Show(
-            I18n.Format(I18n.Tr("将删除 {id} 已下载的分卷与文件夹，并重新搜索。是否继续？"),
-                ("id", group.WorkId)),
-            I18n.Tr("重新搜索"), MessageBoxButton.YesNo, MessageBoxImage.Question,
-            MessageBoxResult.No);
-        if (answer != MessageBoxResult.Yes)
+        if (!InAppDialog.Confirm(this,
+                I18n.Format(I18n.Tr("将删除 {id} 已下载的分卷与文件夹，并重新搜索。是否继续？"),
+                    ("id", group.WorkId)),
+                I18n.Tr("重新搜索")))
             return;
         DownloadEngine.PurgeWorkDownload(group.WorkId);
         Refresh();
@@ -456,11 +454,9 @@ public partial class DownloadPage : UserControl
     {
         if (_groups.Count == 0)
             return;
-        var answer = MessageBox.Show(
-            I18n.Tr("确定要清空整个下载列表吗？等待中的任务也会被删除。"),
-            I18n.Tr("清空下载列表"), MessageBoxButton.YesNo, MessageBoxImage.Question,
-            MessageBoxResult.No);
-        if (answer != MessageBoxResult.Yes)
+        if (!InAppDialog.Confirm(this,
+                I18n.Tr("确定要清空整个下载列表吗？等待中的任务也会被删除。"),
+                I18n.Tr("清空下载列表")))
             return;
         // 没有下载完成就被删除的番号，从已下载（works 表）中移除
         var rows = Db.Select(
