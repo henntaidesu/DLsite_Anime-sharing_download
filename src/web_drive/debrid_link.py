@@ -39,14 +39,23 @@ _work_name_cache = {}
 
 CHUNK = 1024 * 64           # 每次读取的块大小
 
-# UI 指定的每作品媒体库目标根目录：work_id -> 文件夹路径
+# UI 指定的每作品媒体库目标根目录与所属媒体库名：work_id -> 文件夹路径 / 媒体库名
 # 下载/解压都在缓存目录进行，解压完成后再移动到此目标目录
 _work_target_paths = {}
+_work_target_libs = {}
 
 
-def set_work_target_path(work_id, path):
-    """由 UI 在加入队列前设定作品解压完成后要移动到的媒体库目标目录"""
+def set_work_target_path(work_id, path, lib_name=None):
+    """由 UI 在入队时设定作品解压完成后要移动到的媒体库目标目录及所属媒体库名。
+    除写入内存外立即写入 works 表（works 行须已存在），防止程序重启后丢失。"""
     _work_target_paths[work_id] = path
+    _work_target_libs[work_id] = lib_name
+    from src.module.datebase_execution import SQLiteDB
+    esc_path = str(path).replace("'", "''")
+    esc_lib = str(lib_name).replace("'", "''") if lib_name else ''
+    SQLiteDB().update(
+        f'''UPDATE "main"."works" SET "target" = '{esc_path}', "target_lib" = '{esc_lib}'
+            WHERE "work_id" = '{work_id}' ''')
 
 
 def _folder_leaf_name(work_id):
@@ -100,17 +109,16 @@ def persist_work_folder(work_id, path):
             WHERE "work_id" = '{work_id}' AND ("folder" IS NULL OR "folder" = '') ''')
 
 
-def persist_work_target(work_id):
-    """把 UI 选择的媒体库目标目录写入 works 表（仅在尚未写入时），
-    使下载跨重启续传后，解压完成仍能找到要移动到的媒体库目录。"""
-    target = _work_target_paths.get(work_id)
-    if not target:
-        return
+def read_work_target_lib(work_id):
+    """读取作品所属媒体库名：优先本次会话的内存选择，其次 works.target_lib（重启后用）"""
+    if _work_target_libs.get(work_id):
+        return _work_target_libs[work_id]
     from src.module.datebase_execution import SQLiteDB
-    esc = str(target).replace("'", "''")
-    SQLiteDB().update(
-        f'''UPDATE "main"."works" SET "target" = '{esc}'
-            WHERE "work_id" = '{work_id}' AND ("target" IS NULL OR "target" = '') ''')
+    result = SQLiteDB().select(
+        f'''SELECT "target_lib" FROM "main"."works" WHERE "work_id" = '{work_id}' ''')
+    if result is not False and result[1] and result[1][0][0]:
+        return result[1][0][0]
+    return None
 
 
 def _read_work_target(work_id):
@@ -144,6 +152,8 @@ def move_to_target_folder(work_id, cache_folder):
     from src.module.datebase_execution import SQLiteDB
     target_root = _read_work_target(work_id)
     if not target_root:
+        # 入队时未选择媒体库目标（如当时无媒体库配置）：明确记录而不是静默跳过
+        logger.write_log(f'{work_id} 未设置媒体库目标目录，保留在缓存目录: {cache_folder}', 'warning')
         return cache_folder
     leaf = os.path.basename(os.path.normpath(cache_folder))
     dest = os.path.join(target_root, leaf)
@@ -478,10 +488,9 @@ def _download_worker_loop(session):
             direct_url = value['downloadUrl']
             filename = value.get('name') or direct_url.rstrip('/').rsplit('/', 1)[-1]
             download_path = work_folder_path(work_id)
-            # 首个分卷处理时落库缓存目录与媒体库目标目录，
-            # 保证后续分卷、以及重启续传后的解压与移动都用同一目录
+            # 首个分卷处理时落库缓存目录，保证后续分卷、以及重启续传后的解压都用同一目录
+            # （媒体库目标目录已在入队时由 set_work_target_path 落库）
             persist_work_folder(work_id, download_path)
-            persist_work_target(work_id)
             os.makedirs(download_path, exist_ok=True)
             file_path = os.path.join(download_path, filename)
 

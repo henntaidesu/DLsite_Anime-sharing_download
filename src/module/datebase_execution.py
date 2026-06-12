@@ -80,6 +80,7 @@ class SQLiteDB:
                 "meta_scanned" text,
                 "folder" text,
                 "target" text,
+                "target_lib" text,
                 PRIMARY KEY ("work_id")
             )''')
             cursor.execute('''CREATE TABLE IF NOT EXISTS "work_genres" (
@@ -90,7 +91,8 @@ class SQLiteDB:
             # 旧版 works 表缺列时补加
             columns = [row[1] for row in cursor.execute('PRAGMA table_info("works")').fetchall()]
             for col in ('state', 'library', 'sell_date', 'series', 'scenario', 'illust',
-                        'voice_actor', 'genre', 'file_size', 'cover', 'meta_scanned', 'folder', 'target'):
+                        'voice_actor', 'genre', 'file_size', 'cover', 'meta_scanned', 'folder',
+                        'target', 'target_lib'):
                 if col not in columns:
                     cursor.execute(f'ALTER TABLE "works" ADD COLUMN "{col}" text')
             self.db.commit()

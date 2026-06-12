@@ -29,6 +29,7 @@ class _DownTargetDialog(QDialog):
         self.setModal(True)
         self.setMinimumWidth(420)
         self.selected_folder = None
+        self.selected_lib = None
 
         self._stack = QStackedWidget(self)
         root = QVBoxLayout(self)
@@ -54,7 +55,7 @@ class _DownTargetDialog(QDialog):
                      if len(folders) > 1 else lib['name'])
             btn = QPushButton(label)
             btn.setMinimumHeight(40)
-            btn.clicked.connect(lambda checked, f=folders: self._pick_lib(f))
+            btn.clicked.connect(lambda checked, n=lib['name'], f=folders: self._pick_lib(n, f))
             layout.addWidget(btn)
 
         layout.addStretch()
@@ -63,7 +64,8 @@ class _DownTargetDialog(QDialog):
         layout.addWidget(cancel_btn)
         self._stack.addWidget(page)
 
-    def _pick_lib(self, folders):
+    def _pick_lib(self, name, folders):
+        self.selected_lib = name
         if len(folders) == 1:
             self.selected_folder = folders[0]
             self.accept()
@@ -407,13 +409,13 @@ class SelectWindown(QMainWindow):
             return  # 失效、分卷不全或还在检测中的网站不加入下载
 
         # 有媒体库配置时弹窗选择下载目标
+        target_folder = target_lib = None
         if Config().read_media_libs():
             dlg = _DownTargetDialog(self)
             if dlg.exec_() != QDialog.Accepted:
                 return
-            if dlg.selected_folder:
-                from src.web_drive.debrid_link import set_work_target_path
-                set_work_target_path(self.select_ID, dlg.selected_folder)
+            target_folder = dlg.selected_folder
+            target_lib = dlg.selected_lib
 
         for down_url in self.host_groups.get(host, []):
             # url 为主键：重复加入同一作品时覆盖旧记录并重置为待下载（用户已在搜索时确认过）
@@ -421,6 +423,10 @@ class SelectWindown(QMainWindow):
              VALUES ('{uuid.uuid4()}', '{self.select_ID}', '{down_url}', '0', '0', '1');'''
             SQLiteDB().insert(sql)
         self.record_work()
+        # 须在 record_work 建好 works 行之后落库目标目录，重启后仍可恢复
+        if target_folder:
+            from src.web_drive.debrid_link import set_work_target_path
+            set_work_target_path(self.select_ID, target_folder, target_lib)
         start_download_worker()
 
         self.host_status[host] = 'queued'
@@ -429,18 +435,27 @@ class SelectWindown(QMainWindow):
         status_label.setStyleSheet('color: #8fa3ff; font-weight: 600;')
 
     def record_work(self):
-        """把 DL API 返回的作品数据写入 works 表，状态为下载中，全部下载完成后由下载线程改为已下载"""
+        """把 DL API 返回的作品数据写入 works 表，状态为下载中，全部下载完成后由下载线程改为已下载。
+        用 UPSERT 而不是 INSERT OR REPLACE：重复入队时只刷新本次下载相关的列，
+        保留已有的元数据（cover、genre、library 等）；folder/target/target_lib 重置为
+        空让本次下载重新选择缓存目录与媒体库目标。"""
         work = self.work_data or {}
 
         def esc(value):
             return str(value if value is not None else '').replace("'", "''")
 
-        sql = (f'INSERT OR REPLACE INTO "main"."works" '
+        sql = (f'INSERT INTO "main"."works" '
                f'("work_id", "work_name", "maker_id", "maker_name", "work_type", '
                f'"intro_s", "age_category", "is_ana", "state", "down_time") VALUES '
                f"('{esc(self.select_ID)}', '{esc(work.get('work_name'))}', '{esc(work.get('maker_id'))}', "
                f"'{esc(work.get('maker_name'))}', '{esc(work.get('work_type'))}', '{esc(work.get('intro_s'))}', "
-               f"'{esc(work.get('age_category'))}', '{esc(work.get('is_ana'))}', '下载中', '{Time_a().now_time()}')")
+               f"'{esc(work.get('age_category'))}', '{esc(work.get('is_ana'))}', '下载中', '{Time_a().now_time()}') "
+               f'ON CONFLICT("work_id") DO UPDATE SET '
+               f'"work_name" = excluded."work_name", "maker_id" = excluded."maker_id", '
+               f'"maker_name" = excluded."maker_name", "work_type" = excluded."work_type", '
+               f'"intro_s" = excluded."intro_s", "age_category" = excluded."age_category", '
+               f'"is_ana" = excluded."is_ana", "state" = excluded."state", "down_time" = excluded."down_time", '
+               f'"folder" = NULL, "target" = NULL, "target_lib" = NULL')
         SQLiteDB().insert(sql)
 
     def clear_display(self):

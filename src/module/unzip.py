@@ -134,22 +134,23 @@ def _post_extract(work_id, folder_path):
     关联所属媒体库和文件夹，然后后台补全详细元数据"""
     from src.module.import_local_works import (_import_rj_list, backfill_works_from_api,
                                                backfill_work_pages)
-    from src.web_drive.debrid_link import move_to_target_folder
+    from src.web_drive.debrid_link import move_to_target_folder, read_work_target_lib
     # 解压完成后把作品从缓存目录移动到媒体库目标目录，后续都用最终目录
     folder_path = move_to_target_folder(work_id, folder_path)
-    # 通过父目录匹配媒体库文件夹
-    lib_name = None
-    parent = os.path.dirname(os.path.abspath(folder_path))
-    for lib in Config().read_media_libs():
-        for lib_folder in lib.get('folders', []):
-            try:
-                if os.path.abspath(lib_folder) == parent:
-                    lib_name = lib['name']
-                    break
-            except OSError:
-                pass
-        if lib_name:
-            break
+    # 优先用入队时记录的所属媒体库名；没有时再通过父目录匹配媒体库文件夹
+    lib_name = read_work_target_lib(work_id)
+    if not lib_name:
+        parent = os.path.dirname(os.path.abspath(folder_path))
+        for lib in Config().read_media_libs():
+            for lib_folder in lib.get('folders', []):
+                try:
+                    if os.path.abspath(lib_folder) == parent:
+                        lib_name = lib['name']
+                        break
+                except OSError:
+                    pass
+            if lib_name:
+                break
 
     _import_rj_list([work_id], '已品悦', lib_name, {work_id: os.path.abspath(folder_path)})
     logger.write_log(f'{work_id} 已标记为已品悦，媒体库: {lib_name or "未关联"}', 'info')

@@ -59,12 +59,13 @@ class Log:
                 print(f"{now_time()} - WARNING - {text}")
 
         elif self.log_level == "info":
+            # error/warning 也写入日志文件，否则后台线程（下载、解压、数据库）的错误只打印到控制台，事后无法排查
             if log_type == 'info':
                 self.logger.info(text)
             elif log_type == 'error':
-                print(f"{now_time()} - ERROR - {text}")
+                self.logger.error(text)
             elif log_type == 'warning':
-                print(f"{now_time()} - WARIN - {text}")
+                self.logger.warning(text)
 
         elif self.log_level == "debug":
             if log_type == 'info':
