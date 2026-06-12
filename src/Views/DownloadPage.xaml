@@ -16,6 +16,7 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="200" />
@@ -28,9 +29,11 @@
                     Click="ClearDoneButton_Click" Content="清除已完成" />
             <Button x:Name="ClearAllButton" Grid.Column="3" Margin="8,0,0,0"
                     Click="ClearAllButton_Click" Content="清空列表" />
-            <TextBlock x:Name="UsageLabel" Grid.Column="5" VerticalAlignment="Center"
+            <Button x:Name="ShowDownloadedButton" Grid.Column="4" Margin="8,0,0,0"
+                    Click="ShowDownloadedButton_Click" Content="已下载" />
+            <TextBlock x:Name="UsageLabel" Grid.Column="6" VerticalAlignment="Center"
                        Style="{StaticResource CaptionText}" Margin="0,0,8,0" Text="debrid-link 使用量 --" />
-            <ProgressBar x:Name="UsageBar" Grid.Column="6" Height="10" VerticalAlignment="Center" />
+            <ProgressBar x:Name="UsageBar" Grid.Column="7" Height="10" VerticalAlignment="Center" />
         </Grid>
 
         <!-- 下载列表（两级树：番号 -> 分卷文件） -->

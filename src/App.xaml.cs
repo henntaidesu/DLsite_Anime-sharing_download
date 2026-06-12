@@ -14,5 +14,14 @@ public partial class App : Application
         // 设置中开启了自动下载时，随程序启动下载线程；否则由下载页"开始下载"按钮启动
         if (AppConfig.AutoDownload)
             DownloadEngine.Start();
+        // 设置中开启了外部访问时，随程序启动内嵌 Web 服务
+        if (AppConfig.WebEnabled)
+            WebServer.StartFromConfig();
+    }
+
+    protected override void OnExit(ExitEventArgs e)
+    {
+        WebServer.Stop();
+        base.OnExit(e);
     }
 }

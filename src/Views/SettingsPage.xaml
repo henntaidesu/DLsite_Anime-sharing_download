@@ -75,6 +75,25 @@
                 </StackPanel>
             </GroupBox>
 
+            <!-- 外部访问 -->
+            <GroupBox x:Name="WebGroup" Header="外部访问">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,4">
+                        <TextBlock x:Name="WebEnableLabel" Text="外部访问" Style="{StaticResource FieldLabel}" />
+                        <ComboBox x:Name="WebEnableCombo" Width="120"
+                                  SelectionChanged="WebEnableCombo_SelectionChanged" />
+                        <TextBlock x:Name="WebPortLabel" Text="端口" Style="{StaticResource FieldLabel}"
+                                   MinWidth="0" Margin="24,0,12,0" />
+                        <TextBox x:Name="WebPortBox" Width="90" LostFocus="WebPortBox_LostFocus" />
+                        <TextBlock x:Name="WebPasswordLabel" Text="访问密码" Style="{StaticResource FieldLabel}"
+                                   MinWidth="0" Margin="24,0,12,0" />
+                        <TextBox x:Name="WebPasswordBox" Width="160" LostFocus="WebPasswordBox_LostFocus" />
+                    </StackPanel>
+                    <TextBlock x:Name="WebStatusLabel" Margin="0,6,0,0"
+                               Foreground="{StaticResource CaptionBrush}" TextWrapping="Wrap" />
+                </StackPanel>
+            </GroupBox>
+
             <!-- 系统 -->
             <GroupBox x:Name="SystemGroup" Header="系统">
                 <StackPanel Orientation="Horizontal" Margin="0,4">

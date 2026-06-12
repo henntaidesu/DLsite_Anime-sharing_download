@@ -81,19 +81,28 @@ public partial class MediaLibPage : UserControl
     private double _worksScrollPos;
     private MediaLibSettingDialog? _settingDialog;
 
-    // 作品视图数据：全部查询结果 / 搜索过滤后的结果（懒加载来源）
-    private List<object?[]> _workRows = [];
-    private List<object?[]> _filteredRows = [];
-    private int _loadedCards;
+    // 搜索作用域：分组层级（媒体库首页/社团页）输入关键字时改为在当前作用域内按 RJ号/作品名 搜索作品
+    private bool _searchMode;        // 当前是否处于作品搜索结果视图
+    private bool _detailFromSearch;  // 当前详情是否由搜索结果打开（返回时回到搜索结果）
+    private string _searchLevel = "libs";  // 进入详情前所处的搜索层级（libs/makers）
 
-    // 详情页右侧 信息/文件树 切换
-    private Grid? _detailRightHost;
-    private FrameworkElement? _detailInfoPanel;
-    private FrameworkElement? _detailFileTree;
-    private bool _showingFileTree;
+    // 所有卡片层级统一的懒加载来源：每项携带一个延迟构建器与搜索过滤键
+    private sealed record GridCard(Func<Border> Build, string FilterKey);
+    private List<GridCard> _gridCards = [];   // 当前层级全部卡片
+    private List<GridCard> _shownCards = [];  // 搜索过滤后的卡片
+    private int _loadedCards;                 // 已渲染数量
+    private bool _workLevelCount;             // 计数文案样式：true=作品卡，false=分组卡
+    private string _countUnit = "";           // 分组卡层级的单位文案（个社团/个媒体库/…）
 
-    // 文件列表视图：左侧轮播图（限高基准）/ 整页预览状态
-    private FrameworkElement? _detailSlider;
+    // 排序状态：社团页按作品数，作品页按发售日（详见 MakerSortOptions / WorkSortOptions）
+    private int _makerSort;   // 0=作品数↓ 1=作品数↑ 2=社团名
+    private int _workSort;    // 0=发售日↓ 1=发售日↑ 2=RJ号↓ 3=RJ号↑
+    private bool _suppressSort;  // 重填 SortBox 时抑制 SelectionChanged
+
+    // 文件树作为独立页面显示，记录其所属作品文件夹（用于语言切换/重新可见时重建）
+    private string? _treeFolder;
+
+    // 整页预览状态
     private InlineMediaPlayer? _inlinePlayer;
     private List<string> _previewImages = [];
     private int _previewIndex;
@@ -128,9 +137,9 @@ public partial class MediaLibPage : UserControl
         BackButton.Content = I18n.Tr("← 返回");
         LibSettingButton.Content = I18n.Tr("媒体库设置");
         OpenFolderButton.Content = I18n.Tr("打开文件夹");
-        ViewFilesButton.Content = I18n.Tr(_showingFileTree ? "作品信息" : "查看作品");
+        ViewFilesButton.Content = I18n.Tr("查看作品");
         MoveLibButton.Content = I18n.Tr("移动媒体库");
-        SearchBox.ToolTip = I18n.Tr("搜索 RJ号 / 作品名 / 社团");
+        SearchBox.ToolTip = I18n.Tr("搜索 RJ号 / 作品名");
         PreviewCloseButton.Content = I18n.Tr("← 返回");
         PreviewPrevButton.Content = "‹ " + I18n.Tr("上一张");
         PreviewNextButton.Content = I18n.Tr("下一张") + " ›";
@@ -152,12 +161,23 @@ public partial class MediaLibPage : UserControl
     {
         switch (_level)
         {
+            case "filetree":
+                ShowDetail();   // 文件树页返回作品详情
+                break;
             case "filtered_works":
                 ShowDetail();
                 break;
             case "detail":
                 _currentWork = null;
-                if (_root == MediaLibRoot.Favorite)
+                if (_detailFromSearch)
+                {
+                    // 由搜索结果进入：恢复搜索层级并按搜索框内容重跑作用域搜索
+                    _detailFromSearch = false;
+                    _level = _searchLevel;
+                    ApplyCardFilter();
+                    RestoreWorksScroll();
+                }
+                else if (_root == MediaLibRoot.Favorite)
                 {
                     ShowFavorites();
                     RestoreWorksScroll();
@@ -219,8 +239,9 @@ public partial class MediaLibPage : UserControl
 
     private void UpdateReadFavButtons()
     {
-        ReadButton.Content = (_currentRead ? "★ " : "☆ ") + I18n.Tr("已读");
-        FavButton.Content = (_currentFav ? "♥ " : "♡ ") + I18n.Tr("收藏");
+        // 收藏/已读状态用 emoji 表示：已读 ⭐ / 未读 ☆（白色的星）；已收藏 ❤️ / 未收藏 🤍
+        ReadButton.Content = (_currentRead ? "⭐ " : "☆ ") + I18n.Tr("已读");
+        FavButton.Content = (_currentFav ? "❤️ " : "🤍 ") + I18n.Tr("收藏");
     }
 
     private void LibSettingButton_Click(object sender, RoutedEventArgs e)
@@ -293,25 +314,11 @@ public partial class MediaLibPage : UserControl
 
     private void ViewFilesButton_Click(object sender, RoutedEventArgs e)
     {
-        // 详情页右侧在"信息面板"与"文件树"之间切换
-        if (_detailRightHost == null || _currentWorkFolder == null)
+        // "查看作品"：从详情页再跳转到独立的文件树页面（等同卡片跳详情的二次页面跳转）
+        if (_currentWorkFolder == null)
             return;
-        if (!_showingFileTree)
-        {
-            _detailFileTree ??= BuildFileTree(_currentWorkFolder);  // 首次切换时才构建文件树
-            _detailRightHost.Children.Clear();
-            _detailRightHost.Children.Add(_detailFileTree);
-            _showingFileTree = true;
-            ViewFilesButton.Content = I18n.Tr("作品信息");
-        }
-        else
-        {
-            _detailRightHost.Children.Clear();
-            if (_detailInfoPanel != null)
-                _detailRightHost.Children.Add(_detailInfoPanel);
-            _showingFileTree = false;
-            ViewFilesButton.Content = I18n.Tr("查看作品");
-        }
+        _treeFolder = _currentWorkFolder;
+        ShowFileTree();
     }
 
     public void Refresh()
@@ -320,6 +327,8 @@ public partial class MediaLibPage : UserControl
         var names = AppConfig.ReadMediaLibs().Select(l => l.Name).ToHashSet();
         if (_currentLib != null && !names.Contains(_currentLib))
             ShowRoot();  // 当前库已被删除/改名，回到根视图
+        else if (_level == "filetree" && _treeFolder != null && Directory.Exists(_treeFolder))
+            ShowFileTree();
         else if (_level == "filtered_works" && _filterCol != null)
             ShowFilteredWorks();
         else if (_level == "detail" && _currentWork != null)
@@ -370,14 +379,13 @@ public partial class MediaLibPage : UserControl
         MoveLibButton.Visibility = Visibility.Collapsed;
         ReadButton.Visibility = Visibility.Collapsed;
         FavButton.Visibility = Visibility.Collapsed;
-        LibSettingButton.Visibility = Visibility.Collapsed;  // 仅媒体库首页显示，由 ShowLibs 重新打开
-        _detailRightHost = null;
-        _detailInfoPanel = null;
-        _detailFileTree = null;
-        _showingFileTree = false;
+        LibSettingButton.Visibility = Visibility.Collapsed;  // 仅媒体库首页显示，由 ApplyCardFilter 重新打开
+        SortBox.Visibility = Visibility.Collapsed;            // 仅社团页/作品页显示，由 ApplyCardFilter 重新打开
+        SearchBox.Visibility = Visibility.Visible;           // 默认显示搜索框，详情页由 ShowDetail 隐藏
+        RjLabel.Visibility = Visibility.Collapsed;           // RJ 号仅详情页显示
+        RjLabel.Inlines.Clear();
         _currentWorkFolder = null;
         ClosePreview();
-        _detailSlider = null;
     }
 
     private Border MakeClickCard(string title, string caption, Action onClick)
@@ -411,7 +419,6 @@ public partial class MediaLibPage : UserControl
         _level = "libs";
         _currentLib = null;
         _currentMaker = null;
-        BackButton.Visibility = Visibility.Collapsed;
         var counts = new Dictionary<string, long>();
         var rows = Db.Select(
             "SELECT \"library\", COUNT(*) FROM \"works\" WHERE \"state\" = '已品悦' GROUP BY \"library\"");
@@ -419,67 +426,68 @@ public partial class MediaLibPage : UserControl
             foreach (var row in rows)
                 counts[row[0] as string ?? ""] = Convert.ToInt64(row[1]);
         _totalWorks = (int)counts.Values.Sum();
-        ClearCards();
-        LibSettingButton.Visibility = Visibility.Visible;  // 媒体库设置仅在媒体库首页显示
-        foreach (var lib in AppConfig.ReadMediaLibs())
+        _workLevelCount = false;
+        _countUnit = I18n.Tr("个媒体库");
+        _gridCards = AppConfig.ReadMediaLibs().Select(lib =>
         {
             var name = lib.Name;
             var caption = I18n.Format(I18n.Tr("{works} 个作品 · {folders} 个文件夹"),
                 ("works", counts.GetValueOrDefault(name)), ("folders", lib.Folders.Count));
-            _cardsPanel.Children.Add(MakeClickCard(name, caption, () =>
+            return new GridCard(() => MakeClickCard(name, caption, () =>
             {
                 _currentLib = name;
                 _currentMaker = null;
                 _currentGenre = null;
                 ShowMakers();
-            }));
-        }
+            }), name.ToLowerInvariant());
+        }).ToList();
         ApplyCardFilter();
     }
 
-    /// <summary>二级：当前媒体库（或当前标签）下的社团卡片。</summary>
+    /// <summary>二级：当前媒体库（或当前标签）下的社团卡片，懒加载，可按作品数/社团名排序。</summary>
     private void ShowMakers()
     {
         _level = "makers";
         _currentMaker = null;
-        BackButton.Visibility = Visibility.Visible;
         List<object?[]>? rows;
         if (_currentGenre != null)
             rows = Db.Select(
                 "SELECT w.\"maker_name\", COUNT(*) FROM \"works\" w " +
                 "JOIN \"work_genres\" g ON g.\"work_id\" = w.\"work_id\" " +
                 "WHERE w.\"state\" = '已品悦' AND g.\"genre\" = @g " +
-                "GROUP BY w.\"maker_name\" ORDER BY COUNT(*) DESC",
+                "GROUP BY w.\"maker_name\" " + MakerOrderClause("w."),
                 ("@g", _currentGenre));
         else if (_currentType != null)
             rows = Db.Select(
                 "SELECT \"maker_name\", COUNT(*) FROM \"works\" " +
                 "WHERE \"state\" = '已品悦' AND \"work_type\" = @t " +
-                "GROUP BY \"maker_name\" ORDER BY COUNT(*) DESC",
+                "GROUP BY \"maker_name\" " + MakerOrderClause(),
                 ("@t", _currentType));
         else
             rows = Db.Select(
                 "SELECT \"maker_name\", COUNT(*) FROM \"works\" " +
                 "WHERE \"state\" = '已品悦' AND \"library\" = @lib " +
-                "GROUP BY \"maker_name\" ORDER BY COUNT(*) DESC",
+                "GROUP BY \"maker_name\" " + MakerOrderClause(),
                 ("@lib", _currentLib ?? ""));
         if (rows == null)
             return;
         _totalWorks = (int)rows.Sum(r => Convert.ToInt64(r[1]));
-        ClearCards();
-        foreach (var row in rows)
+        _workLevelCount = false;
+        _countUnit = I18n.Tr("个社团");
+        _gridCards = rows.Select(row =>
         {
             var maker = row[0] as string ?? "";
             var count = Convert.ToInt64(row[1]);
             var title = maker.Length > 0 ? maker : I18n.Tr("未知社团");
-            _cardsPanel.Children.Add(MakeClickCard(
+            return new GridCard(() => MakeClickCard(
                 title, I18n.Format(I18n.Tr("{count} 个作品"), ("count", count)),
                 () =>
                 {
                     _currentMaker = maker.Length > 0 ? maker : UnknownMaker;
                     ShowWorks();
-                }));
-        }
+                }), title.ToLowerInvariant());
+        }).ToList();
+        PopulateSortBox(MakerSortOptions, _makerSort);
         ApplyCardFilter();
     }
 
@@ -487,7 +495,6 @@ public partial class MediaLibPage : UserControl
     private void ShowGenres()
     {
         _level = "genres";
-        BackButton.Visibility = _root == MediaLibRoot.Genre ? Visibility.Collapsed : Visibility.Visible;
         var rows = Db.Select(
             "SELECT g.\"genre\", COUNT(*) FROM \"work_genres\" g " +
             "JOIN \"works\" w ON w.\"work_id\" = g.\"work_id\" " +
@@ -498,15 +505,16 @@ public partial class MediaLibPage : UserControl
             "SELECT COUNT(DISTINCT g.\"work_id\") FROM \"work_genres\" g " +
             "JOIN \"works\" w ON w.\"work_id\" = g.\"work_id\" WHERE w.\"state\" = '已品悦'");
         _totalWorks = total != null ? (int)Convert.ToInt64(total) : 0;
-        ClearCards();
-        foreach (var row in rows)
+        _workLevelCount = false;
+        _countUnit = I18n.Tr("个标签");
+        _gridCards = rows.Select(row =>
         {
             var genre = row[0] as string ?? "";
             var count = Convert.ToInt64(row[1]);
-            _cardsPanel.Children.Add(MakeClickCard(
+            return new GridCard(() => MakeClickCard(
                 genre, I18n.Format(I18n.Tr("{count} 个作品"), ("count", count)),
-                () => OpenGenre(genre)));
-        }
+                () => OpenGenre(genre)), genre.ToLowerInvariant());
+        }).ToList();
         ApplyCardFilter();
     }
 
@@ -520,7 +528,6 @@ public partial class MediaLibPage : UserControl
     private void ShowTypes()
     {
         _level = "types";
-        BackButton.Visibility = _root == MediaLibRoot.WorkType ? Visibility.Collapsed : Visibility.Visible;
         var rows = Db.Select(
             "SELECT \"work_type\", COUNT(*) FROM \"works\" " +
             "WHERE \"state\" = '已品悦' AND \"work_type\" IS NOT NULL AND \"work_type\" <> '' " +
@@ -528,15 +535,16 @@ public partial class MediaLibPage : UserControl
         if (rows == null)
             return;
         _totalWorks = (int)rows.Sum(r => Convert.ToInt64(r[1]));
-        ClearCards();
-        foreach (var row in rows)
+        _workLevelCount = false;
+        _countUnit = I18n.Tr("个形式");
+        _gridCards = rows.Select(row =>
         {
             var type = row[0] as string ?? "";
             var count = Convert.ToInt64(row[1]);
-            _cardsPanel.Children.Add(MakeClickCard(
+            return new GridCard(() => MakeClickCard(
                 type, I18n.Format(I18n.Tr("{count} 个作品"), ("count", count)),
-                () => OpenType(type)));
-        }
+                () => OpenType(type)), type.ToLowerInvariant());
+        }).ToList();
         ApplyCardFilter();
     }
 
@@ -549,11 +557,10 @@ public partial class MediaLibPage : UserControl
         ShowMakers();
     }
 
-    /// <summary>三级：当前社团的作品卡片（标签流程下为 标签+社团）。</summary>
+    /// <summary>三级：当前社团的作品卡片（标签流程下为 标签+社团），默认按发售日由新到旧。</summary>
     private void ShowWorks()
     {
         _level = "works";
-        BackButton.Visibility = Visibility.Visible;
         List<object?[]>? rows;
         var makerCond = _currentMaker == UnknownMaker
             ? "(\"maker_name\" IS NULL OR \"maker_name\" = '')"
@@ -564,43 +571,38 @@ public partial class MediaLibPage : UserControl
                 "w.\"age_category\", w.\"cover\" FROM \"works\" w " +
                 "JOIN \"work_genres\" g ON g.\"work_id\" = w.\"work_id\" " +
                 $"WHERE w.\"state\" = '已品悦' AND g.\"genre\" = @g AND {makerCond.Replace("\"maker_name\"", "w.\"maker_name\"")} " +
-                "ORDER BY w.\"work_id\" DESC",
+                WorkOrderClause("w."),
                 ("@g", _currentGenre), ("@maker", _currentMaker ?? ""));
         else if (_currentType != null)
             rows = Db.Select(
                 "SELECT \"work_id\", \"work_name\", \"maker_name\", \"work_type\", \"age_category\", \"cover\" " +
                 $"FROM \"works\" WHERE \"state\" = '已品悦' AND \"work_type\" = @t AND {makerCond} " +
-                "ORDER BY \"work_id\" DESC",
+                WorkOrderClause(),
                 ("@t", _currentType), ("@maker", _currentMaker ?? ""));
         else
             rows = Db.Select(
                 "SELECT \"work_id\", \"work_name\", \"maker_name\", \"work_type\", \"age_category\", \"cover\" " +
                 $"FROM \"works\" WHERE \"state\" = '已品悦' AND \"library\" = @lib AND {makerCond} " +
-                "ORDER BY \"work_id\" DESC",
+                WorkOrderClause(),
                 ("@lib", _currentLib ?? ""), ("@maker", _currentMaker ?? ""));
-        if (rows == null)
-            return;
-        _workRows = rows;
-        ApplyCardFilter();
+        if (rows != null)
+            SetWorkCards(rows);
     }
 
     /// <summary>按单列值过滤的作品视图（跨所有媒体库），由详情页可点击字段触发。</summary>
     private void ShowFilteredWorks()
     {
         _level = "filtered_works";
-        BackButton.Visibility = Visibility.Visible;
         var cond = _filterCol == "voice_actor"
             ? "\"voice_actor\" LIKE @val"
             : $"\"{_filterCol}\" = @val";
         var value = _filterCol == "voice_actor" ? $"%{_filterVal}%" : _filterVal;
         var rows = Db.Select(
             "SELECT \"work_id\", \"work_name\", \"maker_name\", \"work_type\", \"age_category\", \"cover\" " +
-            $"FROM \"works\" WHERE \"state\" = '已品悦' AND {cond} ORDER BY \"work_id\" DESC",
+            $"FROM \"works\" WHERE \"state\" = '已品悦' AND {cond} " + WorkOrderClause(),
             ("@val", value));
-        if (rows == null)
-            return;
-        _workRows = rows;
-        ApplyCardFilter();
+        if (rows != null)
+            SetWorkCards(rows);
     }
 
     private void OpenFilter(string column, string value)
@@ -615,14 +617,95 @@ public partial class MediaLibPage : UserControl
     {
         _level = "favorites";
         _currentMaker = null;
-        BackButton.Visibility = Visibility.Collapsed;
         var rows = Db.Select(
             "SELECT \"work_id\", \"work_name\", \"maker_name\", \"work_type\", \"age_category\", \"cover\" " +
-            "FROM \"works\" WHERE \"favorite\" = '1' ORDER BY \"work_id\" DESC");
-        if (rows == null)
-            return;
-        _workRows = rows;
+            "FROM \"works\" WHERE \"favorite\" = '1' " + WorkOrderClause());
+        if (rows != null)
+            SetWorkCards(rows);
+    }
+
+    /// <summary>作品卡层级共用：把查询结果转成懒加载卡片项并刷新 SortBox。</summary>
+    private void SetWorkCards(List<object?[]> rows)
+    {
+        _workLevelCount = true;
+        _gridCards = rows.Select(row => new GridCard(
+            () => MakeWorkCard(row),
+            $"{row[0]} {row[1]} {row[2]}".ToLowerInvariant())).ToList();
+        PopulateSortBox(WorkSortOptions, _workSort);
         ApplyCardFilter();
+    }
+
+    // ---------- 排序 ----------
+
+    private string[] MakerSortOptions =>
+    [
+        I18n.Tr("作品数 多→少"), I18n.Tr("作品数 少→多"), I18n.Tr("社团名 A→Z"),
+    ];
+
+    private string[] WorkSortOptions =>
+    [
+        I18n.Tr("发售日 新→旧"), I18n.Tr("发售日 旧→新"), I18n.Tr("RJ号 新→旧"), I18n.Tr("RJ号 旧→新"),
+    ];
+
+    /// <summary>社团排序的 ORDER BY 子句；prefix 为表别名（标签流程下为 "w."）。</summary>
+    private string MakerOrderClause(string prefix = "") => _makerSort switch
+    {
+        1 => "ORDER BY COUNT(*) ASC",
+        2 => $"ORDER BY {prefix}\"maker_name\" COLLATE NOCASE ASC",
+        _ => "ORDER BY COUNT(*) DESC",
+    };
+
+    /// <summary>作品排序的 ORDER BY 子句；prefix 为表别名（标签流程下为 "w."）。</summary>
+    private string WorkOrderClause(string prefix = "") => _workSort switch
+    {
+        1 => $"ORDER BY {prefix}\"sell_date\" ASC",
+        2 => $"ORDER BY {prefix}\"work_id\" DESC",
+        3 => $"ORDER BY {prefix}\"work_id\" ASC",
+        _ => $"ORDER BY {prefix}\"sell_date\" DESC",
+    };
+
+    /// <summary>用指定选项重填 SortBox 并选中当前排序，抑制由此触发的事件。</summary>
+    private void PopulateSortBox(string[] options, int selected)
+    {
+        _suppressSort = true;
+        SortBox.Items.Clear();
+        foreach (var option in options)
+            SortBox.Items.Add(new ComboBoxItem { Content = option });
+        SortBox.SelectedIndex = Math.Min(Math.Max(selected, 0), options.Length - 1);
+        _suppressSort = false;
+    }
+
+    private void SortBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressSort || SortBox.SelectedIndex < 0)
+            return;
+        var idx = SortBox.SelectedIndex;
+        if (_searchMode)
+        {
+            // 搜索结果按作品排序重排：直接重跑作用域搜索
+            _workSort = idx;
+            ApplyCardFilter();
+            return;
+        }
+        switch (_level)
+        {
+            case "makers":
+                _makerSort = idx;
+                ShowMakers();
+                break;
+            case "works":
+                _workSort = idx;
+                ShowWorks();
+                break;
+            case "filtered_works":
+                _workSort = idx;
+                ShowFilteredWorks();
+                break;
+            case "favorites":
+                _workSort = idx;
+                ShowFavorites();
+                break;
+        }
     }
 
     // ---------- 过滤与懒加载 ----------
@@ -633,63 +716,130 @@ public partial class MediaLibPage : UserControl
     {
         if (_level == "detail")
             return;
-        var keyword = SearchBox.Text.Trim().ToLowerInvariant();
-        if (_level is "works" or "filtered_works" or "favorites")
+        var keyword = SearchBox.Text.Trim();
+        // 分组层级（媒体库首页 / 社团页）输入关键字时，改为在当前作用域内按 RJ号/作品名 搜索作品
+        if (keyword.Length > 0 && _level is "libs" or "makers")
         {
-            // 作品视图：在全量查询结果上过滤，再懒加载
-            _filteredRows = keyword.Length == 0
-                ? _workRows.ToList()
-                : _workRows.Where(r =>
-                    $"{r[0]} {r[1]} {r[2]}".ToLowerInvariant().Contains(keyword)).ToList();
-            ClearCards();
-            // 收藏夹是其根视图，不显示返回按钮；作品/过滤视图为下钻视图，显示返回
-            BackButton.Visibility = _level == "favorites" ? Visibility.Collapsed : Visibility.Visible;
-            _loadedCards = 0;
-            LoadMoreWorks();
+            ShowScopedSearch(keyword);
             return;
         }
-        var shown = 0;
-        var totalCards = 0;
-        foreach (var child in _cardsPanel.Children.OfType<Border>())
-        {
-            totalCards++;
-            var visible = keyword.Length == 0 ||
-                          (child.Tag as string ?? "").Contains(keyword);
-            child.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
-            if (visible)
-                shown++;
-        }
-        var unit = I18n.Tr(_level switch
-        {
-            "makers" => "个社团",
-            "genres" => "个标签",
-            "types" => "个形式",
-            _ => "个媒体库",
-        });
-        CountLabel.Text = keyword.Length > 0
-            ? I18n.Format(I18n.Tr("共 {total} {unit}，匹配 {shown} 个"),
-                ("total", totalCards), ("unit", unit), ("shown", shown))
-            : I18n.Format(I18n.Tr("共 {total} {unit}，{works} 个作品"),
-                ("total", totalCards), ("unit", unit), ("works", _totalWorks));
+        _searchMode = false;
+        // 其余层级（作品卡 / 标签 / 形式）：在全量卡片项上按关键字过滤，再分批懒加载
+        var key = keyword.ToLowerInvariant();
+        _shownCards = key.Length == 0
+            ? _gridCards.ToList()
+            : _gridCards.Where(c => c.FilterKey.Contains(key)).ToList();
+        ClearCards();   // 统一关闭详情/设置按钮并清空面板
+        BackButton.Visibility = ShouldShowBack() ? Visibility.Visible : Visibility.Collapsed;
+        if (_level == "libs")
+            LibSettingButton.Visibility = Visibility.Visible;  // 媒体库设置仅在媒体库首页显示
+        SortBox.Visibility = _level is "makers" or "works" or "filtered_works" or "favorites"
+            ? Visibility.Visible : Visibility.Collapsed;
+        _loadedCards = 0;
+        LoadMoreCards();
     }
 
-    /// <summary>作品视图：追加加载下一批卡片。</summary>
-    private void LoadMoreWorks()
+    /// <summary>
+    /// 作用域搜索：在当前层级对应的范围内按 RJ号/作品名 搜索作品并平铺为作品卡。
+    /// 媒体库首页搜全部库；进入某媒体库后限当前库；标签/形式下的社团页限对应分组。
+    /// 不改动 _gridCards，清空搜索框后即可回到原分组视图。
+    /// </summary>
+    private void ShowScopedSearch(string keyword)
     {
-        var batch = _filteredRows.Skip(_loadedCards).Take(WorksPageSize).ToList();
-        foreach (var row in batch)
-            _cardsPanel.Children.Add(MakeWorkCard(row));
-        _loadedCards += batch.Count;
+        _searchMode = true;
+        var conds = new List<string> { "\"state\" = '已品悦'", "(\"work_id\" LIKE @kw OR \"work_name\" LIKE @kw)" };
+        var pars = new List<(string, object?)> { ("@kw", $"%{keyword}%") };
+        var join = "";
+        if (_level == "makers")
+        {
+            if (_currentGenre != null)
+            {
+                join = "JOIN \"work_genres\" g ON g.\"work_id\" = \"works\".\"work_id\" ";
+                conds.Add("g.\"genre\" = @g");
+                pars.Add(("@g", _currentGenre));
+            }
+            else if (_currentType != null)
+            {
+                conds.Add("\"work_type\" = @t");
+                pars.Add(("@t", _currentType));
+            }
+            else
+            {
+                conds.Add("\"library\" = @lib");
+                pars.Add(("@lib", _currentLib ?? ""));
+            }
+        }
+        var rows = Db.Select(
+            "SELECT \"works\".\"work_id\", \"works\".\"work_name\", \"works\".\"maker_name\", " +
+            "\"works\".\"work_type\", \"works\".\"age_category\", \"works\".\"cover\" FROM \"works\" " +
+            join + "WHERE " + string.Join(" AND ", conds) + " " + WorkOrderClause("\"works\"."),
+            pars.ToArray()) ?? [];
 
+        _workLevelCount = true;
+        _shownCards = rows.Select(row => new GridCard(
+            () => MakeWorkCard(row),
+            $"{row[0]} {row[1]} {row[2]}".ToLowerInvariant())).ToList();
+        PopulateSortBox(WorkSortOptions, _workSort);
+        ClearCards();
+        BackButton.Visibility = ShouldShowBack() ? Visibility.Visible : Visibility.Collapsed;
+        SortBox.Visibility = Visibility.Visible;
+        _loadedCards = 0;
+        LoadMoreCards();
+    }
+
+    /// <summary>返回按钮在当前层级是否显示（根视图层级不显示）。</summary>
+    private bool ShouldShowBack() => _level switch
+    {
+        "libs" => false,
+        "favorites" => false,
+        "genres" => _root != MediaLibRoot.Genre,
+        "types" => _root != MediaLibRoot.WorkType,
+        _ => true,
+    };
+
+    /// <summary>追加渲染下一批卡片（构建器在此刻才真正生成可视化元素）。</summary>
+    private void LoadMoreCards()
+    {
+        var batch = _shownCards.Skip(_loadedCards).Take(WorksPageSize).ToList();
+        foreach (var card in batch)
+            _cardsPanel.Children.Add(card.Build());
+        _loadedCards += batch.Count;
+        UpdateGridCountLabel();
+    }
+
+    /// <summary>刷新计数文案：作品卡显示作品总数+已加载，分组卡显示分组数+作品数。</summary>
+    private void UpdateGridCountLabel()
+    {
         var keyword = SearchBox.Text.Trim();
-        var total = _workRows.Count;
-        var matched = _filteredRows.Count;
-        var text = keyword.Length > 0
-            ? I18n.Format(I18n.Tr("共 {total} 个作品，匹配 {matched} 个"), ("total", total), ("matched", matched))
-            : I18n.Format(I18n.Tr("共 {total} 个作品"), ("total", total));
-        if (_loadedCards < matched)
-            text += I18n.Format(I18n.Tr("（已加载 {loaded}）"), ("loaded", _loadedCards));
-        CountLabel.Text = text;
+        if (_searchMode)
+        {
+            // 作用域搜索：仅统计命中的作品数
+            var matched = _shownCards.Count;
+            var text = I18n.Format(I18n.Tr("搜索到 {count} 个作品"), ("count", matched));
+            if (_loadedCards < matched)
+                text += I18n.Format(I18n.Tr("（已加载 {loaded}）"), ("loaded", _loadedCards));
+            CountLabel.Text = text;
+            return;
+        }
+        var total = _gridCards.Count;
+        var shown = _shownCards.Count;
+        if (_workLevelCount)
+        {
+            var text = keyword.Length > 0
+                ? I18n.Format(I18n.Tr("共 {total} 个作品，匹配 {matched} 个"), ("total", total), ("matched", shown))
+                : I18n.Format(I18n.Tr("共 {total} 个作品"), ("total", total));
+            if (_loadedCards < shown)
+                text += I18n.Format(I18n.Tr("（已加载 {loaded}）"), ("loaded", _loadedCards));
+            CountLabel.Text = text;
+        }
+        else
+        {
+            CountLabel.Text = keyword.Length > 0
+                ? I18n.Format(I18n.Tr("共 {total} {unit}，匹配 {shown} 个"),
+                    ("total", total), ("unit", _countUnit), ("shown", shown))
+                : I18n.Format(I18n.Tr("共 {total} {unit}，{works} 个作品"),
+                    ("total", total), ("unit", _countUnit), ("works", _totalWorks));
+        }
     }
 
     private void CardsScroll_ScrollChanged(object sender, ScrollChangedEventArgs e)
@@ -697,11 +847,11 @@ public partial class MediaLibPage : UserControl
         // 视口宽度变化（窗口缩放 / 滚动条出现）时，按新宽度重排卡片以撑满整行
         if (e.ViewportWidthChange != 0)
             RelayoutCards();
-        // 滚动接近底部时加载下一批作品卡片
-        if (_level is not ("works" or "filtered_works" or "favorites") || _loadedCards >= _filteredRows.Count)
+        // 滚动接近底部时加载下一批卡片（所有卡片层级通用）
+        if (_level == "detail" || _loadedCards >= _shownCards.Count)
             return;
         if (e.VerticalOffset >= CardsScroll.ScrollableHeight - 300)
-            LoadMoreWorks();
+            LoadMoreCards();
     }
 
     /// <summary>按视口宽度计算卡片宽度：先求每行能放下的列数（按最小宽度），再让卡片均分整行宽度。</summary>
@@ -738,10 +888,10 @@ public partial class MediaLibPage : UserControl
         if (target <= 0)
             return;
         // 预加载直到内容高度能容纳目标滚动位置
-        while (_loadedCards < _filteredRows.Count &&
+        while (_loadedCards < _shownCards.Count &&
                _cardsPanel.ActualHeight < target + CardsScroll.ViewportHeight)
         {
-            LoadMoreWorks();
+            LoadMoreCards();
             _cardsPanel.UpdateLayout();
         }
         Dispatcher.BeginInvoke(() => CardsScroll.ScrollToVerticalOffset(target));
@@ -835,6 +985,9 @@ public partial class MediaLibPage : UserControl
         {
             _worksScrollPos = CardsScroll.VerticalOffset;
             _currentWork = workId;
+            // 记录是否从搜索结果进入详情，以便返回时回到同一搜索视图
+            _detailFromSearch = _searchMode;
+            _searchLevel = _level;
             ShowDetail();
         };
         return card;
@@ -859,8 +1012,20 @@ public partial class MediaLibPage : UserControl
 
         _level = "detail";
         BackButton.Visibility = Visibility.Visible;
-        CountLabel.Text = workId;
         ClearCards();
+        CountLabel.Text = "";
+        // 详情页不显示搜索框；RJ 号居左显示为可点击跳转 DLsite 作品页的超链接
+        SearchBox.Visibility = Visibility.Collapsed;
+        RjLabel.Inlines.Clear();
+        var rjLink = new Hyperlink(new Run(workId))
+        {
+            Foreground = (Brush)FindResource("AccentLightBrush"),
+            TextDecorations = null,
+        };
+        rjLink.Click += (_, _) => Process.Start(new ProcessStartInfo(
+            $"https://www.dlsite.com/maniax/work/=/product_id/{workId}.html") { UseShellExecute = true });
+        RjLabel.Inlines.Add(rjLink);
+        RjLabel.Visibility = Visibility.Visible;
         if (workFolder != null && Directory.Exists(workFolder))
         {
             _currentWorkFolder = workFolder;
@@ -949,7 +1114,6 @@ public partial class MediaLibPage : UserControl
 
         // 字段网格（带可点击链接）
         var infoPanel = BuildDetailFields(workId, r);
-        _detailInfoPanel = infoPanel;
 
         // 上半部分：左边轮播图（1/3），右边字段详情（2/3）
         var content = new Grid { Margin = new Thickness(0, 10, 0, 0) };
@@ -960,13 +1124,11 @@ public partial class MediaLibPage : UserControl
             var slider = new ImageSliderControl(sliderPaths) { VerticalAlignment = VerticalAlignment.Top };
             Grid.SetColumn(slider, 0);
             content.Children.Add(slider);
-            _detailSlider = slider;
         }
         var rightHost = new Grid { Margin = new Thickness(20, 0, 0, 0) };
         rightHost.Children.Add(infoPanel);
         Grid.SetColumn(rightHost, 1);
         content.Children.Add(rightHost);
-        _detailRightHost = rightHost;
         layout.Children.Add(content);
 
         // 正文：文本与图片按原文顺序嵌入
@@ -1139,75 +1301,51 @@ public partial class MediaLibPage : UserControl
         return tb;
     }
 
-    // ---------- 文件列表（仿下载页样式） ----------
+    // ---------- 文件树（独立页面，多级折叠列表） ----------
 
-    /// <summary>文件列表：每个顶层文件夹一张卡片（可展开/收起），整体高度不超过左侧轮播图。</summary>
-    private FrameworkElement BuildFileTree(string root)
+    private const double TreeIndentStep = 22;    // 每深一级的左缩进
+    private const double TreeRowBaseIndent = 8;  // 行基础左缩进
+    private static readonly FontFamily EmojiFont = new("Segoe UI Emoji");
+
+    /// <summary>"查看作品"独立页面：以多级折叠列表展示作品文件树（默认仅显示根目录文件，文件夹折叠）。</summary>
+    private void ShowFileTree()
     {
-        var list = new StackPanel();
-        string[] dirs = [], files = [];
-        try
+        var folder = _treeFolder;
+        if (folder == null || !Directory.Exists(folder))
         {
-            dirs = Directory.GetDirectories(root);
-            files = Directory.GetFiles(root);
+            ShowDetail();
+            return;
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-        }
+        _level = "filetree";
+        ClearCards();
+        BackButton.Visibility = Visibility.Visible;
+        SearchBox.Visibility = Visibility.Collapsed;   // 文件树页不需要搜索框
+        CountLabel.Text = "";
+        // 顶部居左显示当前作品 RJ 号
+        RjLabel.Inlines.Clear();
+        RjLabel.Inlines.Add(new Run(_currentWork ?? Path.GetFileName(folder)));
+        RjLabel.Visibility = Visibility.Visible;
+        // 恢复"打开文件夹"按钮（ClearCards 已置空 _currentWorkFolder）
+        _currentWorkFolder = folder;
+        OpenFolderButton.Visibility = Visibility.Visible;
 
-        // 根目录散文件合并为一张无标题卡片
-        var rootFiles = files.OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase).ToList();
-        if (rootFiles.Count > 0)
-        {
-            var card = new Border
+        var list = new StackPanel { Margin = new Thickness(0, 0, 0, 12) };
+        AddTreeLevel(list, folder, depth: 0, isRoot: true);
+        if (list.Children.Count == 0)
+            list.Children.Add(new TextBlock
             {
-                Style = (Style)FindResource("Card"),
-                Margin = new Thickness(0, 3, 0, 3),
-            };
-            var stack = new StackPanel();
-            foreach (var file in rootFiles)
-                stack.Children.Add(MakeFileRow(file));
-            card.Child = stack;
-            list.Children.Add(card);
-        }
-        foreach (var dir in dirs.OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase))
-            list.Children.Add(MakeFolderCard(dir));
-
-        var scroll = new ScrollViewer
-        {
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            Content = list,
-        };
-        // 限高：跟随左侧轮播图实际高度，内容超出时滚动
-        if (_detailSlider != null)
-            scroll.SetBinding(MaxHeightProperty,
-                new Binding(nameof(ActualHeight)) { Source = _detailSlider });
-        else
-            scroll.MaxHeight = 480;
-        return scroll;
+                Text = I18n.Tr("此作品文件夹为空"),
+                Style = (Style)FindResource("CaptionText"),
+                Margin = new Thickness(TreeRowBaseIndent, 8, 0, 0),
+            });
+        ContentHost.Content = list;
+        CardsScroll.ScrollToVerticalOffset(0);
     }
 
-    /// <summary>顶层文件夹卡片：标题行（▾ + 名称 + 项数）+ 缩进的子项列表，默认展开。</summary>
-    private Border MakeFolderCard(string dir)
+    /// <summary>递归填充某一层级：子文件夹（默认折叠）在前、文件在后；根目录排除 DataSource。</summary>
+    private void AddTreeLevel(StackPanel panel, string dir, int depth, bool isRoot)
     {
-        var card = new Border
-        {
-            Style = (Style)FindResource("Card"),
-            Margin = new Thickness(0, 3, 0, 3),
-        };
-        var stack = new StackPanel();
-        var children = new StackPanel { Margin = new Thickness(24, 4, 0, 0) };
-        PopulateEntries(children, dir);
-        stack.Children.Add(MakeFolderHeader(dir, children, expanded: true));
-        stack.Children.Add(children);
-        card.Child = stack;
-        return card;
-    }
-
-    /// <summary>递归填充目录内容：子文件夹在前（默认收起）、文件在后，各自按名称排序。</summary>
-    private void PopulateEntries(StackPanel panel, string dir)
-    {
-        string[] subDirs, files;
+        string[] subDirs = [], files = [];
         try
         {
             subDirs = Directory.GetDirectories(dir);
@@ -1217,33 +1355,52 @@ public partial class MediaLibPage : UserControl
         {
             return;
         }
-        foreach (var sub in subDirs.OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase))
+        var dirs = subDirs
+            .Where(d => !(isRoot && string.Equals(Path.GetFileName(d), DlsitePage.DataSourceDir,
+                StringComparison.OrdinalIgnoreCase)))
+            .OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase);
+        foreach (var sub in dirs)
         {
-            var children = new StackPanel { Margin = new Thickness(24, 0, 0, 0) };
-            PopulateEntries(children, sub);
-            panel.Children.Add(MakeFolderHeader(sub, children, expanded: false));
+            var children = new StackPanel { Visibility = Visibility.Collapsed };  // 默认折叠
+            AddTreeLevel(children, sub, depth + 1, false);
+            panel.Children.Add(MakeTreeFolderRow(sub, children, depth));
             panel.Children.Add(children);
         }
         foreach (var file in files.OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase))
-            panel.Children.Add(MakeFileRow(file));
+            panel.Children.Add(MakeTreeFileRow(file, depth));
     }
 
-    /// <summary>文件夹标题行：点击整行切换子项显示，箭头与下载页父行一致（▸/▾）。</summary>
-    private Grid MakeFolderHeader(string dir, StackPanel children, bool expanded)
+    /// <summary>文件夹行：箭头 + 📁 + 名称 + 项数，点击整行折叠/展开子级。</summary>
+    private Border MakeTreeFolderRow(string dir, StackPanel children, int depth)
     {
-        children.Visibility = expanded ? Visibility.Visible : Visibility.Collapsed;
-        var row = new Grid { Cursor = Cursors.Hand, Background = Brushes.Transparent };
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(24) });
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var row = new Border
+        {
+            Cursor = Cursors.Hand,
+            Background = Brushes.Transparent,
+            CornerRadius = new CornerRadius(6),
+            Padding = new Thickness(TreeRowBaseIndent + depth * TreeIndentStep, 7, 12, 7),
+            Margin = new Thickness(0, 1, 0, 1),
+        };
+        var grid = new Grid();
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(20) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
         var arrow = new TextBlock
         {
-            Text = expanded ? "▾" : "▸",
+            Text = "▸",
             Foreground = (Brush)FindResource("CaptionBrush"),
             VerticalAlignment = VerticalAlignment.Center,
         };
-        row.Children.Add(arrow);
+        grid.Children.Add(arrow);
+        var icon = new TextBlock
+        {
+            Text = "📁", FontFamily = EmojiFont,
+            Margin = new Thickness(0, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center,
+        };
+        Grid.SetColumn(icon, 1);
+        grid.Children.Add(icon);
         var name = new TextBlock
         {
             Text = Path.GetFileName(dir),
@@ -1251,8 +1408,8 @@ public partial class MediaLibPage : UserControl
             VerticalAlignment = VerticalAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis,
         };
-        Grid.SetColumn(name, 1);
-        row.Children.Add(name);
+        Grid.SetColumn(name, 2);
+        grid.Children.Add(name);
         var count = 0;
         try
         {
@@ -1265,10 +1422,12 @@ public partial class MediaLibPage : UserControl
         {
             Text = I18n.Format(I18n.Tr("{count} 项"), ("count", count)),
             Style = (Style)FindResource("CaptionText"),
+            Margin = new Thickness(12, 0, 0, 0),
             VerticalAlignment = VerticalAlignment.Center,
         };
-        Grid.SetColumn(countText, 2);
-        row.Children.Add(countText);
+        Grid.SetColumn(countText, 3);
+        grid.Children.Add(countText);
+        row.Child = grid;
 
         row.MouseLeftButtonUp += (_, _) =>
         {
@@ -1281,15 +1440,30 @@ public partial class MediaLibPage : UserControl
         return row;
     }
 
-    /// <summary>文件行：名称 + 大小。图片/视频单击整页预览；音频/其它双击交给播放器弹窗或系统程序。</summary>
-    private Grid MakeFileRow(string path)
+    /// <summary>文件行：类型图标 + 名称 + 大小。图片/视频单击整页预览；音频/其它双击打开。</summary>
+    private Border MakeTreeFileRow(string path, int depth)
     {
-        var row = new Grid { Margin = new Thickness(0, 2, 0, 2), Background = Brushes.Transparent };
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
         var ext = Path.GetExtension(path).ToLowerInvariant();
         var previewable = DlsitePage.ImageExts.Contains(ext) || VideoExts.Contains(ext);
+        var row = new Border
+        {
+            Background = Brushes.Transparent,
+            CornerRadius = new CornerRadius(6),
+            // 文件对齐到同级文件夹名（让出箭头列宽度）
+            Padding = new Thickness(TreeRowBaseIndent + depth * TreeIndentStep + 20, 5, 12, 5),
+            Margin = new Thickness(0, 1, 0, 1),
+        };
+        var grid = new Grid();
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        var icon = new TextBlock
+        {
+            Text = FileIcon(ext), FontFamily = EmojiFont,
+            Margin = new Thickness(0, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center,
+        };
+        grid.Children.Add(icon);
         var name = new TextBlock
         {
             Text = Path.GetFileName(path),
@@ -1297,7 +1471,8 @@ public partial class MediaLibPage : UserControl
             VerticalAlignment = VerticalAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis,
         };
-        row.Children.Add(name);
+        Grid.SetColumn(name, 1);
+        grid.Children.Add(name);
         long size = 0;
         try
         {
@@ -1313,8 +1488,9 @@ public partial class MediaLibPage : UserControl
             Margin = new Thickness(12, 0, 0, 0),
             VerticalAlignment = VerticalAlignment.Center,
         };
-        Grid.SetColumn(sizeText, 1);
-        row.Children.Add(sizeText);
+        Grid.SetColumn(sizeText, 2);
+        grid.Children.Add(sizeText);
+        row.Child = grid;
 
         if (previewable)
         {
@@ -1334,6 +1510,15 @@ public partial class MediaLibPage : UserControl
         row.MouseEnter += (_, _) => row.Background = RowHoverBrush;
         row.MouseLeave += (_, _) => row.Background = Brushes.Transparent;
         return row;
+    }
+
+    /// <summary>按扩展名选择文件类型图标。</summary>
+    private static string FileIcon(string ext)
+    {
+        if (DlsitePage.ImageExts.Contains(ext)) return "🖼️";
+        if (VideoExts.Contains(ext)) return "🎬";
+        if (AudioExts.Contains(ext)) return "🎵";
+        return "📄";
     }
 
     private static string FormatSize(long bytes) => bytes switch

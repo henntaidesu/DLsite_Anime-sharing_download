@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>DLsite 下载器</title>
+<style>
+  :root {
+    --bg: #1b1b1f; --surface: #26262b; --surface2: #2f2f36; --line: #3a3a42;
+    --text: #e8e8ea; --muted: #9a9aa3; --accent: #6aa3ff; --accent-dim: #4a78c0;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif; font-size: 15px; line-height: 1.5;
+  }
+  a { color: var(--accent); text-decoration: none; cursor: pointer; }
+  button { font-family: inherit; }
+
+  header {
+    position: sticky; top: 0; z-index: 30; background: rgba(27,27,31,.96);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 8px max(12px, env(safe-area-inset-left));
+  }
+  .topbar { display: flex; align-items: center; gap: 8px; max-width: 1200px; margin: 0 auto; flex-wrap: wrap; }
+  .icon-btn {
+    background: var(--surface2); border: 1px solid var(--line); color: var(--text);
+    border-radius: 8px; padding: 7px 12px; cursor: pointer; font-size: 14px; white-space: nowrap;
+  }
+  .icon-btn:hover { border-color: var(--accent-dim); }
+  .icon-btn:disabled { opacity: .5; cursor: default; }
+  .icon-btn[hidden] { display: none; }
+  .icon-btn.primary { background: var(--accent-dim); border-color: var(--accent-dim); color: #fff; }
+  .title { font-weight: 600; font-size: 16px; margin-right: auto;
+           overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+  .grow { flex: 1 1 140px; }
+  input, select {
+    background: var(--surface2); border: 1px solid var(--line); color: var(--text);
+    border-radius: 8px; padding: 7px 10px; font-size: 14px; outline: none; min-width: 0;
+  }
+  input:focus, select:focus { border-color: var(--accent); }
+
+  .tabs { display: flex; gap: 6px; overflow-x: auto; max-width: 1200px; margin: 6px auto 0; padding-bottom: 2px; }
+  .tab { padding: 6px 14px; border-radius: 999px; background: var(--surface);
+         border: 1px solid var(--line); cursor: pointer; white-space: nowrap; font-size: 14px; color: var(--muted); }
+  .tab.active { background: var(--accent-dim); color: #fff; border-color: var(--accent-dim); }
+
+  main { max-width: 1200px; margin: 0 auto; padding: 12px max(12px, env(safe-area-inset-left)) 40px; }
+  .count { color: var(--muted); font-size: 13px; margin: 4px 2px 12px; }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; align-items: center; }
+
+  .grid { display: grid; gap: 12px; }
+  .grid.cards { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  .grid.groups { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+          overflow: hidden; cursor: pointer; display: flex; flex-direction: column; transition: border-color .12s; }
+  .card:hover { border-color: var(--accent-dim); }
+  .group-card { padding: 14px; min-height: 92px; }
+  .group-card .gt { font-weight: 600; font-size: 15px; word-break: break-word; }
+  .group-card .gc { color: var(--muted); font-size: 13px; margin-top: 8px; }
+  .cover { position: relative; width: 100%; aspect-ratio: 4 / 3; background: #15151a; }
+  .cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .badge { position: absolute; top: 6px; padding: 1px 7px; border-radius: 6px;
+           background: rgba(0,0,0,.62); color: #f3f3f3; font-size: 11px; max-width: 70%;
+           overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .badge.rj { left: 6px; } .badge.type { right: 6px; }
+  .card .wt { padding: 8px 10px 10px; font-size: 13.5px; font-weight: 500;
+              display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+  .detail { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
+  .detail h1 { font-size: 20px; margin: 0 0 12px; }
+  .dtop { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr); gap: 18px; align-items: start; }
+  @media (max-width: 720px) { .dtop { grid-template-columns: 1fr; } }
+  .gallery img.main { width: 100%; border-radius: 8px; background: #15151a; cursor: zoom-in; display: block; }
+  .thumbs { display: flex; gap: 6px; overflow-x: auto; margin-top: 8px; }
+  .thumbs img { height: 54px; border-radius: 5px; cursor: pointer; opacity: .65; border: 2px solid transparent; }
+  .thumbs img.sel { opacity: 1; border-color: var(--accent); }
+  .fields { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; align-items: baseline; }
+  .fields .k { color: var(--muted); font-size: 13px; white-space: nowrap; }
+  .fields .v { word-break: break-word; }
+  .tag { display: inline-block; margin: 0 8px 4px 0; }
+  .actions { display: flex; gap: 8px; margin: 14px 0 4px; flex-wrap: wrap; }
+  .toggle { background: var(--surface2); border: 1px solid var(--line); color: var(--text);
+            border-radius: 8px; padding: 7px 14px; cursor: pointer; font-size: 14px; }
+  .toggle.on { background: var(--accent-dim); border-color: var(--accent-dim); color: #fff; }
+  .body { margin-top: 16px; }
+  .body p { white-space: pre-wrap; word-break: break-word; margin: 10px 0; }
+  .body img { max-width: 100%; border-radius: 8px; margin: 10px 0; display: block; cursor: zoom-in; }
+
+  /* 搜索 */
+  .res { display: flex; gap: 12px; background: var(--surface); border: 1px solid var(--line);
+         border-radius: var(--radius); padding: 12px; margin-bottom: 10px; cursor: pointer; }
+  .res:hover { border-color: var(--accent-dim); }
+  .res img { width: 120px; height: 90px; object-fit: cover; border-radius: 6px; background: #15151a; flex: none; }
+  .res .rt { font-weight: 600; margin-bottom: 4px; }
+  .res .rm { color: var(--muted); font-size: 12.5px; margin-bottom: 6px; }
+  .res .rs { color: var(--muted); font-size: 12.5px; white-space: pre-wrap;
+             display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+  .host { display: flex; align-items: center; gap: 12px; background: var(--surface);
+          border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; margin-bottom: 10px; }
+  .host.ok { cursor: pointer; } .host.ok:hover { border-color: var(--accent-dim); }
+  .host .hn { font-weight: 600; } .host .hc { color: var(--muted); font-size: 13px; }
+  .host .hs { margin-left: auto; font-size: 13px; }
+
+  /* 下载 */
+  .dl { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+        padding: 12px 14px; margin-bottom: 10px; }
+  .dl .row { display: flex; align-items: center; gap: 10px; }
+  .dl .rj { font-weight: 600; cursor: pointer; }
+  .dl .st { font-size: 13px; } .dl .sp { color: var(--muted); font-size: 12.5px; margin-left: auto; }
+  .bar { height: 6px; background: var(--surface2); border-radius: 4px; overflow: hidden; margin-top: 8px; }
+  .bar > i { display: block; height: 100%; background: var(--accent); border-radius: 4px; transition: width .3s; }
+  .children { margin-top: 10px; padding-left: 4px; display: none; }
+  .children.open { display: block; }
+  .frow { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 3px 0; color: var(--muted); }
+  .frow .fn { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .usage { margin-bottom: 12px; }
+  .usage .ut { font-size: 12.5px; color: var(--muted); margin-bottom: 4px; }
+
+  /* 已下载表 */
+  .dt { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  .dt th { text-align: left; color: var(--muted); font-weight: 500; padding: 8px 10px; cursor: pointer;
+           border-bottom: 1px solid var(--line); white-space: nowrap; position: sticky; top: 0; background: var(--bg); }
+  .dt td { padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  .dt tr:hover td { background: var(--surface); }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; }
+  .mini { background: var(--surface2); border: 1px solid var(--line); color: var(--text);
+          border-radius: 6px; padding: 3px 8px; font-size: 12px; cursor: pointer; }
+  @media (max-width: 640px) { .dt .hide-sm { display: none; } }
+
+  /* 设置 */
+  .sec { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+         padding: 14px 16px; margin-bottom: 14px; }
+  .sec h3 { margin: 0 0 12px; font-size: 15px; }
+  .frm { display: grid; grid-template-columns: 140px 1fr; gap: 10px 14px; align-items: center; }
+  @media (max-width: 560px) { .frm { grid-template-columns: 1fr; gap: 4px 0; } .frm label { margin-top: 8px; } }
+  .frm label { color: var(--muted); font-size: 13.5px; }
+  .frm input, .frm select { width: 100%; }
+  .frm .ro { color: var(--muted); font-size: 13px; word-break: break-all; }
+  .note { color: var(--muted); font-size: 12.5px; margin-top: 8px; }
+
+  .lightbox { position: fixed; inset: 0; background: rgba(0,0,0,.93); z-index: 60;
+              display: none; align-items: center; justify-content: center; }
+  .lightbox.show { display: flex; }
+  .lightbox img { max-width: 96vw; max-height: 90vh; object-fit: contain; }
+  .lb-btn { position: absolute; background: rgba(255,255,255,.1); border: none; color: #fff;
+            font-size: 30px; padding: 10px 18px; cursor: pointer; border-radius: 8px; user-select: none; }
+  .lb-prev { left: 12px; } .lb-next { right: 12px; } .lb-close { top: 12px; right: 12px; font-size: 22px; padding: 6px 14px; }
+
+  .login { position: fixed; inset: 0; background: var(--bg); z-index: 80;
+           display: none; align-items: center; justify-content: center; padding: 20px; }
+  .login.show { display: flex; }
+  .login .box { background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+                padding: 24px; width: 100%; max-width: 320px; }
+  .login h2 { margin: 0 0 14px; font-size: 18px; }
+  .login input { width: 100%; margin-bottom: 12px; }
+  .login button { width: 100%; background: var(--accent-dim); border: none; color: #fff;
+                  padding: 10px; border-radius: 8px; cursor: pointer; font-size: 15px; }
+  .login .err { color: #ff7a7a; font-size: 13px; min-height: 18px; margin-bottom: 6px; }
+  .empty { color: var(--muted); text-align: center; padding: 50px 0; }
+  .spin { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--line);
+          border-top-color: var(--accent); border-radius: 50%; animation: sp .7s linear infinite; vertical-align: -3px; }
+  @keyframes sp { to { transform: rotate(360deg); } }
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 70;
+             display: none; align-items: center; justify-content: center; }
+  .overlay.show { display: flex; }
+  .overlay .card2 { background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+                    padding: 20px; max-width: 360px; width: 100%; }
+  .overlay h3 { margin: 0 0 12px; font-size: 16px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="topbar">
+    <button id="back" class="icon-btn" hidden>← 返回</button>
+    <span id="title" class="title">搜索</span>
+    <input id="search" class="grow" type="search" placeholder="搜索 RJ号 / 作品名 / 社团" autocomplete="off" hidden>
+    <select id="sort" hidden></select>
+  </div>
+  <div id="tabs" class="tabs"></div>
+</header>
+<main>
+  <div id="count" class="count"></div>
+  <div id="content"></div>
+</main>
+
+<div id="lightbox" class="lightbox">
+  <button class="lb-btn lb-close" onclick="LB.close()">✕</button>
+  <button class="lb-btn lb-prev" onclick="LB.step(-1)">‹</button>
+  <img id="lbimg" alt="">
+  <button class="lb-btn lb-next" onclick="LB.step(1)">›</button>
+</div>
+
+<div id="picker" class="overlay"><div class="card2" id="pickerBox"></div></div>
+
+<div id="login" class="login">
+  <div class="box">
+    <h2>需要访问密码</h2>
+    <div id="loginErr" class="err"></div>
+    <input id="pw" type="password" placeholder="密码" autocomplete="current-password">
+    <button onclick="doLogin()">进入</button>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+const enc = encodeURIComponent;
+
+const SECTIONS = [
+  { key: 'search',   label: '搜索' },
+  { key: 'download', label: '下载' },
+  { key: 'medialib', label: '媒体库', root: 'libs' },
+  { key: 'tag',      label: '标签',   root: 'genres' },
+  { key: 'type',     label: '作品形式', root: 'types' },
+  { key: 'favorite', label: '收藏',   root: 'favorites' },
+  { key: 'settings', label: '设置' },
+];
+const MAKER_SORTS = ['作品数 多→少', '作品数 少→多', '社团名 A→Z'];
+const WORK_SORTS  = ['发售日 新→旧', '发售日 旧→新', 'RJ号 新→旧', 'RJ号 旧→新'];
+const AGE = { '1': '全年龄', '2': 'R-15', '3': 'R-18' };
+
+let section = 'search';
+let stack = [];            // 卡片区导航栈
+let curItems = [];         // 卡片区原始数据（本地搜索过滤）
+let makerSort = 0, workSort = 0;
+let pollTimer = null, usageTimer = null;
+
+async function api(path) {
+  const r = await fetch(path, { headers: { 'Accept': 'application/json' } });
+  if (r.status === 401) { showLogin(false); throw new Error('unauth'); }
+  return r.json();
+}
+async function apiPost(path, body) {
+  const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+  if (r.status === 401) { showLogin(false); throw new Error('unauth'); }
+  return r.json();
+}
+
+// ---------- 登录 ----------
+function showLogin(initial) { $('login').classList.add('show'); if (!initial) $('loginErr').textContent = '会话已失效，请重新登录'; $('pw').focus(); }
+async function doLogin() {
+  $('loginErr').textContent = '';
+  const r = await apiPost('/api/login', { password: $('pw').value });
+  if (r.ok) { $('login').classList.remove('show'); $('pw').value = ''; selectSection('search'); }
+  else $('loginErr').textContent = '密码错误';
+}
+$('pw').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+// ---------- 顶部分区 ----------
+function buildTabs() {
+  const box = $('tabs'); box.innerHTML = '';
+  SECTIONS.forEach(s => {
+    const b = el('div', 'tab' + (s.key === section ? ' active' : ''), s.label);
+    b.onclick = () => selectSection(s.key);
+    box.appendChild(b);
+  });
+}
+function stopTimers() { if (pollTimer) clearInterval(pollTimer); if (usageTimer) clearInterval(usageTimer); pollTimer = usageTimer = null; }
+
+function selectSection(key) {
+  section = key; stopTimers();
+  const s = SECTIONS.find(x => x.key === key);
+  buildTabs();
+  $('search').hidden = !s.root;
+  $('sort').hidden = true;
+  $('back').hidden = true;
+  $('count').textContent = '';
+  $('content').innerHTML = '';
+  $('search').value = '';
+  if (s.root) { makerSort = 0; workSort = 0; stack = [{ view: s.root, ctx: {} }]; render(); }
+  else if (key === 'search') renderSearch();
+  else if (key === 'download') renderDownloadSection();
+  else if (key === 'settings') renderSettings();
+}
+
+// ========== 卡片区（媒体库/标签/作品形式/收藏）==========
+function pushView(view, ctx) { if (stack.length) stack[stack.length - 1].scroll = window.scrollY; stack.push({ view, ctx: ctx || {} }); render(); }
+function back() {
+  const s = SECTIONS.find(x => x.key === section);
+  if (s && s.root && stack.length > 1) { stack.pop(); render(); const top = stack[stack.length - 1]; if (top && top.scroll) window.scrollTo(0, top.scroll); }
+}
+$('back').onclick = back;
+
+async function render() {
+  const st = stack[stack.length - 1];
+  $('back').hidden = stack.length <= 1;
+  $('sort').hidden = true;
+  $('content').innerHTML = '';
+  $('count').textContent = '';
+  try {
+    if (st.view === 'libs') await renderLibs();
+    else if (st.view === 'genres') await renderGenres();
+    else if (st.view === 'types') await renderTypes();
+    else if (st.view === 'favorites') await renderWorks('/api/favorites', '收藏', true);
+    else if (st.view === 'makers') await renderMakers(st.ctx);
+    else if (st.view === 'works') await renderWorks(worksUrl(st.ctx), st.ctx.maker || '未知社团', true, st.ctx);
+    else if (st.view === 'filter') await renderWorks(`/api/filter?col=${enc(st.ctx.col)}&val=${enc(st.ctx.val)}`, st.ctx.label, true);
+    else if (st.view === 'detail') await renderDetail(st.ctx.id);
+  } catch (e) { if (e.message !== 'unauth') $('content').appendChild(el('div', 'empty', '加载失败')); }
+}
+
+function setSort(options, current, onChange) {
+  const s = $('sort'); s.hidden = false; s.innerHTML = '';
+  options.forEach((o, i) => { const op = el('option', null, o); op.value = i; s.appendChild(op); });
+  s.value = current; s.onchange = () => onChange(parseInt(s.value));
+}
+
+async function renderLibs() {
+  $('title').textContent = '媒体库';
+  const d = await api('/api/libs');
+  curItems = d.libs.map(l => ({ ...l, _key: l.name.toLowerCase() }));
+  drawGroups(curItems, l => ({ title: l.name, caption: `${l.works} 个作品 · ${l.folders} 个文件夹`, onClick: () => pushView('makers', { lib: l.name }) }), '个媒体库');
+}
+async function renderGenres() {
+  $('title').textContent = '标签';
+  const d = await api('/api/genres');
+  curItems = d.genres.map(g => ({ ...g, _key: g.genre.toLowerCase() }));
+  drawGroups(curItems, g => ({ title: g.genre, caption: `${g.count} 个作品`, onClick: () => pushView('makers', { genre: g.genre }) }), '个标签');
+}
+async function renderTypes() {
+  $('title').textContent = '作品形式';
+  const d = await api('/api/types');
+  curItems = d.types.map(t => ({ ...t, _key: t.type.toLowerCase() }));
+  drawGroups(curItems, t => ({ title: t.type, caption: `${t.count} 个作品`, onClick: () => pushView('makers', { type: t.type }) }), '个形式');
+}
+async function renderMakers(ctx) {
+  $('title').textContent = ctx.genre || ctx.type || ctx.lib || '社团';
+  setSort(MAKER_SORTS, makerSort, v => { makerSort = v; render(); });
+  const q = new URLSearchParams();
+  if (ctx.lib) q.set('lib', ctx.lib); if (ctx.genre) q.set('genre', ctx.genre); if (ctx.type) q.set('type', ctx.type);
+  q.set('sort', makerSort);
+  const d = await api('/api/makers?' + q);
+  curItems = d.makers.map(m => ({ ...m, _key: (m.maker || '未知社团').toLowerCase() }));
+  drawGroups(curItems, m => ({ title: m.maker || '未知社团', caption: `${m.count} 个作品`, onClick: () => pushView('works', { ...ctx, maker: m.maker }) }), '个社团');
+}
+function worksUrl(ctx) {
+  const q = new URLSearchParams();
+  if (ctx.lib) q.set('lib', ctx.lib); if (ctx.genre) q.set('genre', ctx.genre); if (ctx.type) q.set('type', ctx.type);
+  q.set('maker', ctx.maker || ''); q.set('sort', workSort);
+  return '/api/works?' + q;
+}
+async function renderWorks(url, title, sortable) {
+  $('title').textContent = title;
+  if (sortable) setSort(WORK_SORTS, workSort, v => { workSort = v; render(); });
+  const full = url.includes('sort=') ? url : url + (url.includes('?') ? '&' : '?') + 'sort=' + workSort;
+  const d = await api(full);
+  curItems = d.works.map(w => ({ ...w, _key: `${w.id} ${w.name} ${w.maker}`.toLowerCase() }));
+  drawWorks(curItems);
+}
+
+function filtered() { const kw = $('search').value.trim().toLowerCase(); return kw ? curItems.filter(i => i._key.includes(kw)) : curItems; }
+
+let lastMap = null, lastUnit = '';
+function drawGroups(items, mapFn, unit) {
+  lastMap = mapFn; lastUnit = unit;
+  const items2 = filtered();
+  const works = items.reduce((s, i) => s + (i.works || i.count || 0), 0);
+  $('count').textContent = $('search').value.trim() ? `共 ${items.length} ${unit}，匹配 ${items2.length} 个` : `共 ${items.length} ${unit}，${works} 个作品`;
+  const grid = el('div', 'grid groups');
+  items2.forEach(i => { const m = mapFn(i); const c = el('div', 'card group-card'); c.appendChild(el('div', 'gt', m.title)); c.appendChild(el('div', 'gc', m.caption)); c.onclick = m.onClick; grid.appendChild(c); });
+  const host = $('content'); host.innerHTML = ''; host.appendChild(items2.length ? grid : el('div', 'empty', '没有内容'));
+}
+function drawWorks(items) {
+  lastMap = null;
+  const items2 = filtered();
+  $('count').textContent = $('search').value.trim() ? `共 ${items.length} 个作品，匹配 ${items2.length} 个` : `共 ${items.length} 个作品`;
+  const grid = el('div', 'grid cards');
+  items2.forEach(w => {
+    const c = el('div', 'card');
+    const cov = el('div', 'cover');
+    if (w.cover) { const img = el('img'); img.loading = 'lazy'; img.src = `/api/cover?id=${enc(w.id)}`; cov.appendChild(img); }
+    cov.appendChild(el('div', 'badge rj', w.id));
+    if (w.type) cov.appendChild(el('div', 'badge type', w.type));
+    c.appendChild(cov); c.appendChild(el('div', 'wt', w.name || w.id));
+    c.onclick = () => pushView('detail', { id: w.id });
+    grid.appendChild(c);
+  });
+  const host = $('content'); host.innerHTML = ''; host.appendChild(items2.length ? grid : el('div', 'empty', '没有内容'));
+}
+
+async function renderDetail(id) {
+  $('title').textContent = id; $('sort').hidden = true;
+  const d = await api('/api/detail?id=' + enc(id));
+  if (d.error) { $('content').appendChild(el('div', 'empty', '作品不存在')); return; }
+  $('title').textContent = d.name || d.id;
+  const root = el('div', 'detail');
+  root.appendChild(el('h1', null, d.name || d.id));
+  const top = el('div', 'dtop');
+  const gallery = el('div', 'gallery');
+  const imgs = d.slider.length ? d.slider.map(n => `/api/asset?id=${enc(d.id)}&name=${enc(n)}`) : (d.hasCover ? [`/api/cover?id=${enc(d.id)}`] : []);
+  if (imgs.length) {
+    const main = el('img', 'main'); main.src = imgs[0]; main.onclick = () => LB.open(imgs, 0); gallery.appendChild(main);
+    if (imgs.length > 1) {
+      const thumbs = el('div', 'thumbs');
+      imgs.forEach((src, i) => { const t = el('img'); t.src = src; t.loading = 'lazy'; if (i === 0) t.className = 'sel';
+        t.onclick = () => { main.src = src; main.onclick = () => LB.open(imgs, i); thumbs.querySelectorAll('img').forEach(x => x.classList.remove('sel')); t.classList.add('sel'); }; thumbs.appendChild(t); });
+      gallery.appendChild(thumbs);
+    }
+  }
+  top.appendChild(gallery);
+  const fields = el('div', 'fields');
+  const addF = (k, node) => { if (node == null) return; fields.appendChild(el('div', 'k', k)); const v = el('div', 'v'); if (typeof node === 'string') v.textContent = node; else v.appendChild(node); fields.appendChild(v); };
+  const link = (text, col, val) => { const a = el('a', null, text); a.onclick = () => pushView('filter', { col, val, label: text }); return a; };
+  const multi = (text, col, sep) => { const w = el('span'); const parts = (text || '').split(sep).map(s => s.trim()).filter(Boolean); parts.forEach((p, i) => { w.appendChild(link(p, col, p)); if (i < parts.length - 1) w.appendChild(document.createTextNode(' / ')); }); return parts.length ? w : null; };
+  if (d.maker) addF('社团', link(d.maker, 'maker_name', d.maker));
+  if (d.sellDate) addF('販売日', d.sellDate);
+  if (d.series) addF('系列', link(d.series, 'series', d.series));
+  if (d.scenario) addF('剧本', link(d.scenario, 'scenario', d.scenario));
+  if (d.illust) addF('插画', link(d.illust, 'illust', d.illust));
+  if (d.voiceActor) addF('声优', multi(d.voiceActor, 'voice_actor', '/'));
+  if (d.age) addF('年龄分级', link(d.ageText || AGE[d.age] || d.age, 'age_category', d.age));
+  if (d.workType) addF('作品形式', d.workType);
+  if (d.tags && d.tags.length) { const box = el('span'); d.tags.forEach(t => { const a = el('a', 'tag', t); a.onclick = () => { section = 'tag'; buildTabs(); $('search').hidden = false; stack = [{ view: 'genres', ctx: {} }]; pushView('makers', { genre: t }); }; box.appendChild(a); }); addF('类型', box); }
+  if (d.fileSize) addF('文件容量', d.fileSize);
+  if (d.intro) addF('简介', d.intro);
+  top.appendChild(fields); root.appendChild(top);
+
+  const actions = el('div', 'actions');
+  const rb = el('button', 'toggle' + (d.read ? ' on' : ''), (d.read ? '★ ' : '☆ ') + '已读');
+  rb.onclick = async () => { const r = await apiPost('/api/toggle', { id: d.id, field: 'read', value: !d.read }); d.read = r.value; rb.className = 'toggle' + (d.read ? ' on' : ''); rb.textContent = (d.read ? '★ ' : '☆ ') + '已读'; };
+  const fb = el('button', 'toggle' + (d.favorite ? ' on' : ''), (d.favorite ? '♥ ' : '♡ ') + '收藏');
+  fb.onclick = async () => { const r = await apiPost('/api/toggle', { id: d.id, field: 'favorite', value: !d.favorite }); d.favorite = r.value; fb.className = 'toggle' + (d.favorite ? ' on' : ''); fb.textContent = (d.favorite ? '♥ ' : '♡ ') + '收藏'; };
+  actions.appendChild(rb); actions.appendChild(fb); root.appendChild(actions);
+
+  if (d.body && d.body.length) {
+    const body = el('div', 'body'); const bodyImgs = [];
+    d.body.forEach(b => { if (b.kind === 'image') bodyImgs.push(`/api/asset?id=${enc(d.id)}&name=${enc(b.value)}`); });
+    let ix = 0;
+    d.body.forEach(b => {
+      if (b.kind === 'text') { if (b.value.trim()) body.appendChild(el('p', null, b.value)); }
+      else { const img = el('img'); img.src = `/api/asset?id=${enc(d.id)}&name=${enc(b.value)}`; img.loading = 'lazy'; const idx = ix++; img.onclick = () => LB.open(bodyImgs, idx); body.appendChild(img); }
+    });
+    root.appendChild(body);
+  }
+  const host = $('content'); host.innerHTML = ''; host.appendChild(root); window.scrollTo(0, 0);
+}
+
+// ========== 搜索 ==========
+function renderSearch() {
+  $('title').textContent = '搜索';
+  const host = $('content'); host.innerHTML = '';
+  const bar = el('div', 'toolbar');
+  const inp = el('input'); inp.placeholder = '输入作品番号，例如 RJ01234567'; inp.className = 'grow'; inp.id = 'sId';
+  const btn = el('button', 'icon-btn primary', '查询');
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') runSearch(); });
+  btn.onclick = runSearch;
+  bar.appendChild(inp); bar.appendChild(btn);
+  host.appendChild(bar);
+  host.appendChild(el('div', null)).id = 'searchResult';
+}
+async function runSearch() {
+  const id = ($('sId').value || '').trim().toUpperCase();
+  if (!id) return;
+  const box = $('searchResult'); box.innerHTML = '<div class="empty"><span class="spin"></span> 正在查询…</div>';
+  let d;
+  try { d = await api('/api/search?id=' + enc(id)); } catch (e) { return; }
+  if (d.error) { box.innerHTML = ''; box.appendChild(el('div', 'empty', d.error)); return; }
+  if (d.existed && !confirm(`${d.id} ${d.existedName || ''}\n该作品已于 ${d.existedTime || ''} 加入过下载，是否继续？`)) { box.innerHTML = ''; return; }
+  if (!d.results.length) { box.innerHTML = ''; box.appendChild(el('div', 'empty', '无匹配数据')); return; }
+  box.innerHTML = '';
+  $('count').textContent = `${d.work.name || d.id} · ${d.results.length} 个帖子`;
+  d.results.forEach(r => {
+    const c = el('div', 'res');
+    if (r.thumb) { const img = el('img'); img.loading = 'lazy'; img.src = '/api/thumb?url=' + enc(r.thumb); c.appendChild(img); }
+    const info = el('div'); info.style.minWidth = '0';
+    info.appendChild(el('div', 'rt', r.title));
+    if (r.minor) info.appendChild(el('div', 'rm', r.minor));
+    if (r.snippet) info.appendChild(el('div', 'rs', r.snippet));
+    c.appendChild(info);
+    c.onclick = () => openPost(id, r.url, r.title);
+    box.appendChild(c);
+  });
+}
+async function openPost(id, url, title) {
+  const box = $('searchResult'); box.innerHTML = '<div class="empty"><span class="spin"></span> 正在解析下载链接…</div>';
+  $('count').textContent = title;
+  let d;
+  try { d = await api('/api/posturls?url=' + enc(url)); } catch (e) { return; }
+  if (d.error || !d.hosts.length) { box.innerHTML = ''; box.appendChild(el('div', 'empty', d.error || '该帖子中没有找到下载链接')); return; }
+  box.innerHTML = '';
+  const bk = el('button', 'icon-btn', '← 返回结果'); bk.style.marginBottom = '10px'; bk.onclick = () => runSearch(); box.appendChild(bk);
+  d.hosts.forEach(h => {
+    const c = el('div', 'host');
+    c.appendChild(el('div')).append(el('div', 'hn', h.host), el('div', 'hc', `${h.count} 个文件`));
+    const st = el('div', 'hs'); st.innerHTML = '<span class="spin"></span> 检测中…'; c.appendChild(st);
+    box.appendChild(c);
+    apiPost('/api/checkhost', { urls: h.urls }).then(res => {
+      if (res.status === 'valid') { st.textContent = '有效'; st.style.color = '#4ade80'; c.classList.add('ok'); c.onclick = () => enqueue(id, h.urls, c, st); }
+      else if (res.status === 'invalid') { st.textContent = '失效'; st.style.color = '#f87171'; }
+      else { st.textContent = `部分有效 ${res.valid}/${res.total}`; st.style.color = '#facc15'; }
+    }).catch(() => { st.textContent = '检测失败'; st.style.color = '#f87171'; });
+  });
+}
+async function enqueue(id, urls, card, st) {
+  const d = await api('/api/downtargets');
+  let lib = '', folder = '';
+  if (d.libs.length) {
+    const target = await pickTarget(d.libs);
+    if (!target) return;
+    lib = target.lib; folder = target.folder;
+  }
+  st.innerHTML = '<span class="spin"></span>';
+  const r = await apiPost('/api/enqueue', { id, urls, lib, folder });
+  if (r.ok) { st.textContent = '已加入下载'; st.style.color = '#6aa3ff'; card.classList.remove('ok'); card.onclick = null; }
+  else { st.textContent = '加入失败'; st.style.color = '#f87171'; }
+}
+function pickTarget(libs) {
+  return new Promise(resolve => {
+    const ov = $('picker'), box = $('pickerBox');
+    const close = (v) => { ov.classList.remove('show'); resolve(v); };
+    function libPage() {
+      box.innerHTML = ''; box.appendChild(el('h3', null, '选择下载到哪个媒体库'));
+      libs.forEach(l => {
+        const b = el('button', 'icon-btn', l.folders.length > 1 ? `${l.name}（${l.folders.length} 个文件夹）` : l.name);
+        b.style.cssText = 'display:block;width:100%;text-align:left;margin-top:8px';
+        b.onclick = () => { if (l.folders.length === 1) close({ lib: l.name, folder: l.folders[0] }); else folderPage(l); };
+        box.appendChild(b);
+      });
+      const c = el('button', 'icon-btn', '取消'); c.style.cssText = 'display:block;width:100%;margin-top:16px'; c.onclick = () => close(null); box.appendChild(c);
+    }
+    function folderPage(l) {
+      box.innerHTML = ''; box.appendChild(el('h3', null, '选择下载文件夹'));
+      l.folders.forEach(f => { const b = el('button', 'icon-btn', f); b.style.cssText = 'display:block;width:100%;text-align:left;margin-top:8px;word-break:break-all'; b.onclick = () => close({ lib: l.name, folder: f }); box.appendChild(b); });
+      const bk = el('button', 'icon-btn', '← 返回'); bk.style.cssText = 'display:block;width:100%;margin-top:16px'; bk.onclick = libPage; box.appendChild(bk);
+    }
+    libPage(); ov.classList.add('show');
+  });
+}
+
+// ========== 下载 / 已下载 ==========
+let dlExpanded = new Set();
+let dlMode = 'downloading';   // downloading | downloaded
+function renderDownloadSection() {
+  $('title').textContent = '下载';
+  if (dlMode === 'downloaded') { renderDownloaded(); return; }
+  const host = $('content'); host.innerHTML = '';
+  const bar = el('div', 'toolbar');
+  const startBtn = el('button', 'icon-btn primary', '开始下载'); startBtn.id = 'engineBtn';
+  startBtn.onclick = async () => { const running = startBtn.dataset.running === '1'; await apiPost('/api/engine', { action: running ? 'stop' : 'start' }); loadDownloads(); };
+  const refresh = el('button', 'icon-btn', '刷新'); refresh.onclick = loadDownloads;
+  const cd = el('button', 'icon-btn', '清除已完成'); cd.onclick = async () => { await apiPost('/api/cleardone'); loadDownloads(); };
+  const ca = el('button', 'icon-btn', '清空列表'); ca.onclick = async () => { if (confirm('确定要清空整个下载列表吗？等待中的任务也会被删除。')) { await apiPost('/api/clearall'); loadDownloads(); } };
+  const dd = el('button', 'icon-btn', '已下载'); dd.onclick = () => { dlMode = 'downloaded'; renderDownloadSection(); };
+  bar.append(startBtn, refresh, cd, ca, dd);
+  host.appendChild(bar);
+  const usage = el('div', 'usage'); usage.id = 'usage';
+  usage.innerHTML = '<div class="ut" id="usageText">debrid-link 使用量 --</div><div class="bar"><i id="usageBar" style="width:0;background:#a78bfa"></i></div>';
+  host.appendChild(usage);
+  host.appendChild(el('div', null)).id = 'dlList';
+  loadDownloads(); loadUsage();
+  pollTimer = setInterval(loadDownloads, 1000);
+  usageTimer = setInterval(loadUsage, 15000);
+}
+async function loadDownloads() {
+  if (section !== 'download' || dlMode !== 'downloading') return;
+  let d; try { d = await api('/api/downloads'); } catch (e) { return; }
+  const btn = $('engineBtn');
+  if (btn) {
+    if (d.engine.running) { btn.dataset.running = '1'; if (d.engine.stopRequested) { btn.textContent = '暂停中…'; btn.disabled = true; } else { btn.textContent = '暂停下载'; btn.disabled = false; } }
+    else { btn.dataset.running = '0'; btn.textContent = '开始下载'; btn.disabled = false; }
+  }
+  const list = $('dlList'); if (!list) return;
+  if (!d.groups.length) { list.innerHTML = '<div class="empty">下载列表为空</div>'; $('count').textContent = ''; return; }
+  $('count').textContent = `${d.groups.length} 个作品`;
+  list.innerHTML = '';
+  d.groups.forEach(g => {
+    const c = el('div', 'dl');
+    const row = el('div', 'row');
+    const rj = el('div', 'rj', g.id || '(未知)'); rj.onclick = () => { if (dlExpanded.has(g.id)) dlExpanded.delete(g.id); else dlExpanded.add(g.id); loadDownloads(); };
+    const stt = el('div', 'st', g.statusText); stt.style.color = g.color;
+    row.append(rj, stt);
+    if (g.speed) { const sp = el('div', 'sp', g.speed); row.appendChild(sp); }
+    const pc = el('div', 'sp', g.pct + '%'); row.appendChild(pc);
+    c.appendChild(row);
+    const bar = el('div', 'bar'); const i = el('i'); i.style.width = g.pct + '%'; i.style.background = g.color; bar.appendChild(i); c.appendChild(bar);
+    if (g.canReparse) {
+      const act = el('div', 'actions');
+      const rp = el('button', 'mini', '重新解析'); rp.onclick = async () => { await apiPost('/api/reparse', { id: g.id }); loadDownloads(); };
+      const rs = el('button', 'mini', '重新搜索'); rs.onclick = async () => { if (confirm(`将删除 ${g.id} 已下载的分卷与文件夹，并重新搜索。是否继续？`)) { await apiPost('/api/research', { id: g.id }); selectSection('search'); setTimeout(() => { $('sId').value = g.id; runSearch(); }, 50); } };
+      act.append(rp, rs); c.appendChild(act);
+    }
+    const ch = el('div', 'children' + (dlExpanded.has(g.id) ? ' open' : ''));
+    g.children.forEach(f => {
+      const fr = el('div', 'frow');
+      fr.appendChild(el('div', 'fn', f.fileName));
+      const fs = el('div', null, f.statusText); fs.style.color = f.color; fr.appendChild(fs);
+      if (f.speed) fr.appendChild(el('div', null, f.speed));
+      fr.appendChild(el('div', null, f.pct + '%'));
+      ch.appendChild(fr);
+    });
+    c.appendChild(ch);
+    list.appendChild(c);
+  });
+}
+async function loadUsage() {
+  if (section !== 'download') return;
+  let d; try { d = await api('/api/usage'); } catch (e) { return; }
+  const t = $('usageText'), b = $('usageBar'); if (!t || !b) return;
+  if (d.percent == null) { t.textContent = 'debrid-link 使用量 --'; b.style.width = '0'; return; }
+  b.style.width = d.percent + '%';
+  t.textContent = 'debrid-link 使用量' + (d.resetText ? ` · ${d.resetText} 后重置` : '');
+}
+
+// 已下载
+let dledAll = [], dledSort = { prop: 'downTime', asc: false }, dledKw = '', dledState = '';
+const STATE_FILTER = [['', '全部'], ['下载中', '下载中'], ['已下载', '已下载'], ['已品悦', '已品悦']];
+const STATE_COLOR = { '已品悦': '#4ade80', '已下载': '#60a5fa', '下载中': '#facc15' };
+async function renderDownloaded() {
+  $('title').textContent = '已下载';
+  const host = $('content'); host.innerHTML = '';
+  const bar = el('div', 'toolbar');
+  const back = el('button', 'icon-btn', '← 下载'); back.onclick = () => { dlMode = 'downloading'; renderDownloadSection(); };
+  const refresh = el('button', 'icon-btn', '刷新'); refresh.onclick = loadDownloaded;
+  const kw = el('input'); kw.placeholder = '搜索 RJ号 / 作品名 / 社团'; kw.value = dledKw; kw.oninput = () => { dledKw = kw.value.trim(); drawDownloaded(); };
+  const sf = el('select'); STATE_FILTER.forEach(([v, t]) => { const o = el('option', null, t); o.value = v; sf.appendChild(o); }); sf.value = dledState; sf.onchange = () => { dledState = sf.value; drawDownloaded(); };
+  bar.append(back, refresh, kw, sf);
+  host.appendChild(bar);
+  host.appendChild(el('div', null)).id = 'dledWrap';
+  loadDownloaded();
+}
+async function loadDownloaded() {
+  let d; try { d = await api('/api/downloaded'); } catch (e) { return; }
+  dledAll = d.works; drawDownloaded();
+}
+function drawDownloaded() {
+  const wrap = $('dledWrap'); if (!wrap) return;
+  let rows = dledAll.filter(r => (!dledState || r.state === dledState) && (!dledKw || (r.id + r.name + r.maker).toLowerCase().includes(dledKw.toLowerCase())));
+  const p = dledSort.prop;
+  rows = rows.slice().sort((a, b) => { const av = (a[p] || '').toLowerCase(), bv = (b[p] || '').toLowerCase(); return (av < bv ? -1 : av > bv ? 1 : 0) * (dledSort.asc ? 1 : -1); });
+  $('count').textContent = rows.length === dledAll.length ? `共 ${dledAll.length} 个作品` : `共 ${dledAll.length} 个作品，匹配 ${rows.length} 个`;
+  const cols = [['id', 'RJ号', ''], ['name', '作品名称', ''], ['maker', '社团', 'hide-sm'], ['type', '类型', 'hide-sm'], ['state', '状态', ''], ['downTime', '下载时间', 'hide-sm']];
+  const tbl = el('table', 'dt');
+  const thead = el('tr');
+  cols.forEach(([prop, label, cls]) => { const th = el('th', cls, label + (dledSort.prop === prop ? (dledSort.asc ? ' ▲' : ' ▼') : '')); th.onclick = () => { if (dledSort.prop === prop) dledSort.asc = !dledSort.asc; else { dledSort.prop = prop; dledSort.asc = true; } drawDownloaded(); }; thead.appendChild(th); });
+  thead.appendChild(el('th', '', '')); tbl.appendChild(thead);
+  rows.forEach(r => {
+    const tr = el('tr');
+    tr.appendChild(el('td', '', r.id));
+    tr.appendChild(el('td', '', r.name));
+    tr.appendChild(el('td', 'hide-sm', r.maker));
+    tr.appendChild(el('td', 'hide-sm', r.type));
+    const stTd = el('td'); const pill = el('span', 'pill', r.state); pill.style.cssText = `color:${STATE_COLOR[r.state] || '#ccc'};border:1px solid ${STATE_COLOR[r.state] || '#555'}`; stTd.appendChild(pill); tr.appendChild(stTd);
+    tr.appendChild(el('td', 'hide-sm', r.downTime));
+    const actTd = el('td');
+    if (r.state === '已下载') { const mk = el('button', 'mini', '标记已品悦'); mk.onclick = async () => { await apiPost('/api/mark', { id: r.id }); loadDownloaded(); }; actTd.appendChild(mk); }
+    tr.appendChild(actTd);
+    tbl.appendChild(tr);
+  });
+  wrap.innerHTML = ''; wrap.appendChild(rows.length ? tbl : el('div', 'empty', '没有内容'));
+}
+
+// ========== 设置 ==========
+async function renderSettings() {
+  $('title').textContent = '设置';
+  const host = $('content'); host.innerHTML = '<div class="empty"><span class="spin"></span> 加载中…</div>';
+  let d; try { d = await api('/api/settings'); } catch (e) { return; }
+  host.innerHTML = '';
+  const write = (section, key, value) => apiPost('/api/settings', { section, key, value });
+  const mkInput = (val, on) => { const i = el('input'); i.value = val; i.onchange = () => on(i.value.trim()); return i; };
+  const mkSelect = (opts, val, on) => { const s = el('select'); opts.forEach(([v, t]) => { const o = el('option', null, t); o.value = v; s.appendChild(o); }); s.value = val; s.onchange = () => on(s.value); return s; };
+  const boolOpts = [['True', '开启'], ['False', '关闭']];
+
+  // 下载
+  let s = el('div', 'sec'); s.appendChild(el('h3', null, '下载'));
+  let f = el('div', 'frm');
+  f.append(el('label', null, '缓存路径'), mkInput(d.downpath, v => write('downpath', 'downpath', v)));
+  f.append(el('label', null, '自动下载'), mkSelect(boolOpts, d.autoDownload ? 'True' : 'False', v => write('down_list', 'auto_download', v)));
+  f.append(el('label', null, '自动解压'), mkSelect(boolOpts, d.autoUnzip ? 'True' : 'False', v => write('down_list', 'auto_unzip', v)));
+  f.append(el('label', null, '单文件线程数'), mkInput(d.downProc, v => write('down_list', 'download_processes', v)));
+  f.append(el('label', null, '最低速度 (KB/s)'), mkInput(d.minSpeed, v => write('down_list', 'min_speed', v)));
+  f.append(el('label', null, '速度限制 (KB/s)'), mkInput(d.speedLimit, v => write('down_list', 'speed_limit', v)));
+  s.appendChild(f); host.appendChild(s);
+
+  // 代理
+  s = el('div', 'sec'); s.appendChild(el('h3', null, '代理')); f = el('div', 'frm');
+  f.append(el('label', null, '开启'), mkSelect(boolOpts, d.proxy.open ? 'True' : 'False', v => write('proxy', 'openproxy', v)));
+  f.append(el('label', null, '类型'), mkSelect([['http', 'http'], ['socks5', 'socks5']], d.proxy.type, v => write('proxy', 'type', v)));
+  f.append(el('label', null, '主机'), mkInput(d.proxy.host, v => write('proxy', 'host', v)));
+  f.append(el('label', null, '端口'), mkInput(d.proxy.port, v => write('proxy', 'port', v)));
+  s.appendChild(f); host.appendChild(s);
+
+  // Debrid-Link
+  s = el('div', 'sec'); s.appendChild(el('h3', null, 'Debrid-Link 下载中转站')); f = el('div', 'frm');
+  const keyInput = mkInput(d.debridKey, v => write('debrid', 'api_key', v));
+  f.append(el('label', null, 'API Key'), keyInput);
+  const testRow = el('div'); const testBtn = el('button', 'icon-btn', '测试'); const testRes = el('span'); testRes.style.marginLeft = '10px';
+  testBtn.onclick = async () => { testRes.textContent = '测试中…'; const r = await apiPost('/api/debridtest', { key: keyInput.value.trim() }); testRes.textContent = r.ok ? '✓ 有效' : '✗ 无效'; testRes.style.color = r.ok ? '#4ade80' : '#f87171'; };
+  testRow.append(testBtn, testRes);
+  f.append(el('label', null, ''), testRow);
+  s.appendChild(f); host.appendChild(s);
+
+  // 系统
+  s = el('div', 'sec'); s.appendChild(el('h3', null, '系统')); f = el('div', 'frm');
+  f.append(el('label', null, '语言'), mkSelect(d.languages.map(l => [l.code, l.name]), d.language, v => write('language', 'lang', v)));
+  f.append(el('label', null, '日志级别'), mkSelect([['info', 'info'], ['error', 'error'], ['debug', 'debug']], d.logLevel, v => write('loglevel', 'level', v)));
+  f.append(el('label', null, '解压编码'), mkInput(d.encoding, v => write('encoding', 'encoding', v)));
+  s.appendChild(f); host.appendChild(s);
+
+  // 媒体库（只读）
+  s = el('div', 'sec'); s.appendChild(el('h3', null, '媒体库'));
+  if (d.mediaLibs.length) d.mediaLibs.forEach(l => { const row = el('div', 'frm'); row.append(el('label', null, l.name), el('div', 'ro', l.folders.join('\n') || '（无文件夹）')); s.appendChild(row); });
+  else s.appendChild(el('div', 'ro', '尚未配置媒体库'));
+  s.appendChild(el('div', 'note', '媒体库文件夹的增删需在桌面端操作（需要本地文件夹选择器）。'));
+  host.appendChild(s);
+
+  // 外部访问（只读）
+  s = el('div', 'sec'); s.appendChild(el('h3', null, '外部访问')); f = el('div', 'frm');
+  f.append(el('label', null, '状态'), el('div', 'ro', d.web.enabled ? '已开启' : '已关闭'));
+  f.append(el('label', null, '端口'), el('div', 'ro', String(d.web.port)));
+  f.append(el('label', null, '访问密码'), el('div', 'ro', d.web.password ? '已设置' : '未设置'));
+  s.appendChild(f);
+  s.appendChild(el('div', 'note', '外部访问的开关 / 端口 / 密码请在桌面端修改（避免从外部改动后断开连接）。'));
+  host.appendChild(s);
+}
+
+// ---------- 灯箱 ----------
+const LB = {
+  list: [], idx: 0,
+  open(list, idx) { this.list = list; this.idx = idx; $('lbimg').src = list[idx]; $('lightbox').classList.add('show'); },
+  close() { $('lightbox').classList.remove('show'); $('lbimg').src = ''; },
+  step(d) { if (!this.list.length) return; this.idx = (this.idx + d + this.list.length) % this.list.length; $('lbimg').src = this.list[this.idx]; },
+};
+$('lightbox').addEventListener('click', e => { if (e.target.id === 'lightbox') LB.close(); });
+document.addEventListener('keydown', e => { if (!$('lightbox').classList.contains('show')) return; if (e.key === 'Escape') LB.close(); else if (e.key === 'ArrowLeft') LB.step(-1); else if (e.key === 'ArrowRight') LB.step(1); });
+
+// ---------- 卡片区本地搜索 ----------
+let searchTimer = null;
+$('search').addEventListener('input', () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    const v = stack.length ? stack[stack.length - 1].view : '';
+    if (v === 'detail') return;
+    if (['works', 'favorites', 'filter'].includes(v)) drawWorks(curItems);
+    else if (lastMap) drawGroups(curItems, lastMap, lastUnit);
+  }, 120);
+});
+
+// ---------- 启动 ----------
+async function boot() {
+  buildTabs();
+  try { const s = await fetch('/api/state').then(r => r.json()); if (s.needLogin) { showLogin(true); return; } } catch (e) {}
+  selectSection('search');
+}
+boot();
+</script>
+</body>
+</html>

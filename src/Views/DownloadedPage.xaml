@@ -59,17 +59,19 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <TextBox x:Name="SearchBox" MinWidth="220" MaxWidth="320"
+            <Button x:Name="BackButton" Click="BackButton_Click" Content="← 下载" Margin="0,0,8,0" />
+            <TextBox x:Name="SearchBox" Grid.Column="1" MinWidth="220" MaxWidth="320"
                      VerticalContentAlignment="Center" TextChanged="SearchBox_TextChanged" />
-            <ComboBox x:Name="StateFilter" Grid.Column="1" Margin="8,0,0,0" MinWidth="110"
+            <ComboBox x:Name="StateFilter" Grid.Column="2" Margin="8,0,0,0" MinWidth="110"
                       SelectionChanged="StateFilter_SelectionChanged" />
-            <TextBlock x:Name="CountLabel" Grid.Column="3" VerticalAlignment="Center"
+            <TextBlock x:Name="CountLabel" Grid.Column="4" VerticalAlignment="Center"
                        Margin="0,0,12,0" Style="{StaticResource CaptionText}" />
-            <Button x:Name="RefreshButton" Grid.Column="4" Click="RefreshButton_Click" Content="刷新" />
+            <Button x:Name="RefreshButton" Grid.Column="5" Click="RefreshButton_Click" Content="刷新" />
         </Grid>
 
         <!-- 表头：点击切换排序（与行卡片同列宽，左右留出卡片内边距） -->

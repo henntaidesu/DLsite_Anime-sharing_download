@@ -53,6 +53,9 @@ public partial class DownloadedPage : UserControl
     // 表头 -> (列标题原文, 排序属性)
     private readonly (TextBlock Header, string Title, string Prop)[] _headers;
 
+    /// <summary>点击"← 下载"按钮时触发，由主窗口切回下载视图。</summary>
+    public event Action? BackToDownloadRequested;
+
     public DownloadedPage()
     {
         InitializeComponent();
@@ -80,6 +83,7 @@ public partial class DownloadedPage : UserControl
     private void RetranslateUi()
     {
         RefreshButton.Content = I18n.Tr("刷新");
+        BackButton.Content = "← " + I18n.Tr("下载");
         SearchBox.ToolTip = I18n.Tr("搜索 RJ号 / 作品名 / 社团");
         MarkMenuItem.Header = I18n.Tr("标记为已品悦");
         UpdateHeaders();
@@ -100,6 +104,9 @@ public partial class DownloadedPage : UserControl
     }
 
     private void RefreshButton_Click(object sender, RoutedEventArgs e) => Refresh();
+
+    private void BackButton_Click(object sender, RoutedEventArgs e) =>
+        BackToDownloadRequested?.Invoke();
 
     private void Refresh()
     {

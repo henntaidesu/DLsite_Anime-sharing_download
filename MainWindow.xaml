@@ -19,8 +19,6 @@
                              IsChecked="True" Checked="Nav_Checked" Tag="search" Content="搜索" />
                 <RadioButton x:Name="NavDownload" Style="{StaticResource NavButton}" GroupName="nav"
                              Checked="Nav_Checked" Tag="download" Content="下载" />
-                <RadioButton x:Name="NavDownloaded" Style="{StaticResource NavButton}" GroupName="nav"
-                             Checked="Nav_Checked" Tag="downloaded" Content="已下载" />
                 <RadioButton x:Name="NavMediaLib" Style="{StaticResource NavButton}" GroupName="nav"
                              Checked="Nav_Checked" Tag="medialib" Content="媒体库" />
                 <RadioButton x:Name="NavTag" Style="{StaticResource NavButton}" GroupName="nav"

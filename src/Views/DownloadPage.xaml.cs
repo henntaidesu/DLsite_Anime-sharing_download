@@ -88,6 +88,9 @@ public partial class DownloadPage : UserControl
     /// <summary>解析失败的番号点击"重新搜索"时触发，由主窗口切回搜索页。</summary>
     public event Action<string>? ResearchRequested;
 
+    /// <summary>点击"已下载"按钮时触发，由主窗口切到已下载视图。</summary>
+    public event Action? ShowDownloadedRequested;
+
     // download_list.status -> 显示文本（中文原文，渲染时经 Tr 翻译）与颜色
     private static readonly Dictionary<string, (string Text, string Color)> StatusMap = new()
     {
@@ -117,9 +120,13 @@ public partial class DownloadPage : UserControl
         RefreshButton.Content = I18n.Tr("刷新");
         ClearDoneButton.Content = I18n.Tr("清除已完成");
         ClearAllButton.Content = I18n.Tr("清空列表");
+        ShowDownloadedButton.Content = I18n.Tr("已下载");
         UpdateStartButton();
         Refresh();
     }
+
+    private void ShowDownloadedButton_Click(object sender, RoutedEventArgs e) =>
+        ShowDownloadedRequested?.Invoke();
 
     private void Page_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
     {

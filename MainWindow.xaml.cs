@@ -33,6 +33,10 @@ public partial class MainWindow : Window
             _searchPage.SearchFor(workId);
         };
 
+        // "已下载"已并入下载页：下载页按钮切到已下载视图，已下载页按钮切回下载视图（导航仍停留在"下载"）
+        _downloadPage.ShowDownloadedRequested += () => PageHost.Content = _downloadedPage;
+        _downloadedPage.BackToDownloadRequested += () => PageHost.Content = _downloadPage;
+
         RetranslateUi();
         I18n.LanguageChanged += RetranslateUi;
     }
@@ -43,7 +47,6 @@ public partial class MainWindow : Window
         Title = I18n.Tr("DLsite 下载器");
         NavSearch.Content = I18n.Tr("搜索");
         NavDownload.Content = I18n.Tr("下载");
-        NavDownloaded.Content = I18n.Tr("已下载");
         NavMediaLib.Content = I18n.Tr("媒体库");
         NavTag.Content = I18n.Tr("标签");
         NavType.Content = I18n.Tr("作品形式");
@@ -58,7 +61,6 @@ public partial class MainWindow : Window
         PageHost.Content = (sender as RadioButton)?.Tag switch
         {
             "download" => _downloadPage,
-            "downloaded" => _downloadedPage,
             "medialib" => _mediaLibPage,
             "tag" => _tagPage,
             "type" => _typePage,

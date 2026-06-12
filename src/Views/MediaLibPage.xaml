@@ -12,7 +12,9 @@
         <Grid Grid.Row="0" Margin="0,0,0,10">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
@@ -24,21 +26,25 @@
             </Grid.ColumnDefinitions>
             <TextBox x:Name="SearchBox" Grid.Column="0" MaxWidth="320" HorizontalAlignment="Left"
                      MinWidth="220" TextChanged="SearchBox_TextChanged" />
-            <Button x:Name="OpenFolderButton" Grid.Column="2" Margin="8,0,0,0" Visibility="Collapsed"
+            <ComboBox x:Name="SortBox" Grid.Column="1" Margin="8,0,0,0" MinWidth="130" Visibility="Collapsed"
+                      VerticalAlignment="Center" SelectionChanged="SortBox_SelectionChanged" />
+            <TextBlock x:Name="RjLabel" Grid.Column="0" VerticalAlignment="Center" HorizontalAlignment="Left"
+                       Margin="0,0,8,0" FontWeight="SemiBold" Visibility="Collapsed" />
+            <Button x:Name="OpenFolderButton" Grid.Column="4" Margin="8,0,0,0" Visibility="Collapsed"
                     Click="OpenFolderButton_Click" Content="打开文件夹" />
-            <Button x:Name="ViewFilesButton" Grid.Column="3" Margin="8,0,0,0" Visibility="Collapsed"
+            <Button x:Name="ViewFilesButton" Grid.Column="5" Margin="8,0,0,0" Visibility="Collapsed"
                     Click="ViewFilesButton_Click" Content="查看作品" />
-            <Button x:Name="MoveLibButton" Grid.Column="4" Margin="8,0,0,0" Visibility="Collapsed"
+            <Button x:Name="MoveLibButton" Grid.Column="6" Margin="8,0,0,0" Visibility="Collapsed"
                     Click="MoveLibButton_Click" Content="移动媒体库" />
-            <Button x:Name="ReadButton" Grid.Column="5" Margin="8,0,0,0" Visibility="Collapsed"
-                    Click="ReadButton_Click" Content="☆ 已读" />
-            <Button x:Name="FavButton" Grid.Column="6" Margin="8,0,0,0" Visibility="Collapsed"
-                    Click="FavButton_Click" Content="♡ 收藏" />
-            <Button x:Name="LibSettingButton" Grid.Column="7" Margin="8,0,0,0" Visibility="Collapsed"
+            <Button x:Name="ReadButton" Grid.Column="7" Margin="8,0,0,0" Visibility="Collapsed"
+                    FontFamily="Segoe UI Emoji" Click="ReadButton_Click" Content="☆ 已读" />
+            <Button x:Name="FavButton" Grid.Column="8" Margin="8,0,0,0" Visibility="Collapsed"
+                    FontFamily="Segoe UI Emoji" Click="FavButton_Click" Content="🤍 收藏" />
+            <Button x:Name="LibSettingButton" Grid.Column="9" Margin="8,0,0,0" Visibility="Collapsed"
                     Click="LibSettingButton_Click" Content="媒体库设置" />
-            <TextBlock x:Name="CountLabel" Grid.Column="8" VerticalAlignment="Center"
+            <TextBlock x:Name="CountLabel" Grid.Column="10" VerticalAlignment="Center"
                        Style="{StaticResource CaptionText}" Margin="12,0,12,0" />
-            <Button x:Name="BackButton" Grid.Column="9" Click="BackButton_Click" Content="← 返回"
+            <Button x:Name="BackButton" Grid.Column="11" Click="BackButton_Click" Content="← 返回"
                     Visibility="Collapsed" />
         </Grid>
 

@@ -35,6 +35,8 @@ public partial class SettingsPage : UserControl
         AutoDownloadCombo.Items.Add(I18n.Tr("关闭"));
         AutoUnzipCombo.Items.Add(I18n.Tr("开启"));
         AutoUnzipCombo.Items.Add(I18n.Tr("关闭"));
+        WebEnableCombo.Items.Add(I18n.Tr("开启"));
+        WebEnableCombo.Items.Add(I18n.Tr("关闭"));
         foreach (var level in new[] { "info", "error", "debug" })
             LogLevelCombo.Items.Add(level);
         foreach (var (_, name) in I18n.Languages)
@@ -66,6 +68,11 @@ public partial class SettingsPage : UserControl
         LanguageLabel.Text = I18n.Tr("语言");
         LogLevelLabel.Text = I18n.Tr("日志级别");
         EncodingLabel.Text = I18n.Tr("解压编码");
+        WebGroup.Header = I18n.Tr("外部访问");
+        WebEnableLabel.Text = I18n.Tr("外部访问");
+        WebPortLabel.Text = I18n.Tr("端口");
+        WebPasswordLabel.Text = I18n.Tr("访问密码");
+        WebPasswordBox.ToolTip = I18n.Tr("留空则不需要密码；手机/电脑浏览器访问时输入此密码");
         // 下拉框选项文案（保持索引语义不变，仅更新显示文本）
         ProxyStatusCombo.Items[0] = I18n.Tr("开启");
         ProxyStatusCombo.Items[1] = I18n.Tr("关闭");
@@ -73,7 +80,10 @@ public partial class SettingsPage : UserControl
         AutoDownloadCombo.Items[1] = I18n.Tr("关闭");
         AutoUnzipCombo.Items[0] = I18n.Tr("开启");
         AutoUnzipCombo.Items[1] = I18n.Tr("关闭");
+        WebEnableCombo.Items[0] = I18n.Tr("开启");
+        WebEnableCombo.Items[1] = I18n.Tr("关闭");
         _loading = false;
+        UpdateWebStatus();
     }
 
     private void Page_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
@@ -129,7 +139,12 @@ public partial class SettingsPage : UserControl
         var codes = I18n.Languages.Select(l => l.Code).ToList();
         var langIndex = codes.IndexOf(I18n.CurrentLanguage);
         LanguageCombo.SelectedIndex = langIndex >= 0 ? langIndex : 0;
+
+        WebEnableCombo.SelectedIndex = AppConfig.WebEnabled ? 0 : 1;
+        WebPortBox.Text = AppConfig.WebPort.ToString();
+        WebPasswordBox.Text = AppConfig.WebPassword;
         _loading = false;
+        UpdateWebStatus();
     }
 
     // ---------- 保存 ----------
@@ -272,5 +287,67 @@ public partial class SettingsPage : UserControl
         if (_loading)
             return;
         AppConfig.Write("encoding", "encoding", EncodingBox.Text.Trim());
+    }
+
+    // ---------- 外部访问 ----------
+
+    private void WebEnableCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loading)
+            return;
+        AppConfig.Write("web_server", "enabled", WebEnableCombo.SelectedIndex == 0 ? "True" : "False");
+        ApplyWebServer();
+    }
+
+    private void WebPortBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (_loading)
+            return;
+        // 端口校验：非法值回退 8080
+        var port = int.TryParse(WebPortBox.Text.Trim(), out var v) && v is >= 1 and <= 65535 ? v : 8080;
+        WebPortBox.Text = port.ToString();
+        AppConfig.Write("web_server", "port", port.ToString());
+        ApplyWebServer();
+    }
+
+    private void WebPasswordBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (_loading)
+            return;
+        AppConfig.Write("web_server", "password", WebPasswordBox.Text.Trim());
+        ApplyWebServer();
+    }
+
+    /// <summary>按当前配置启动/停止内嵌 Web 服务（开启时改端口/密码会重启），并刷新状态文案。</summary>
+    private void ApplyWebServer()
+    {
+        if (AppConfig.WebEnabled)
+            WebServer.StartFromConfig();
+        else
+            WebServer.Stop();
+        UpdateWebStatus();
+    }
+
+    private void UpdateWebStatus()
+    {
+        if (WebStatusLabel == null)
+            return;
+        if (!AppConfig.WebEnabled)
+        {
+            WebStatusLabel.Text = I18n.Tr("外部访问已关闭");
+            return;
+        }
+        if (WebServer.IsRunning)
+        {
+            var url = $"http://{WebServer.LocalIPv4()}:{WebServer.RunningPort}";
+            var text = I18n.Format(I18n.Tr("已开启 · 在手机/电脑浏览器打开 {url}"), ("url", url));
+            if (AppConfig.WebPassword.Length > 0)
+                text += I18n.Tr("（需输入访问密码）");
+            WebStatusLabel.Text = text;
+        }
+        else
+        {
+            WebStatusLabel.Text = I18n.Tr("启动失败：端口可能被占用，请更换端口");
+        }
     }
 }

@@ -34,6 +34,7 @@ public static class AppConfig
         },
         ["media_lib"] = new() { ["libs"] = "[]" },
         ["language"] = new() { ["lang"] = "zh_CN" },
+        ["web_server"] = new() { ["enabled"] = "False", ["port"] = "8080", ["password"] = "" },
     };
 
     private static Dictionary<string, Dictionary<string, string>>? _cache;
@@ -150,6 +151,24 @@ public static class AppConfig
     public static string SysEncoding => Read("encoding", "encoding", "cp437") ?? "cp437";
 
     public static string Language => Read("language", "lang", "zh_CN") ?? "zh_CN";
+
+    // ---------- 外部访问（内嵌 Web 服务）----------
+
+    /// <summary>是否开启外部访问（内嵌 HTTP 服务，手机/电脑浏览器可访问媒体库）。</summary>
+    public static bool WebEnabled => Read("web_server", "enabled") == "True";
+
+    /// <summary>外部访问端口（1-65535）。</summary>
+    public static int WebPort
+    {
+        get
+        {
+            var port = ReadInt("web_server", "port", 8080);
+            return port is >= 1 and <= 65535 ? port : 8080;
+        }
+    }
+
+    /// <summary>外部访问密码；为空表示不鉴权。</summary>
+    public static string WebPassword => Read("web_server", "password", "") ?? "";
 
     /// <summary>媒体库列表（media_lib.libs，JSON）。</summary>
     public static List<MediaLib> ReadMediaLibs()
