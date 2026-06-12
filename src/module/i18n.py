@@ -70,11 +70,11 @@ TRANSLATIONS = {
         'ja': '一部有効 {valid}/{total}',
         'en': 'Partly valid {valid}/{total}'},
     '已加入下载': {'zh_TW': '已加入下載', 'ja': 'ダウンロードに追加', 'en': 'Added to downloads'},
-    'RJ号错误': {'zh_TW': 'RJ號錯誤', 'ja': 'RJ番号エラー', 'en': 'Invalid RJ number'},
-    '{id} 不是有效的RJ号（格式：RJ + 数字）': {
-        'zh_TW': '{id} 不是有效的RJ號（格式：RJ + 數字）',
-        'ja': '{id} は有効な RJ 番号ではありません（形式：RJ + 数字）',
-        'en': '{id} is not a valid RJ number (format: RJ + digits)'},
+    '番号错误': {'zh_TW': '番號錯誤', 'ja': '番号エラー', 'en': 'Invalid number'},
+    '{id} 不是有效的番号（格式：RJ/BJ/VJ + 数字）': {
+        'zh_TW': '{id} 不是有效的番號（格式：RJ/BJ/VJ + 數字）',
+        'ja': '{id} は有効な番号ではありません（形式：RJ/BJ/VJ + 数字）',
+        'en': '{id} is not a valid number (format: RJ/BJ/VJ + digits)'},
     '{id} {name}\n该作品已于 {time} 加入过下载，是否继续搜索？': {
         'zh_TW': '{id} {name}\n該作品已於 {time} 加入過下載，是否繼續搜尋？',
         'ja': '{id} {name}\nこの作品は {time} にダウンロードへ追加済みです。検索を続けますか？',
@@ -106,6 +106,12 @@ TRANSLATIONS = {
     '等待下载 {done}/{total}': {
         'zh_TW': '等待下載 {done}/{total}', 'ja': '待機中 {done}/{total}', 'en': 'Waiting {done}/{total}'},
     '{n} 个解析失败': {'zh_TW': '{n} 個解析失敗', 'ja': '{n} 件解析失敗', 'en': '{n} parse failed'},
+    '重新解析': {'zh_TW': '重新解析', 'ja': '再解析', 'en': 'Re-parse'},
+    '重新搜索': {'zh_TW': '重新搜尋', 'ja': '再検索', 'en': 'Re-search'},
+    '将删除 {id} 已下载的分卷与文件夹，并重新搜索。是否继续？': {
+        'zh_TW': '將刪除 {id} 已下載的分卷與資料夾，並重新搜尋。是否繼續？',
+        'ja': '{id} のダウンロード済み分割ファイルとフォルダを削除して再検索します。続行しますか？',
+        'en': 'This will delete the downloaded parts and folder of {id}, then search again. Continue?'},
     '未知({status})': {'zh_TW': '未知({status})', 'ja': '不明({status})', 'en': 'Unknown({status})'},
     '番号 / 文件': {'zh_TW': '番號 / 檔案', 'ja': '番号 / ファイル', 'en': 'ID / File'},
     '下载进度': {'zh_TW': '下載進度', 'ja': '進捗', 'en': 'Progress'},
@@ -135,6 +141,14 @@ TRANSLATIONS = {
     '媒体库设置': {'zh_TW': '媒體庫設定', 'ja': 'ライブラリ設定', 'en': 'Library settings'},
     '打开文件夹': {'zh_TW': '開啟資料夾', 'ja': 'フォルダを開く', 'en': 'Open folder'},
     '移动媒体库': {'zh_TW': '移動媒體庫', 'ja': 'ライブラリを移動', 'en': 'Move library'},
+    '查看作品': {'zh_TW': '查看作品', 'ja': '作品を見る', 'en': 'Browse files'},
+    '作品信息': {'zh_TW': '作品資訊', 'ja': '作品情報', 'en': 'Work info'},
+    '查看图片': {'zh_TW': '查看圖片', 'ja': '画像を表示', 'en': 'View image'},
+    '上一张': {'zh_TW': '上一張', 'ja': '前へ', 'en': 'Previous'},
+    '下一张': {'zh_TW': '下一張', 'ja': '次へ', 'en': 'Next'},
+    '无法显示该图片': {'zh_TW': '無法顯示該圖片', 'ja': 'この画像を表示できません', 'en': 'Cannot display this image'},
+    '播放': {'zh_TW': '播放', 'ja': '再生', 'en': 'Play'},
+    '暂停': {'zh_TW': '暫停', 'ja': '一時停止', 'en': 'Pause'},
     '移动中…': {'zh_TW': '移動中…', 'ja': '移動中…', 'en': 'Moving…'},
     '选择要移动到的媒体库': {
         'zh_TW': '選擇要移動到的媒體庫',

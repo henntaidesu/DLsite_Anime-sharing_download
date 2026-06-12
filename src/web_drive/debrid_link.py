@@ -205,6 +205,32 @@ def move_to_target_folder(work_id, cache_folder):
     return dest
 
 
+def purge_work_download(work_id):
+    """重新搜索前清理该作品：删除已下载的分卷文件与作品文件夹，并清空其
+    download_list 记录与未完成（下载中）的 works 行，使其可从头重新下载。
+    返回是否删除了磁盘上的文件夹。"""
+    from src.module.datebase_execution import SQLiteDB
+
+    # 先取文件夹路径再删 works 行，否则删除后无法定位（work_folder_path 依赖 works.folder）
+    folder = work_folder_path(work_id)
+    removed = False
+    if folder and os.path.isdir(folder):
+        shutil.rmtree(folder, ignore_errors=True)
+        removed = not os.path.isdir(folder)
+        logger.write_log(f'{work_id} 重新搜索，删除已下载文件夹: {folder}', 'info')
+
+    esc = str(work_id).replace("'", "''")
+    SQLiteDB().delete(f'''DELETE FROM "main"."download_list" WHERE "work_id" = '{esc}' ''')
+    SQLiteDB().delete(
+        f'''DELETE FROM "main"."works" WHERE "work_id" = '{esc}' AND "state" = '下载中' ''')
+
+    # 内存缓存一并清理，避免影响重新下载时的目标目录与文件夹命名
+    _work_target_paths.pop(work_id, None)
+    _work_target_libs.pop(work_id, None)
+    _work_name_cache.pop(work_id, None)
+    return removed
+
+
 class DebridLink:
     """debrid-link.com 下载中转站 API 客户端"""
 

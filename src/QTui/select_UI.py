@@ -476,10 +476,10 @@ class SelectWindown(QMainWindow):
         self.select_ID = self.input.text().strip().upper()
         if not self.select_ID:
             return
-        # RJ 号格式校验
-        if not re.fullmatch(r'RJ\d+', self.select_ID):
-            QMessageBox.warning(self, tr('RJ号错误'),
-                                tr('{id} 不是有效的RJ号（格式：RJ + 数字）').format(id=self.select_ID))
+        # 番号格式校验：支持 RJ / BJ / VJ + 数字
+        if not re.fullmatch(r'(?:RJ|BJ|VJ)\d+', self.select_ID):
+            QMessageBox.warning(self, tr('番号错误'),
+                                tr('{id} 不是有效的番号（格式：RJ/BJ/VJ + 数字）').format(id=self.select_ID))
             return
         # 已下载过的作品提示用户
         result = SQLiteDB().select(

@@ -1,3 +1,4 @@
+import asyncio
 from src.QTui.select_UI import SelectWindown
 from src.QTui.download_UI import DownloadWindow
 from src.QTui.downloaded_UI import DownloadedWindow
@@ -40,6 +41,8 @@ class IndexWindow(QWidget):
 
         self.download_window = DownloadWindow()
         self.stackedWidget.addWidget(self.download_window)
+        # 下载页解析失败点击“重新搜索”：切回搜索页并自动以该番号重新搜索
+        self.download_window.research_requested.connect(self.research_work)
 
         self.downloaded_window = DownloadedWindow()
         self.stackedWidget.addWidget(self.downloaded_window)
@@ -77,6 +80,13 @@ class IndexWindow(QWidget):
 
     def show_download_window(self):
         self.stackedWidget.setCurrentWidget(self.download_window)
+
+    def research_work(self, work_id):
+        """从下载页跳转回搜索页，填入番号并自动发起搜索"""
+        self.select_button.setChecked(True)
+        self.stackedWidget.setCurrentWidget(self.select_window)
+        self.select_window.input.setText(work_id)
+        asyncio.create_task(self.select_window.show_select_button())
 
     def show_downloaded_window(self):
         self.stackedWidget.setCurrentWidget(self.downloaded_window)

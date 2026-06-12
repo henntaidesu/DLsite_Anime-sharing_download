@@ -1,5 +1,6 @@
 from PyQt5.QtWidgets import (QMainWindow, QPushButton, QTreeWidget, QTreeWidgetItem,
-                             QHeaderView, QMessageBox, QProgressBar, QLabel)
+                             QHeaderView, QMessageBox, QProgressBar, QLabel,
+                             QWidget, QHBoxLayout)
 from PyQt5.QtGui import QColor, QPainter, QFont
 from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal, QRectF
 from PyQt5.uic import loadUi
@@ -7,6 +8,7 @@ from src.module.datebase_execution import SQLiteDB
 from src.module.i18n import tr, notifier
 from src.web_drive.debrid_link import (start_download_worker, stop_download_worker,
                                        download_worker_running, stop_requested,
+                                       purge_work_download,
                                        DOWNLOAD_PROGRESS, UNZIP_PROGRESS)
 
 class RoundProgressBar(QProgressBar):
@@ -90,6 +92,9 @@ class UsageLoader(QThread):
 
 
 class DownloadWindow(QMainWindow):
+    # 解析失败的番号点击“重新搜索”时发出，携带番号，由外层切回搜索页重新搜索
+    research_requested = pyqtSignal(str)
+
     def __init__(self):
         super().__init__()
         loadUi("src/QTui/ui_file/download.ui", self)
@@ -103,17 +108,21 @@ class DownloadWindow(QMainWindow):
         self.usage_bar = self.findChild(QProgressBar, 'usage_bar')
         self.usage_loader = None
 
-        self.download_tree.setColumnCount(4)
+        self.download_tree.setColumnCount(5)
         self.download_tree.setHeaderLabels(
-            [tr('番号 / 文件'), tr('下载进度'), tr('速度'), tr('状态')])
+            [tr('番号 / 文件'), tr('下载进度'), tr('速度'), tr('状态'), ''])
         header = self.download_tree.header()
+        # 默认 stretchLastSection=True 会与第 0 列的 Stretch 冲突，导致末列（按钮列）宽度不可控被裁切
+        header.setStretchLastSection(False)
         header.setSectionResizeMode(0, QHeaderView.Stretch)
         header.setSectionResizeMode(1, QHeaderView.Fixed)
         header.setSectionResizeMode(2, QHeaderView.Fixed)
         header.setSectionResizeMode(3, QHeaderView.Fixed)
+        header.setSectionResizeMode(4, QHeaderView.Fixed)
         self.download_tree.setColumnWidth(1, 220)
         self.download_tree.setColumnWidth(2, 110)
         self.download_tree.setColumnWidth(3, 110)
+        self.download_tree.setColumnWidth(4, 220)
 
         self.start_download_button.clicked.connect(self.start_download)
         self.refresh_button.clicked.connect(self.refresh)
@@ -136,7 +145,7 @@ class DownloadWindow(QMainWindow):
     def retranslate_ui(self):
         self.setWindowTitle(tr('下载'))
         self.download_tree.setHeaderLabels(
-            [tr('番号 / 文件'), tr('下载进度'), tr('速度'), tr('状态')])
+            [tr('番号 / 文件'), tr('下载进度'), tr('速度'), tr('状态'), ''])
         self.refresh_button.setText(tr('刷新'))
         self.clear_done_button.setText(tr('清除已完成'))
         self.clear_all_button.setText(tr('清空列表'))
@@ -247,6 +256,52 @@ class DownloadWindow(QMainWindow):
         bar.setFont(font)
         return bar
 
+    def _reparse(self, work_id):
+        """重新解析：把该作品解析失败的分卷重新排队，由下载线程重新解析，成功则继续下载。
+        已下载完成的分卷（status='1'）保留不动。"""
+        esc = str(work_id).replace("'", "''")
+        SQLiteDB().update(
+            f'''UPDATE "main"."download_list" SET "status" = '0'
+                WHERE "work_id" = '{esc}' AND "status" = '2' ''')
+        start_download_worker()
+        self.refresh()
+
+    def _research(self, work_id):
+        """重新搜索：先确认并删除已下载的分卷与文件夹，再切回搜索页重新搜索"""
+        answer = QMessageBox.question(
+            self, tr('重新搜索'),
+            tr('将删除 {id} 已下载的分卷与文件夹，并重新搜索。是否继续？').format(id=work_id),
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if answer != QMessageBox.Yes:
+            return
+        purge_work_download(work_id)
+        self.refresh()
+        self.research_requested.emit(work_id)
+
+    @staticmethod
+    def _make_action_button(text, on_click):
+        btn = QPushButton(text)
+        btn.setCursor(Qt.PointingHandCursor)
+        btn.setFixedHeight(24)
+        btn.setStyleSheet(
+            'QPushButton { background-color: #2b3140; color: #cdd3de; border: 1px solid #3a4254; '
+            'border-radius: 6px; padding: 2px 12px; font-size: 12px; }'
+            'QPushButton:hover { background-color: #353c4d; color: #e6e9ef; }')
+        btn.clicked.connect(on_click)
+        return btn
+
+    def _make_action_buttons(self, work_id):
+        # 用容器把按钮收缩成小按钮并居右贴在列尾，避免铺满整列
+        container = QWidget()
+        layout = QHBoxLayout(container)
+        # 右侧多留出滚动条宽度+边距，避免按钮贴边或被竖直滚动条压住而显示不全
+        layout.setContentsMargins(0, 0, 28, 0)
+        layout.setSpacing(6)
+        layout.addStretch()
+        layout.addWidget(self._make_action_button(tr('重新解析'), lambda: self._reparse(work_id)))
+        layout.addWidget(self._make_action_button(tr('重新搜索'), lambda: self._research(work_id)))
+        return container
+
     def refresh(self):
         self._update_start_button()
         sql = '''SELECT "UUID", "work_id", "url", "status", "long"
@@ -277,6 +332,11 @@ class DownloadWindow(QMainWindow):
             parent = QTreeWidgetItem([work_id, '', '', agg_text])
             parent.setForeground(3, QColor(agg_color))
             self.download_tree.addTopLevelItem(parent)
+
+            # 该番号有分卷解析失败时，状态后跟“重新解析/重新搜索”按钮
+            if '2' in statuses and work_id:
+                self.download_tree.setItemWidget(
+                    parent, 4, self._make_action_buttons(work_id))
 
             total_pct = 0
             total_speed = 0.0

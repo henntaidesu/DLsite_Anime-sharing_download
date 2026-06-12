@@ -2,8 +2,9 @@ import html
 import os
 from PyQt5.QtWidgets import (QMainWindow, QPushButton, QLabel, QLineEdit, QWidget,
                              QFrame, QScrollArea, QGridLayout, QVBoxLayout, QHBoxLayout,
-                             QDialog, QStackedWidget, QMessageBox)
-from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal
+                             QDialog, QStackedWidget, QMessageBox, QTreeWidget,
+                             QTreeWidgetItem, QSlider)
+from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal, QUrl
 from PyQt5.QtGui import QPixmap
 from PyQt5.uic import loadUi
 from src.module.conf_operate import Config
@@ -14,6 +15,10 @@ from src.QTui.media_lib_setting_UI import MediaLibSettingDialog
 CARD_GAP = 10
 WORKS_PAGE = 30  # 作品卡片懒加载：每批数量
 UNKNOWN_MAKER = ''  # maker_name 为空的作品归到"未知社团"
+
+VIDEO_EXTS = ('.mp4', '.mkv', '.avi', '.wmv', '.mov', '.flv', '.webm', '.m4v',
+              '.ts', '.mpg', '.mpeg')
+AUDIO_EXTS = ('.mp3', '.wav', '.flac', '.m4a', '.aac', '.ogg', '.wma', '.opus')
 
 _AGE_MAP = {'1': '全年龄', '2': 'R-15', '3': 'R-18'}
 # label → (db列名, 是否多值用 " / " 分割)
@@ -335,6 +340,156 @@ class _MoveWorker(QThread):
         self.done.emit(ok, msg)
 
 
+class ImageViewerDialog(QDialog):
+    """程序内看图：大图自适应窗口，左右键 / 按钮切换同文件夹的所有图片"""
+
+    def __init__(self, paths, index, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(tr('查看图片'))
+        self.resize(960, 720)
+        self._paths = paths
+        self._index = index
+        self._pixmap = QPixmap()
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(8)
+        self._label = QLabel()
+        self._label.setAlignment(Qt.AlignCenter)
+        self._label.setStyleSheet('background: #111; border-radius: 4px;')
+        layout.addWidget(self._label, 1)
+
+        bar = QHBoxLayout()
+        prev_button = QPushButton('‹ ' + tr('上一张'))
+        prev_button.clicked.connect(self._prev)
+        next_button = QPushButton(tr('下一张') + ' ›')
+        next_button.clicked.connect(self._next)
+        self._counter = QLabel()
+        self._counter.setAlignment(Qt.AlignCenter)
+        bar.addWidget(prev_button)
+        bar.addWidget(self._counter, 1)
+        bar.addWidget(next_button)
+        layout.addLayout(bar)
+
+        self._load()
+
+    def _load(self):
+        self._pixmap = QPixmap(self._paths[self._index])
+        self._counter.setText(f'{self._index + 1} / {len(self._paths)}')
+        self.setWindowTitle(os.path.basename(self._paths[self._index]))
+        self._rescale()
+
+    def _rescale(self):
+        if self._pixmap.isNull():
+            self._label.setText(tr('无法显示该图片'))
+            return
+        self._label.setPixmap(self._pixmap.scaled(
+            self._label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._rescale()
+
+    def _prev(self):
+        self._index = (self._index - 1) % len(self._paths)
+        self._load()
+
+    def _next(self):
+        self._index = (self._index + 1) % len(self._paths)
+        self._load()
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key_Left:
+            self._prev()
+        elif event.key() == Qt.Key_Right:
+            self._next()
+        elif event.key() == Qt.Key_Escape:
+            self.reject()
+        else:
+            super().keyPressEvent(event)
+
+
+class MediaPlayerDialog(QDialog):
+    """程序内嵌播放器：视频用 QVideoWidget，音频只显示文件名，含播放/暂停与进度条"""
+
+    def __init__(self, path, is_video, parent=None):
+        super().__init__(parent)
+        from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent
+        from PyQt5.QtMultimediaWidgets import QVideoWidget
+
+        self.setWindowTitle(os.path.basename(path))
+        self.resize(960, 680) if is_video else self.resize(520, 180)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(8)
+
+        self._player = QMediaPlayer(self)
+        if is_video:
+            video = QVideoWidget()
+            video.setStyleSheet('background: #000;')
+            layout.addWidget(video, 1)
+            self._player.setVideoOutput(video)
+        else:
+            name = QLabel(os.path.basename(path))
+            name.setWordWrap(True)
+            name.setAlignment(Qt.AlignCenter)
+            name.setStyleSheet('font-size: 15px;')
+            layout.addWidget(name, 1)
+
+        self._play_button = QPushButton(tr('暂停'))
+        self._play_button.setFixedWidth(72)
+        self._play_button.clicked.connect(self._toggle)
+        self._slider = QSlider(Qt.Horizontal)
+        self._slider.setRange(0, 0)
+        self._slider.sliderMoved.connect(self._player.setPosition)
+        self._time = QLabel('00:00 / 00:00')
+        bar = QHBoxLayout()
+        bar.addWidget(self._play_button)
+        bar.addWidget(self._slider, 1)
+        bar.addWidget(self._time)
+        layout.addLayout(bar)
+
+        self._player.durationChanged.connect(self._on_duration)
+        self._player.positionChanged.connect(self._on_position)
+        self._player.stateChanged.connect(self._on_state)
+        self._player.setMedia(QMediaContent(QUrl.fromLocalFile(path)))
+        self._player.play()
+
+    def _toggle(self):
+        from PyQt5.QtMultimedia import QMediaPlayer
+        if self._player.state() == QMediaPlayer.PlayingState:
+            self._player.pause()
+        else:
+            self._player.play()
+
+    def _on_state(self, state):
+        from PyQt5.QtMultimedia import QMediaPlayer
+        self._play_button.setText(
+            tr('暂停') if state == QMediaPlayer.PlayingState else tr('播放'))
+
+    def _on_duration(self, duration):
+        self._slider.setRange(0, duration)
+        self._update_time(self._player.position(), duration)
+
+    def _on_position(self, position):
+        if not self._slider.isSliderDown():
+            self._slider.setValue(position)
+        self._update_time(position, self._player.duration())
+
+    def _update_time(self, position, duration):
+        self._time.setText(f'{self._fmt(position)} / {self._fmt(duration)}')
+
+    @staticmethod
+    def _fmt(ms):
+        secs = max(0, ms) // 1000
+        return f'{secs // 60:02d}:{secs % 60:02d}'
+
+    def closeEvent(self, event):
+        self._player.stop()
+        super().closeEvent(event)
+
+
 class MediaLibWindow(QMainWindow):
     """媒体库页面：媒体库卡片 → 社团卡片 → 作品卡片 三级浏览"""
 
@@ -348,6 +503,7 @@ class MediaLibWindow(QMainWindow):
         self.genre_button = self.findChild(QPushButton, 'genre_button')
         self.lib_setting_button = self.findChild(QPushButton, 'lib_setting_button')
         self.open_folder_button = self.findChild(QPushButton, 'open_folder_button')
+        self.view_files_button = self.findChild(QPushButton, 'view_files_button')
         self.move_lib_button = self.findChild(QPushButton, 'move_lib_button')
         self.cards_scroll = self.findChild(QScrollArea, 'cards_scroll')
         self.cards_container = self.cards_scroll.widget()
@@ -381,6 +537,9 @@ class MediaLibWindow(QMainWindow):
         self.lib_setting_button.clicked.connect(self.open_lib_settings)
         self.open_folder_button.clicked.connect(self._open_work_folder)
         self.open_folder_button.setVisible(False)
+        self.view_files_button.clicked.connect(self._toggle_file_tree)
+        self.view_files_button.setVisible(False)
+        self._detail_right_stack = None  # 详情页右侧 信息/文件树 切换栈
         self.move_lib_button.clicked.connect(self._move_work_library)
         self.move_lib_button.setVisible(False)
         self._move_worker = None
@@ -396,6 +555,7 @@ class MediaLibWindow(QMainWindow):
         self.genre_button.setText(tr('作品标签'))
         self.lib_setting_button.setText(tr('媒体库设置'))
         self.open_folder_button.setText(tr('打开文件夹'))
+        self.view_files_button.setText(tr('查看作品'))
         self.move_lib_button.setText(tr('移动媒体库'))
         self.search_edit.setPlaceholderText(tr('搜索 RJ号 / 作品名 / 社团'))
         self.refresh()
@@ -476,6 +636,59 @@ class MediaLibWindow(QMainWindow):
     def _open_work_folder(self):
         if self._current_work_folder and os.path.isdir(self._current_work_folder):
             os.startfile(self._current_work_folder)
+
+    def _toggle_file_tree(self):
+        """详情页右侧在“信息面板”与“文件树”之间切换"""
+        stack = self._detail_right_stack
+        if stack is None or not self._current_work_folder:
+            return
+        if stack.currentIndex() == 0:
+            if stack.count() < 2:  # 首次切换时才构建文件树
+                stack.addWidget(self._build_file_tree(self._current_work_folder))
+            stack.setCurrentIndex(1)
+            self.view_files_button.setText(tr('作品信息'))
+        else:
+            stack.setCurrentIndex(0)
+            self.view_files_button.setText(tr('查看作品'))
+
+    def _build_file_tree(self, root):
+        tree = QTreeWidget()
+        tree.setHeaderHidden(True)
+        tree.setMinimumHeight(360)
+        self._populate_tree(tree.invisibleRootItem(), root)
+        tree.itemClicked.connect(self._on_tree_item_clicked)
+        return tree
+
+    def _populate_tree(self, parent_item, path):
+        """递归填充：文件夹在前、文件在后，各自按名称排序"""
+        try:
+            names = os.listdir(path)
+        except OSError:
+            return
+        names.sort(key=lambda n: (not os.path.isdir(os.path.join(path, n)), n.lower()))
+        for name in names:
+            full = os.path.join(path, name)
+            item = QTreeWidgetItem(parent_item, [name])
+            item.setData(0, Qt.UserRole, full)
+            if os.path.isdir(full):
+                self._populate_tree(item, full)
+
+    def _on_tree_item_clicked(self, item, column):
+        """点击文件：图片→程序内看图（左右切换），视频/音频→内嵌播放器，其它→系统默认程序"""
+        from src.DLsite.DLsite_page import IMAGE_EXTS
+        path = item.data(0, Qt.UserRole)
+        if not path or os.path.isdir(path):
+            return  # 文件夹交给树自身展开/折叠
+        ext = os.path.splitext(path)[1].lower()
+        if ext in IMAGE_EXTS:
+            folder = os.path.dirname(path)
+            images = [os.path.join(folder, f) for f in sorted(os.listdir(folder))
+                      if f.lower().endswith(IMAGE_EXTS)]
+            ImageViewerDialog(images, images.index(path), self).exec_()
+        elif ext in VIDEO_EXTS or ext in AUDIO_EXTS:
+            MediaPlayerDialog(path, ext in VIDEO_EXTS, self).exec_()
+        else:
+            os.startfile(path)
 
     def _move_work_library(self):
         """把当前作品移动到另一个媒体库：移动文件夹 + 改库 + 同步元数据，旧库自动移除"""
@@ -587,6 +800,9 @@ class MediaLibWindow(QMainWindow):
             self._detail_widget.deleteLater()
             self._detail_widget = None
         self.open_folder_button.setVisible(False)
+        self.view_files_button.setVisible(False)
+        self.view_files_button.setText(tr('查看作品'))
+        self._detail_right_stack = None
         self.move_lib_button.setVisible(False)
         self._current_work_folder = None
 
@@ -716,6 +932,7 @@ class MediaLibWindow(QMainWindow):
         if work_folder and os.path.isdir(work_folder):
             self._current_work_folder = work_folder
             self.open_folder_button.setVisible(True)
+            self.view_files_button.setVisible(True)
             self.move_lib_button.setVisible(True)
 
         widget = QFrame(self.cards_container)
@@ -823,15 +1040,21 @@ class MediaLibWindow(QMainWindow):
             form.addWidget(value_label, row, 1)
             row += 1
 
-        # 上半部分：左边轮播图（1/3），右边字段详情（2/3）
+        # 上半部分：左边轮播图（1/3），右边字段详情（2/3）。
+        # 右侧用 QStackedWidget 承载“信息面板 / 文件树”两页，由“查看作品”按钮切换。
         content = QHBoxLayout()
         content.setSpacing(20)
         if slider_paths:
             content.addWidget(ImageSlider(slider_paths, widget), 1, Qt.AlignTop)
-        right_box = QVBoxLayout()
-        right_box.addLayout(form)
-        right_box.addStretch()
-        content.addLayout(right_box, 2)
+        info_page = QWidget()
+        info_layout = QVBoxLayout(info_page)
+        info_layout.setContentsMargins(0, 0, 0, 0)
+        info_layout.addLayout(form)
+        info_layout.addStretch()
+        right_stack = QStackedWidget()
+        right_stack.addWidget(info_page)
+        self._detail_right_stack = right_stack
+        content.addWidget(right_stack, 2)
         layout.addLayout(content)
 
         # 正文：文本与图片按原文顺序嵌入
