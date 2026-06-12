@@ -1,9 +1,10 @@
 import os
 from PyQt5.QtWidgets import (QMainWindow, QLineEdit, QPushButton, QComboBox, QMessageBox,
-                             QFileDialog)
+                             QFileDialog, QGroupBox, QLabel)
 from PyQt5.QtCore import QStandardPaths
 from PyQt5.uic import loadUi
 from src.module.conf_operate import Config
+from src.module.i18n import tr, notifier, apply_language, current_language, LANGUAGES
 from src.web_drive.debrid_link import DebridLink
 
 
@@ -43,6 +44,10 @@ class SettingWindow(QMainWindow):
             self.set_log_level_comboBox()
             self.log_level_choose.currentIndexChanged.connect(self.choose_log_level)
 
+            self.language_choose = self.findChild(QComboBox, 'language_choose')
+            self.set_language_comboBox()
+            self.language_choose.currentIndexChanged.connect(self.choose_language)
+
             self.path_banner_text = self.findChild(QLineEdit, 'path_benner')
             self.address_banner_text = self.findChild(QLineEdit, 'address_benner')
             self.port_banner_text = self.findChild(QLineEdit, 'port_benner')
@@ -68,6 +73,47 @@ class SettingWindow(QMainWindow):
 
             self.conf = Config()
             self.read_conf()
+
+            self.retranslate_ui()
+            notifier.language_changed.connect(self.retranslate_ui)
+
+        def retranslate_ui(self):
+            self.setWindowTitle(tr('设置'))
+            titles = {'downloadGroup': '下载', 'proxyGroup': '代理',
+                      'debridGroup': 'Debrid-Link 下载中转站', 'otherGroup': '下载选项',
+                      'systemGroup': '系统'}
+            for name, key in titles.items():
+                group = self.findChild(QGroupBox, name)
+                if group is not None:
+                    group.setTitle(tr(key))
+
+            labels = {'label': '下载路径', 'label_4': '自动下载', 'autoUnzipLabel': '自动解压',
+                      'folderNameLabel': '文件夹命名', 'label_5': '单文件线程数',
+                      'label_6': '查询线程数', 'minSpeedLabel': '最低速度 (KB/s)',
+                      'label_lang': '语言', 'label_7': '日志级别', 'label_8': '解压编码',
+                      'label_9': 'API 地址'}
+            for name, key in labels.items():
+                label = self.findChild(QLabel, name)
+                if label is not None:
+                    label.setText(tr(key))
+
+            self.down_path_save_button.setText(tr('保存'))
+            self.debrid_test_button.setText(tr('测试'))
+
+            # 工具提示
+            label5 = self.findChild(QLabel, 'label_5')
+            if label5 is not None:
+                label5.setToolTip(tr('单个文件分成多少段并发下载（多线程下载），1 为不分段'))
+            self.download_processes_text.setToolTip(
+                tr('单个文件分成多少段并发下载（多线程下载），1 为不分段，最大 16'))
+            self.min_speed_text.setToolTip(tr('持续低于该速度 30 秒后自动重试，0 表示不限制'))
+
+            # 下拉框选项文案（保持 itemData 不变，仅更新显示文本）
+            for combo in (self.proxy_status_choose, self.auto_download_choose, self.auto_unzip_choose):
+                combo.setItemText(0, tr('开启'))
+                combo.setItemText(1, tr('关闭'))
+            self.folder_name_choose.setItemText(0, tr('RJ号'))
+            self.folder_name_choose.setItemText(1, tr('作品名称'))
 
         def showEvent(self, event):
             """切换到本页时重新加载配置：先丢弃缓存从数据库重读，再回填控件"""
@@ -124,6 +170,12 @@ class SettingWindow(QMainWindow):
             self.api_address_text.setText(self.conf.read_value('API', 'address', '127.0.0.1'))
             self.api_port_text.setText(self.conf.read_value('API', 'port', '5000'))
 
+            codes = [code for code, _ in LANGUAGES]
+            lang_index = codes.index(current_language()) if current_language() in codes else 0
+            self.language_choose.blockSignals(True)  # 回填时不触发切换
+            self.language_choose.setCurrentIndex(lang_index)
+            self.language_choose.blockSignals(False)
+
         def save_down_path(self):
             """手动输入下载路径：输入的是有效目录时才保存"""
             path = self.path_banner_text.text().strip()
@@ -163,9 +215,10 @@ class SettingWindow(QMainWindow):
                 info = None
             if info:
                 account = info.get('email') or info.get('username') or ''
-                QMessageBox.information(self, '测试成功', f'已连接 debrid-link\n账户: {account}')
+                QMessageBox.information(self, tr('测试成功'),
+                                       tr('已连接 debrid-link\n账户: {account}').format(account=account))
             else:
-                QMessageBox.warning(self, '测试失败', 'API Key 无效或网络不可用')
+                QMessageBox.warning(self, tr('测试失败'), tr('API Key 无效或网络不可用'))
 
         def set_proxy_type_comboBox(self):
             items = ["http", "https", "Socks5"]
@@ -179,7 +232,7 @@ class SettingWindow(QMainWindow):
         def set_proxy_status_comboBox(self):
             items = [("开启", "True"), ("关闭", "False")]
             for item in items:
-                self.proxy_status_choose.addItem(f"{item[0]}", item)
+                self.proxy_status_choose.addItem(tr(item[0]), item)
 
         def choose_proxy_status(self, index):
             selected_item = self.proxy_status_choose.itemData(index)[1]
@@ -188,7 +241,7 @@ class SettingWindow(QMainWindow):
         def set_auto_download_comboBox(self):
             items = [("开启", "True"), ("关闭", "False")]
             for text, value in items:
-                self.auto_download_choose.addItem(text, value)
+                self.auto_download_choose.addItem(tr(text), value)
 
         def choose_auto_download(self, index):
             self.conf.write_value('down_list', 'auto_download', self.auto_download_choose.itemData(index))
@@ -196,7 +249,7 @@ class SettingWindow(QMainWindow):
         def set_auto_unzip_comboBox(self):
             items = [("开启", "True"), ("关闭", "False")]
             for text, value in items:
-                self.auto_unzip_choose.addItem(text, value)
+                self.auto_unzip_choose.addItem(tr(text), value)
 
         def choose_auto_unzip(self, index):
             self.conf.write_value('down_list', 'auto_unzip', self.auto_unzip_choose.itemData(index))
@@ -204,10 +257,17 @@ class SettingWindow(QMainWindow):
         def set_folder_name_comboBox(self):
             items = [("RJ号", "rj"), ("作品名称", "work_name")]
             for text, value in items:
-                self.folder_name_choose.addItem(text, value)
+                self.folder_name_choose.addItem(tr(text), value)
 
         def choose_folder_name(self, index):
             self.conf.write_value('down_list', 'folder_name', self.folder_name_choose.itemData(index))
+
+        def set_language_comboBox(self):
+            for code, name in LANGUAGES:
+                self.language_choose.addItem(name, code)
+
+        def choose_language(self, index):
+            apply_language(self.language_choose.itemData(index))
 
         def set_log_level_comboBox(self):
             items = ["info", "error", "debug"]
@@ -221,7 +281,7 @@ class SettingWindow(QMainWindow):
             """打开 Windows 文件夹选择对话框，选择后保存为下载路径"""
             current = self.path_banner_text.text()
             start_dir = current if os.path.isdir(current) else self.default_down_path()
-            path = QFileDialog.getExistingDirectory(self, '选择下载路径', start_dir)
+            path = QFileDialog.getExistingDirectory(self, tr('选择下载路径'), start_dir)
             if path:
                 path = os.path.normpath(path)
                 self.path_banner_text.setText(path)

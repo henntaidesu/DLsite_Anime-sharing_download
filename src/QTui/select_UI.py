@@ -13,6 +13,7 @@ from src.Anime_sharing.get_webdrive_url import get_work_down_url
 from src.DLsite.DLapi_call import get_work_data
 from src.module.conf_operate import Config
 from src.module.datebase_execution import SQLiteDB
+from src.module.i18n import tr, notifier
 from src.module.time import Time_a
 from src.web_drive.doun_url_test import check_url, make_session
 from src.web_drive.debrid_link import start_download_worker
@@ -24,7 +25,7 @@ class _DownTargetDialog(QDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle('选择下载位置')
+        self.setWindowTitle(tr('选择下载位置'))
         self.setModal(True)
         self.setMinimumWidth(420)
         self.selected_folder = None
@@ -41,7 +42,7 @@ class _DownTargetDialog(QDialog):
         layout.setContentsMargins(20, 16, 20, 16)
         layout.setSpacing(8)
 
-        title = QLabel('选择下载到哪个媒体库')
+        title = QLabel(tr('选择下载到哪个媒体库'))
         title.setStyleSheet('font-weight: 600; font-size: 14px;')
         layout.addWidget(title)
 
@@ -49,7 +50,7 @@ class _DownTargetDialog(QDialog):
             folders = [f for f in lib.get('folders', []) if f]
             if not folders:
                 continue
-            label = (f"{lib['name']}　{len(folders)} 个文件夹"
+            label = (f"{lib['name']}　{tr('{n} 个文件夹').format(n=len(folders))}"
                      if len(folders) > 1 else lib['name'])
             btn = QPushButton(label)
             btn.setMinimumHeight(40)
@@ -57,7 +58,7 @@ class _DownTargetDialog(QDialog):
             layout.addWidget(btn)
 
         layout.addStretch()
-        cancel_btn = QPushButton('取消')
+        cancel_btn = QPushButton(tr('取消'))
         cancel_btn.clicked.connect(self.reject)
         layout.addWidget(cancel_btn)
         self._stack.addWidget(page)
@@ -75,7 +76,7 @@ class _DownTargetDialog(QDialog):
         layout.setContentsMargins(20, 16, 20, 16)
         layout.setSpacing(8)
 
-        title = QLabel('选择下载文件夹')
+        title = QLabel(tr('选择下载文件夹'))
         title.setStyleSheet('font-weight: 600; font-size: 14px;')
         layout.addWidget(title)
 
@@ -87,7 +88,7 @@ class _DownTargetDialog(QDialog):
             layout.addWidget(btn)
 
         layout.addStretch()
-        back_btn = QPushButton('← 返回')
+        back_btn = QPushButton(tr('← 返回'))
         back_btn.clicked.connect(lambda: self._stack.setCurrentIndex(0))
         layout.addWidget(back_btn)
 
@@ -144,7 +145,7 @@ class LoadingOverlay(QWidget):
 
         painter.setPen(QColor('#e6e9f0'))
         painter.drawText(QRectF(0, cy + size / 2 + 12, self.width(), 30),
-                         Qt.AlignHCenter, '正在查询…')
+                         Qt.AlignHCenter, tr('正在查询…'))
 
 
 class ThumbLoader(QThread):
@@ -241,6 +242,15 @@ class SelectWindown(QMainWindow):
         # 下载网站卡片：点击有效卡片加入下载
         self.host_card_list.itemClicked.connect(self.host_card_click)
 
+        self.retranslate_ui()
+        notifier.language_changed.connect(self.retranslate_ui)
+
+    def retranslate_ui(self):
+        self.setWindowTitle(tr('搜索'))
+        self.input.setPlaceholderText(tr('输入作品番号，例如 RJ01234567'))
+        self.search_button.setText(tr('查询'))
+        self.back_button.setText(tr('← 返回结果'))
+
     @staticmethod
     def _trim_snippet(snippet):
         """整理帖子摘要：去掉空行和多余空白，最多保留 6 行"""
@@ -335,14 +345,14 @@ class SelectWindown(QMainWindow):
         left.setSpacing(2)
         name_label = QLabel(host)
         name_label.setStyleSheet('font-weight: 600; font-size: 14px;')
-        count_label = QLabel(f'{count} 个文件')
+        count_label = QLabel(tr('{count} 个文件').format(count=count))
         count_label.setStyleSheet('color: #8b93a3; font-size: 12px;')
         left.addWidget(name_label)
         left.addWidget(count_label)
         lay.addLayout(left)
         lay.addStretch(1)
 
-        status_label = QLabel('检测中…')
+        status_label = QLabel(tr('检测中…'))
         status_label.setStyleSheet('color: #8b93a3;')
         lay.addWidget(status_label)
         return frame, status_label, count_label
@@ -353,20 +363,20 @@ class SelectWindown(QMainWindow):
             return
         status_label = card['status']
         if checked < total:
-            status_label.setText(f'检测中… {checked}/{total}')
+            status_label.setText(tr('检测中… {checked}/{total}').format(checked=checked, total=total))
             return
         if valid == total:
             self.host_status[host] = True
-            status_label.setText('有效')
+            status_label.setText(tr('有效'))
             status_label.setStyleSheet('color: #4ade80; font-weight: 600;')
         elif valid == 0:
             self.host_status[host] = False
-            status_label.setText('失效')
+            status_label.setText(tr('失效'))
             status_label.setStyleSheet('color: #f87171;')
         else:
             # 分卷不全等于不可用，不允许加入下载
             self.host_status[host] = False
-            status_label.setText(f'部分有效 {valid}/{total}')
+            status_label.setText(tr('部分有效 {valid}/{total}').format(valid=valid, total=total))
             status_label.setStyleSheet('color: #fbbf24;')
 
     def show_results_page(self):
@@ -411,7 +421,7 @@ class SelectWindown(QMainWindow):
 
         self.host_status[host] = 'queued'
         status_label = self.host_cards[host]['status']
-        status_label.setText('已加入下载')
+        status_label.setText(tr('已加入下载'))
         status_label.setStyleSheet('color: #8fa3ff; font-weight: 600;')
 
     def record_work(self):
@@ -447,7 +457,8 @@ class SelectWindown(QMainWindow):
             return
         # RJ 号格式校验
         if not re.fullmatch(r'RJ\d+', self.select_ID):
-            QMessageBox.warning(self, 'RJ号错误', f'{self.select_ID} 不是有效的RJ号（格式：RJ + 数字）')
+            QMessageBox.warning(self, tr('RJ号错误'),
+                                tr('{id} 不是有效的RJ号（格式：RJ + 数字）').format(id=self.select_ID))
             return
         # 已下载过的作品提示用户
         result = SQLiteDB().select(
@@ -455,8 +466,9 @@ class SelectWindown(QMainWindow):
         if result is not False and result[1]:
             work_name, down_time = result[1][0]
             ret = QMessageBox.question(
-                self, '已下载',
-                f'{self.select_ID} {work_name or ""}\n该作品已于 {str(down_time)[:19]} 加入过下载，是否继续搜索？',
+                self, tr('已下载'),
+                tr('{id} {name}\n该作品已于 {time} 加入过下载，是否继续搜索？').format(
+                    id=self.select_ID, name=work_name or "", time=str(down_time)[:19]),
                 QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
             if ret != QMessageBox.Yes:
                 return
@@ -469,7 +481,7 @@ class SelectWindown(QMainWindow):
         finally:
             self.loading_overlay.stop()
         if not self.results:
-            QMessageBox.information(self, '提示', '无匹配数据')
+            QMessageBox.information(self, tr('提示'), tr('无匹配数据'))
             return
         self.ui_group_list(self.results)
 

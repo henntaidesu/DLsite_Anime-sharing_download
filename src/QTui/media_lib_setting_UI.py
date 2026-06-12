@@ -4,6 +4,7 @@ from PyQt5.QtWidgets import (QDialog, QPushButton, QLabel, QFrame, QScrollArea, 
 from PyQt5.QtCore import QStandardPaths, QThread, pyqtSignal
 from src.module.conf_operate import Config
 from src.module.datebase_execution import SQLiteDB
+from src.module.i18n import tr, notifier
 from src.QTui.style.theme import enable_dark_title_bar
 
 
@@ -27,21 +28,22 @@ class MediaLibScanner(QThread):
             folder_added, folder_total = import_media_lib(folder, self.lib_name)
             added += folder_added
             total += folder_total
-        self.progress.emit(f'已导入 {total} 个作品（新增 {added}），正在从 DL API 补全数据…')
+        self.progress.emit(tr('已导入 {total} 个作品（新增 {added}），正在从 DL API 补全数据…').format(
+            total=total, added=added))
         filled, _, _ = backfill_works_from_api(delay=0.5, progress=self._on_backfill,
                                                library=self.lib_name, force=self.force)
-        self.progress.emit('正在抓取 DLsite 作品页元数据与图片…')
+        self.progress.emit(tr('正在抓取 DLsite 作品页元数据与图片…'))
         page_filled, page_missed, _ = backfill_work_pages(delay=1.0, progress=self._on_page,
                                                           library=self.lib_name, force=self.force)
-        self.done.emit(f'扫描完成：导入 {total} 个，API 补全 {filled} 个，'
-                       f'作品页补全 {page_filled} 个（失败 {page_missed}）')
+        self.done.emit(tr('扫描完成：导入 {total} 个，API 补全 {filled} 个，作品页补全 {page_filled} 个（失败 {page_missed}）').format(
+            total=total, filled=filled, page_filled=page_filled, page_missed=page_missed))
 
     def _on_backfill(self, i, total, rj, ok):
         if i % 10 == 0 or i == total:
-            self.progress.emit(f'DL API 数据补全中… {i}/{total}')
+            self.progress.emit(tr('DL API 数据补全中… {i}/{total}').format(i=i, total=total))
 
     def _on_page(self, i, total, rj, ok):
-        self.progress.emit(f'作品页抓取中… {i}/{total}（{rj}）')
+        self.progress.emit(tr('作品页抓取中… {i}/{total}（{rj}）').format(i=i, total=total, rj=rj))
 
 
 class MediaLibSettingDialog(QDialog):
@@ -52,7 +54,7 @@ class MediaLibSettingDialog(QDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle('媒体库设置')
+        self.setWindowTitle(tr('媒体库设置'))
         self.resize(680, 480)
         enable_dark_title_bar(self)
 
@@ -71,10 +73,10 @@ class MediaLibSettingDialog(QDialog):
         self.media_lib_status.setProperty('class', 'caption')
         header.addWidget(self.media_lib_status)
         header.addStretch()
-        create_button = QPushButton('新建媒体库')
-        create_button.setMinimumSize(108, 28)
-        create_button.clicked.connect(self.create_media_lib)
-        header.addWidget(create_button)
+        self.create_button = QPushButton(tr('新建媒体库'))
+        self.create_button.setMinimumSize(108, 28)
+        self.create_button.clicked.connect(self.create_media_lib)
+        header.addWidget(self.create_button)
         layout.addLayout(header)
 
         scroll = QScrollArea()
@@ -88,6 +90,12 @@ class MediaLibSettingDialog(QDialog):
         layout.addWidget(scroll)
 
         self.media_libs = self.conf.read_media_libs()
+        self._rebuild_media_lib_cards()
+        notifier.language_changed.connect(self.retranslate_ui)
+
+    def retranslate_ui(self):
+        self.setWindowTitle(tr('媒体库设置'))
+        self.create_button.setText(tr('新建媒体库'))
         self._rebuild_media_lib_cards()
 
     @staticmethod
@@ -113,7 +121,7 @@ class MediaLibSettingDialog(QDialog):
             if item.widget():
                 item.widget().deleteLater()
         if not self.media_libs:
-            tip = QLabel('还没有媒体库，点击"新建媒体库"创建。')
+            tip = QLabel(tr('还没有媒体库，点击"新建媒体库"创建。'))
             tip.setProperty('class', 'caption')
             self.media_lib_cards_layout.addWidget(tip)
         else:
@@ -133,20 +141,20 @@ class MediaLibSettingDialog(QDialog):
         name_label = QLabel(lib['name'])
         name_label.setStyleSheet('font-weight: 600; font-size: 14px;')
         header.addWidget(name_label)
-        count_label = QLabel(f"{len(lib['folders'])} 个文件夹")
+        count_label = QLabel(tr('{n} 个文件夹').format(n=len(lib['folders'])))
         count_label.setProperty('class', 'caption')
         header.addWidget(count_label)
         header.addStretch()
-        add_button = QPushButton('添加文件夹')
+        add_button = QPushButton(tr('添加文件夹'))
         add_button.clicked.connect(lambda _, n=lib['name']: self.add_media_lib_folder(n))
         header.addWidget(add_button)
-        scan_button = QPushButton('扫描元数据')
+        scan_button = QPushButton(tr('扫描元数据'))
         scan_button.clicked.connect(lambda _, n=lib['name']: self.scan_media_lib(n))
         header.addWidget(scan_button)
-        rescan_button = QPushButton('重新扫描元数据')
+        rescan_button = QPushButton(tr('重新扫描元数据'))
         rescan_button.clicked.connect(lambda _, n=lib['name']: self.scan_media_lib(n, force=True))
         header.addWidget(rescan_button)
-        delete_button = QPushButton('删除')
+        delete_button = QPushButton(tr('删除'))
         delete_button.clicked.connect(lambda _, n=lib['name']: self.delete_media_lib(n))
         header.addWidget(delete_button)
         layout.addLayout(header)
@@ -158,7 +166,7 @@ class MediaLibSettingDialog(QDialog):
             path_label.setProperty('class', 'caption')
             row.addWidget(path_label)
             row.addStretch()
-            remove_button = QPushButton('移除')
+            remove_button = QPushButton(tr('移除'))
             remove_button.setFixedSize(52, 24)
             remove_button.clicked.connect(
                 lambda _, n=lib['name'], f=folder: self.remove_media_lib_folder(n, f))
@@ -167,14 +175,14 @@ class MediaLibSettingDialog(QDialog):
         return card
 
     def create_media_lib(self):
-        name, ok = QInputDialog.getText(self, '新建媒体库', '媒体库名称：')
+        name, ok = QInputDialog.getText(self, tr('新建媒体库'), tr('媒体库名称：'))
         if not ok:
             return
         name = name.strip()
         if not name:
             return
         if self._find_media_lib(name):
-            QMessageBox.information(self, '媒体库', '已存在同名媒体库。')
+            QMessageBox.information(self, tr('媒体库'), tr('已存在同名媒体库。'))
             return
         self.media_libs.append({'name': name, 'folders': []})
         self._save_media_libs()
@@ -183,13 +191,14 @@ class MediaLibSettingDialog(QDialog):
         lib = self._find_media_lib(lib_name)
         if lib is None:
             return
-        path = QFileDialog.getExistingDirectory(self, '选择媒体库文件夹', self.default_down_path())
+        path = QFileDialog.getExistingDirectory(self, tr('选择媒体库文件夹'), self.default_down_path())
         if not path:
             return
         path = os.path.normpath(path)
         for other in self.media_libs:
             if path in other['folders']:
-                QMessageBox.information(self, '媒体库', f'该文件夹已在媒体库"{other["name"]}"中。')
+                QMessageBox.information(self, tr('媒体库'),
+                                       tr('该文件夹已在媒体库"{name}"中。').format(name=other["name"]))
                 return
         # 只登记文件夹，扫描由"扫描元数据"按钮触发
         lib['folders'].append(path)
@@ -207,8 +216,8 @@ class MediaLibSettingDialog(QDialog):
         if lib is None:
             return
         answer = QMessageBox.question(
-            self, '删除媒体库',
-            f'确定删除媒体库"{lib_name}"吗？\n不会删除本地文件，已导入的作品记录保留。')
+            self, tr('删除媒体库'),
+            tr('确定删除媒体库"{name}"吗？\n不会删除本地文件，已导入的作品记录保留。').format(name=lib_name))
         if answer != QMessageBox.Yes:
             return
         self.media_libs.remove(lib)
@@ -237,7 +246,7 @@ class MediaLibSettingDialog(QDialog):
             if self.media_lib_pending:
                 self._start_media_lib_scan(*self.media_lib_pending.pop(0))
             return
-        self.media_lib_status.setText(f'正在扫描媒体库"{lib_name}"…')
+        self.media_lib_status.setText(tr('正在扫描媒体库"{name}"…').format(name=lib_name))
         self.media_lib_scanner = MediaLibScanner(lib_name, list(lib['folders']), force, self)
         self.media_lib_scanner.progress.connect(self.media_lib_status.setText)
         self.media_lib_scanner.done.connect(self._on_media_lib_scan_done)

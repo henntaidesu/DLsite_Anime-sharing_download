@@ -45,6 +45,8 @@ class Index:
                 QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
                 app = QApplication(sys.argv)
                 apply_dark_theme(app)
+                from src.module.i18n import init_language
+                init_language()  # 创建窗口前加载已保存的语言
                 loop = QEventLoop(app)
                 asyncio.set_event_loop(loop)
                 window = IndexWindow()

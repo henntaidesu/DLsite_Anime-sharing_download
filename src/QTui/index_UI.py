@@ -4,7 +4,8 @@ from src.QTui.downloaded_UI import DownloadedWindow
 from src.QTui.media_lib_UI import MediaLibWindow, TagWindow
 from src.QTui.setting_UI import SettingWindow
 from src.QTui.style.theme import enable_dark_title_bar
-from PyQt5.QtWidgets import QApplication, QMainWindow, QStackedWidget, QPushButton, QVBoxLayout, QWidget
+from src.module.i18n import tr, notifier
+from PyQt5.QtWidgets import QApplication, QMainWindow, QStackedWidget, QPushButton, QVBoxLayout, QWidget, QLabel
 from PyQt5.uic import loadUi
 
 
@@ -55,6 +56,20 @@ class IndexWindow(QWidget):
         # 设置默认显示的窗口
         self.select_button.setChecked(True)
         self.stackedWidget.setCurrentWidget(self.select_window)
+
+        self.logo_label = self.findChild(QLabel, 'logoLabel')
+        self.retranslate_ui()
+        notifier.language_changed.connect(self.retranslate_ui)
+
+    def retranslate_ui(self):
+        if self.logo_label is not None:
+            self.logo_label.setText(tr('DLsite 下载器'))
+        self.select_button.setText(tr('搜索'))
+        self.download_button.setText(tr('下载'))
+        self.downloaded_button.setText(tr('已下载'))
+        self.media_lib_button.setText(tr('媒体库'))
+        self.tag_button.setText(tr('标签'))
+        self.setting_button.setText(tr('设置'))
 
     def show_select_window(self):
         # 切换到 SelectWindown 窗口

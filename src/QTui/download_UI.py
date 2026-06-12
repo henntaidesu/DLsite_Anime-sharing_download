@@ -4,11 +4,12 @@ from PyQt5.QtGui import QColor
 from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal
 from PyQt5.uic import loadUi
 from src.module.datebase_execution import SQLiteDB
+from src.module.i18n import tr, notifier
 from src.web_drive.debrid_link import (start_download_worker, stop_download_worker,
                                        download_worker_running, stop_requested,
                                        DOWNLOAD_PROGRESS)
 
-# download_list.status -> 显示文本与颜色
+# download_list.status -> 显示文本（中文原文，渲染时经 tr() 翻译）与颜色
 STATUS_MAP = {
     '0': ('等待下载', '#facc15'),
     '3': ('下载中', '#60a5fa'),
@@ -68,7 +69,8 @@ class DownloadWindow(QMainWindow):
         self.usage_loader = None
 
         self.download_tree.setColumnCount(4)
-        self.download_tree.setHeaderLabels(['番号 / 文件', '下载进度', '速度', '状态'])
+        self.download_tree.setHeaderLabels(
+            [tr('番号 / 文件'), tr('下载进度'), tr('速度'), tr('状态')])
         header = self.download_tree.header()
         header.setSectionResizeMode(0, QHeaderView.Stretch)
         header.setSectionResizeMode(1, QHeaderView.Fixed)
@@ -92,6 +94,19 @@ class DownloadWindow(QMainWindow):
         self.usage_timer = QTimer(self)
         self.usage_timer.setInterval(15000)
         self.usage_timer.timeout.connect(self._fetch_usage)
+
+        self.retranslate_ui()
+        notifier.language_changed.connect(self.retranslate_ui)
+
+    def retranslate_ui(self):
+        self.setWindowTitle(tr('下载'))
+        self.download_tree.setHeaderLabels(
+            [tr('番号 / 文件'), tr('下载进度'), tr('速度'), tr('状态')])
+        self.refresh_button.setText(tr('刷新'))
+        self.clear_done_button.setText(tr('清除已完成'))
+        self.clear_all_button.setText(tr('清空列表'))
+        self._update_start_button()
+        self.refresh()
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -118,14 +133,14 @@ class DownloadWindow(QMainWindow):
         usage = (value or {}).get('usagePercent') or {}
         current = usage.get('current')
         if current is None:
-            self.usage_label.setText('debrid-link 使用量 --')
+            self.usage_label.setText(tr('debrid-link 使用量 --'))
             self.usage_bar.setValue(0)
             return
         self.usage_bar.setValue(min(100, int(round(current))))
-        text = 'debrid-link 使用量'
+        text = tr('debrid-link 使用量')
         reset = format_reset((value.get('nextResetSeconds') or {}).get('value', 0))
         if reset:
-            text += f' · {reset} 后重置'
+            text += tr(' · {reset} 后重置').format(reset=reset)
         self.usage_label.setText(text)
 
     def start_download(self):
@@ -140,13 +155,13 @@ class DownloadWindow(QMainWindow):
         if download_worker_running():
             if stop_requested():
                 # 已请求暂停，等待当前文件停到断点
-                self.start_download_button.setText('暂停中…')
+                self.start_download_button.setText(tr('暂停中…'))
                 self.start_download_button.setEnabled(False)
             else:
-                self.start_download_button.setText('暂停下载')
+                self.start_download_button.setText(tr('暂停下载'))
                 self.start_download_button.setEnabled(True)
         else:
-            self.start_download_button.setText('开始下载')
+            self.start_download_button.setText(tr('开始下载'))
             self.start_download_button.setEnabled(True)
 
     @staticmethod
@@ -166,12 +181,12 @@ class DownloadWindow(QMainWindow):
     def _aggregate_status(statuses):
         done = statuses.count('1')
         if '3' in statuses:
-            return f'下载中 {done}/{len(statuses)}', '#60a5fa'
+            return tr('下载中 {done}/{total}').format(done=done, total=len(statuses)), '#60a5fa'
         if '0' in statuses:
-            return f'等待下载 {done}/{len(statuses)}', '#facc15'
+            return tr('等待下载 {done}/{total}').format(done=done, total=len(statuses)), '#facc15'
         if '2' in statuses:
-            return f'{statuses.count("2")} 个解析失败', '#f87171'
-        return '已完成', '#4ade80'
+            return tr('{n} 个解析失败').format(n=statuses.count("2")), '#f87171'
+        return tr('已完成'), '#4ade80'
 
     @staticmethod
     def _make_progress_bar(pct):
@@ -221,7 +236,8 @@ class DownloadWindow(QMainWindow):
                 if speed:
                     total_speed += speed
 
-                text, color = STATUS_MAP.get(status, (f'未知({status})', '#cdd3de'))
+                raw_text, color = STATUS_MAP.get(status, (None, '#cdd3de'))
+                text = tr(raw_text) if raw_text else tr('未知({status})').format(status=status)
                 child = QTreeWidgetItem([file_name_of(url), '', format_speed(speed) if speed else '', text])
                 child.setForeground(0, QColor('#9aa3b2'))
                 child.setForeground(3, QColor(color))
@@ -243,8 +259,8 @@ class DownloadWindow(QMainWindow):
         if self.download_tree.topLevelItemCount() == 0:
             return
         answer = QMessageBox.question(
-            self, '清空下载列表',
-            '确定要清空整个下载列表吗？等待中的任务也会被删除。',
+            self, tr('清空下载列表'),
+            tr('确定要清空整个下载列表吗？等待中的任务也会被删除。'),
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
         if answer == QMessageBox.Yes:
             # 没有下载完成就被删除的番号，从已下载（works 表）中移除

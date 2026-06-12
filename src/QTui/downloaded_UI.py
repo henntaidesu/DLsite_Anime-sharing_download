@@ -4,8 +4,9 @@ from PyQt5.QtGui import QColor
 from PyQt5.QtCore import Qt
 from PyQt5.uic import loadUi
 from src.module.datebase_execution import SQLiteDB
+from src.module.i18n import tr, notifier
 
-# works.state -> 显示颜色
+# works.state（数据库原始值）-> 显示颜色
 STATE_COLORS = {
     '已品悦': '#4ade80',
     '已下载': '#60a5fa',
@@ -23,7 +24,8 @@ class DownloadedWindow(QMainWindow):
         self.count_label = self.findChild(QLabel, 'count_label')
 
         self.works_table.setColumnCount(6)
-        self.works_table.setHorizontalHeaderLabels(['RJ号', '作品名称', '社团', '类型', '状态', '下载时间'])
+        self.works_table.setHorizontalHeaderLabels(
+            [tr('RJ号'), tr('作品名称'), tr('社团'), tr('类型'), tr('状态'), tr('下载时间')])
         self.works_table.verticalHeader().setVisible(False)
         header = self.works_table.horizontalHeader()
         header.setSectionResizeMode(1, QHeaderView.Stretch)
@@ -37,17 +39,28 @@ class DownloadedWindow(QMainWindow):
         self.works_table.setContextMenuPolicy(Qt.CustomContextMenu)
         self.works_table.customContextMenuRequested.connect(self._show_context_menu)
 
+        self.retranslate_ui()
+        notifier.language_changed.connect(self.retranslate_ui)
+
+    def retranslate_ui(self):
+        self.setWindowTitle(tr('已下载'))
+        self.works_table.setHorizontalHeaderLabels(
+            [tr('RJ号'), tr('作品名称'), tr('社团'), tr('类型'), tr('状态'), tr('下载时间')])
+        self.refresh_button.setText(tr('刷新'))
+        self.refresh()
+
     def _show_context_menu(self, pos):
         item = self.works_table.itemAt(pos)
         if item is None:
             return
         row = item.row()
         work_id = self.works_table.item(row, 0).text()
-        state = self.works_table.item(row, 4).text()
+        # 用 UserRole 中保存的数据库原始状态值比较，避免被翻译后的显示文本影响
+        state = self.works_table.item(row, 4).data(Qt.UserRole)
         if state != '已下载':
             return
         menu = QMenu(self)
-        mark_action = menu.addAction('标记为已品悦')
+        mark_action = menu.addAction(tr('标记为已品悦'))
         if menu.exec_(self.works_table.viewport().mapToGlobal(pos)) == mark_action:
             SQLiteDB().update(
                 f'''UPDATE "main"."works" SET "state" = '已品悦' WHERE "work_id" = '{work_id}' ''')
@@ -72,10 +85,15 @@ class DownloadedWindow(QMainWindow):
                 text = '' if value is None else str(value)
                 if c == 5:
                     text = text[:19]  # 下载时间不显示微秒
-                item = QTableWidgetItem(text)
-                if c == 4 and text in STATE_COLORS:
-                    item.setForeground(QColor(STATE_COLORS[text]))
+                if c == 4:
+                    # 第 5 列是状态：显示译文，原始值存入 UserRole 供右键菜单/着色使用
+                    item = QTableWidgetItem(tr(text))
+                    item.setData(Qt.UserRole, text)
+                    if text in STATE_COLORS:
+                        item.setForeground(QColor(STATE_COLORS[text]))
+                else:
+                    item = QTableWidgetItem(text)
                 self.works_table.setItem(r, c, item)
         self.works_table.setSortingEnabled(True)
 
-        self.count_label.setText(f'共 {len(rows)} 个作品')
+        self.count_label.setText(tr('共 {n} 个作品').format(n=len(rows)))

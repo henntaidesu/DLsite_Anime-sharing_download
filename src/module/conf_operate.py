@@ -16,6 +16,7 @@ DEFAULT_CONF = {
     'down_list': {'auto_download': 'False', 'auto_unzip': 'False', 'download_processes': '5', 'folder_name': 'rj', 'min_speed': '256'},
     'api': {'address': '127.0.0.1', 'port': '5000'},
     'media_lib': {'libs': '[]'},
+    'language': {'lang': 'zh_CN'},
 }
 
 

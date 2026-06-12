@@ -7,6 +7,7 @@ from PyQt5.QtGui import QPixmap
 from PyQt5.uic import loadUi
 from src.module.conf_operate import Config
 from src.module.datebase_execution import SQLiteDB
+from src.module.i18n import tr, notifier
 from src.QTui.media_lib_setting_UI import MediaLibSettingDialog
 
 CARD_GAP = 10
@@ -274,6 +275,18 @@ class MediaLibWindow(QMainWindow):
         self.search_edit.textChanged.connect(self._apply_filter)
         self.cards_scroll.verticalScrollBar().valueChanged.connect(self._on_scroll)
 
+        self.retranslate_ui()
+        notifier.language_changed.connect(self.retranslate_ui)
+
+    def retranslate_ui(self):
+        self.setWindowTitle(tr('标签') if self._root == 'genres' else tr('媒体库'))
+        self.back_button.setText(tr('← 返回'))
+        self.genre_button.setText(tr('作品标签'))
+        self.lib_setting_button.setText(tr('媒体库设置'))
+        self.open_folder_button.setText(tr('打开文件夹'))
+        self.search_edit.setPlaceholderText(tr('搜索 RJ号 / 作品名 / 社团'))
+        self.refresh()
+
     def showEvent(self, event):
         """切换到本页时重新加载数据：先丢弃配置缓存，再重查数据库刷新当前视图"""
         super().showEvent(event)
@@ -441,7 +454,8 @@ class MediaLibWindow(QMainWindow):
         self._clear_cards()
         self.cards = [
             ClickCard(lib['name'],
-                      f"{counts.get(lib['name'], 0)} 个作品 · {len(lib['folders'])} 个文件夹",
+                      tr('{works} 个作品 · {folders} 个文件夹').format(
+                          works=counts.get(lib['name'], 0), folders=len(lib['folders'])),
                       lib['name'], self._open_lib, WORK_CARD_W, 110, parent=self.cards_container)
             for lib in Config().read_media_libs()
         ]
@@ -470,7 +484,7 @@ class MediaLibWindow(QMainWindow):
         self._total_works = sum(row[1] for row in result[1])
         self._clear_cards()
         self.cards = [
-            ClickCard(maker or '未知社团', f'{count} 个作品',
+            ClickCard(maker or tr('未知社团'), tr('{count} 个作品').format(count=count),
                       maker or UNKNOWN_MAKER, self._open_maker, WORK_CARD_W, 110,
                       parent=self.cards_container)
             for maker, count in result[1]
@@ -495,8 +509,8 @@ class MediaLibWindow(QMainWindow):
         self._total_works = total[1][0][0] if total is not False else 0
         self._clear_cards()
         self.cards = [
-            ClickCard(genre, f'{count} 个作品', genre, self._open_genre, WORK_CARD_W, 110,
-                      parent=self.cards_container)
+            ClickCard(genre, tr('{count} 个作品').format(count=count), genre,
+                      self._open_genre, WORK_CARD_W, 110, parent=self.cards_container)
             for genre, count in result[1]
         ]
         self._apply_filter()
@@ -627,7 +641,7 @@ class MediaLibWindow(QMainWindow):
             elif not value:
                 continue
             elif label == '年龄分级':
-                display = _AGE_MAP.get(str(value), str(value))
+                display = tr(_AGE_MAP.get(str(value), str(value)))
                 value_label = QLabel(
                     f'<a href="{html.escape(str(value), quote=True)}">{html.escape(display)}</a>')
                 value_label.setWordWrap(True)
@@ -650,7 +664,7 @@ class MediaLibWindow(QMainWindow):
                 value_label = QLabel(str(value))
                 value_label.setWordWrap(True)
                 value_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-            key_label = QLabel(label)
+            key_label = QLabel(tr(label))
             key_label.setProperty('class', 'caption')
             form.addWidget(key_label, row, 0, Qt.AlignTop)
             form.addWidget(value_label, row, 1)
@@ -722,11 +736,14 @@ class MediaLibWindow(QMainWindow):
                 shown += 1
         self._relayout()
         total = len(self.cards)
-        unit = {'libs': '个媒体库', 'makers': '个社团', 'genres': '个标签'}[self._level]
+        unit = tr({'libs': '个媒体库', 'makers': '个社团', 'genres': '个标签'}[self._level])
         if keyword:
-            self.count_label.setText(f'共 {total} {unit}，匹配 {shown} 个')
+            self.count_label.setText(
+                tr('共 {total} {unit}，匹配 {shown} 个').format(total=total, unit=unit, shown=shown))
         else:
-            self.count_label.setText(f'共 {total} {unit}，{self._total_works} 个作品')
+            self.count_label.setText(
+                tr('共 {total} {unit}，{works} 个作品').format(
+                    total=total, unit=unit, works=self._total_works))
 
     def _load_more_works(self):
         """作品视图：追加加载下一批卡片"""
@@ -739,9 +756,10 @@ class MediaLibWindow(QMainWindow):
             self._relayout()
         keyword = self.search_edit.text().strip()
         total, matched, loaded = len(self._work_rows), len(self._filtered_rows), len(self.cards)
-        text = f'共 {total} 个作品，匹配 {matched} 个' if keyword else f'共 {total} 个作品'
+        text = (tr('共 {total} 个作品，匹配 {matched} 个').format(total=total, matched=matched)
+                if keyword else tr('共 {total} 个作品').format(total=total))
         if loaded < matched:
-            text += f'（已加载 {loaded}）'
+            text += tr('（已加载 {loaded}）').format(loaded=loaded)
         self.count_label.setText(text)
 
     def _on_scroll(self, value):
