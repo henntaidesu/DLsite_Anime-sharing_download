@@ -85,6 +85,7 @@ public partial class MediaLibPage : UserControl
     private bool _searchMode;        // 当前是否处于作品搜索结果视图
     private bool _detailFromSearch;  // 当前详情是否由搜索结果打开（返回时回到搜索结果）
     private string _searchLevel = "libs";  // 进入详情前所处的搜索层级（libs/makers）
+    private string _detailReturnLevel = "works";  // 进入详情前的作品列表层级（返回时复原）
 
     // 所有卡片层级统一的懒加载来源：每项携带一个延迟构建器与搜索过滤键
     private sealed record GridCard(Func<Border> Build, string FilterKey);
@@ -116,9 +117,14 @@ public partial class MediaLibPage : UserControl
         return brush;
     }
 
+    // 底部音频播放条：代码动态加入 RootGrid 第 2 行（在文件树中就地播放 wav/mp3 等）
+    private readonly AudioPlayerBar AudioBar = new() { Margin = new Thickness(0, 10, 0, 0) };
+
     public MediaLibPage(MediaLibRoot root)
     {
         InitializeComponent();
+        Grid.SetRow(AudioBar, 2);
+        RootGrid.Children.Add(AudioBar);
         _root = root;
         // 各根视图的初始层级；媒体库设置按钮仅在媒体库首页显示（由 ClearCards/ShowLibs 控制）
         _level = root switch
@@ -149,7 +155,10 @@ public partial class MediaLibPage : UserControl
     private void Page_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
         if (!(bool)e.NewValue)
+        {
+            AudioBar.Stop();  // 离开本页时停止音频播放
             return;
+        }
         // 切换到本页时重新加载数据：先丢弃配置缓存，再重查数据库刷新当前视图
         AppConfig.Reload();
         Refresh();
@@ -175,18 +184,22 @@ public partial class MediaLibPage : UserControl
                     _detailFromSearch = false;
                     _level = _searchLevel;
                     ApplyCardFilter();
-                    RestoreWorksScroll();
-                }
-                else if (_root == MediaLibRoot.Favorite)
-                {
-                    ShowFavorites();
-                    RestoreWorksScroll();
                 }
                 else
                 {
-                    ShowWorks();
-                    RestoreWorksScroll();
+                    // 返回进入详情前的作品列表层级
+                    switch (_detailReturnLevel)
+                    {
+                        case "lib_works": ShowLibWorks(); break;
+                        case "favorites": ShowFavorites(); break;
+                        case "filtered_works": ShowFilteredWorks(); break;
+                        default: ShowWorks(); break;
+                    }
                 }
+                RestoreWorksScroll();
+                break;
+            case "lib_works":
+                ShowLibs();
                 break;
             case "works":
                 _currentMaker = null;
@@ -255,6 +268,25 @@ public partial class MediaLibPage : UserControl
         }
         _settingDialog.Show();
         _settingDialog.Activate();
+    }
+
+    private void LibToggleButton_Click(object sender, RoutedEventArgs e)
+    {
+        // 在"显示作品"（媒体库全部作品）与"显示社团"（社团卡片）之间切换
+        if (_level == "lib_works")
+            ShowMakers();
+        else
+            ShowLibWorks();
+    }
+
+    /// <summary>仅进入某个媒体库（非标签/形式流程）时显示"显示作品/显示社团"切换按钮。</summary>
+    private void UpdateLibToggleButton()
+    {
+        var inLib = _currentLib != null && _currentGenre == null && _currentType == null
+                    && _level is "lib_works" or "makers";
+        LibToggleButton.Visibility = inLib ? Visibility.Visible : Visibility.Collapsed;
+        if (inLib)
+            LibToggleButton.Content = _level == "makers" ? I18n.Tr("显示作品") : I18n.Tr("显示社团");
     }
 
     private void OpenFolderButton_Click(object sender, RoutedEventArgs e)
@@ -335,6 +367,8 @@ public partial class MediaLibPage : UserControl
             ShowDetail();
         else if (_level == "favorites")
             ShowFavorites();
+        else if (_level == "lib_works" && _currentLib != null)
+            ShowLibWorks();
         else if (_level is "works" && _currentMaker != null)
             ShowWorks();
         else if (_level == "makers" && (_currentLib != null || _currentGenre != null || _currentType != null))
@@ -380,6 +414,7 @@ public partial class MediaLibPage : UserControl
         ReadButton.Visibility = Visibility.Collapsed;
         FavButton.Visibility = Visibility.Collapsed;
         LibSettingButton.Visibility = Visibility.Collapsed;  // 仅媒体库首页显示，由 ApplyCardFilter 重新打开
+        LibToggleButton.Visibility = Visibility.Collapsed;   // 仅媒体库内作品/社团视图显示
         SortBox.Visibility = Visibility.Collapsed;            // 仅社团页/作品页显示，由 ApplyCardFilter 重新打开
         SearchBox.Visibility = Visibility.Visible;           // 默认显示搜索框，详情页由 ShowDetail 隐藏
         RjLabel.Visibility = Visibility.Collapsed;           // RJ 号仅详情页显示
@@ -438,7 +473,8 @@ public partial class MediaLibPage : UserControl
                 _currentLib = name;
                 _currentMaker = null;
                 _currentGenre = null;
-                ShowMakers();
+                _currentType = null;
+                ShowLibWorks();   // 进入媒体库默认显示作品（可切换到社团视图）
             }), name.ToLowerInvariant());
         }).ToList();
         ApplyCardFilter();
@@ -624,6 +660,19 @@ public partial class MediaLibPage : UserControl
             SetWorkCards(rows);
     }
 
+    /// <summary>进入媒体库后的默认视图：平铺当前媒体库下全部已品悦作品（可切换到社团视图）。</summary>
+    private void ShowLibWorks()
+    {
+        _level = "lib_works";
+        _currentMaker = null;
+        var rows = Db.Select(
+            "SELECT \"work_id\", \"work_name\", \"maker_name\", \"work_type\", \"age_category\", \"cover\" " +
+            "FROM \"works\" WHERE \"state\" = '已品悦' AND \"library\" = @lib " + WorkOrderClause(),
+            ("@lib", _currentLib ?? ""));
+        if (rows != null)
+            SetWorkCards(rows);
+    }
+
     /// <summary>作品卡层级共用：把查询结果转成懒加载卡片项并刷新 SortBox。</summary>
     private void SetWorkCards(List<object?[]> rows)
     {
@@ -705,6 +754,10 @@ public partial class MediaLibPage : UserControl
                 _workSort = idx;
                 ShowFavorites();
                 break;
+            case "lib_works":
+                _workSort = idx;
+                ShowLibWorks();
+                break;
         }
     }
 
@@ -733,8 +786,9 @@ public partial class MediaLibPage : UserControl
         BackButton.Visibility = ShouldShowBack() ? Visibility.Visible : Visibility.Collapsed;
         if (_level == "libs")
             LibSettingButton.Visibility = Visibility.Visible;  // 媒体库设置仅在媒体库首页显示
-        SortBox.Visibility = _level is "makers" or "works" or "filtered_works" or "favorites"
+        SortBox.Visibility = _level is "makers" or "works" or "filtered_works" or "favorites" or "lib_works"
             ? Visibility.Visible : Visibility.Collapsed;
+        UpdateLibToggleButton();
         _loadedCards = 0;
         LoadMoreCards();
     }
@@ -783,6 +837,7 @@ public partial class MediaLibPage : UserControl
         ClearCards();
         BackButton.Visibility = ShouldShowBack() ? Visibility.Visible : Visibility.Collapsed;
         SortBox.Visibility = Visibility.Visible;
+        UpdateLibToggleButton();
         _loadedCards = 0;
         LoadMoreCards();
     }
@@ -985,9 +1040,10 @@ public partial class MediaLibPage : UserControl
         {
             _worksScrollPos = CardsScroll.VerticalOffset;
             _currentWork = workId;
-            // 记录是否从搜索结果进入详情，以便返回时回到同一搜索视图
+            // 记录进入详情前的层级，以便返回时回到原作品列表 / 搜索视图
             _detailFromSearch = _searchMode;
             _searchLevel = _level;
+            _detailReturnLevel = _level;
             ShowDetail();
         };
         return card;
@@ -1440,11 +1496,12 @@ public partial class MediaLibPage : UserControl
         return row;
     }
 
-    /// <summary>文件行：类型图标 + 名称 + 大小。图片/视频单击整页预览；音频/其它双击打开。</summary>
+    /// <summary>文件行：类型图标 + 名称 + 大小。图片/视频单击整页预览；音频单击底部播放条播放；其它双击打开。</summary>
     private Border MakeTreeFileRow(string path, int depth)
     {
         var ext = Path.GetExtension(path).ToLowerInvariant();
         var previewable = DlsitePage.ImageExts.Contains(ext) || VideoExts.Contains(ext);
+        var isAudio = AudioExts.Contains(ext);
         var row = new Border
         {
             Background = Brushes.Transparent,
@@ -1467,7 +1524,7 @@ public partial class MediaLibPage : UserControl
         var name = new TextBlock
         {
             Text = Path.GetFileName(path),
-            Foreground = (Brush)FindResource(previewable ? "TextBrush" : "CaptionBrush"),
+            Foreground = (Brush)FindResource(previewable || isAudio ? "TextBrush" : "CaptionBrush"),
             VerticalAlignment = VerticalAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis,
         };
@@ -1497,6 +1554,12 @@ public partial class MediaLibPage : UserControl
             row.Cursor = Cursors.Hand;
             row.MouseLeftButtonUp += (_, _) => ShowPreview(path);
         }
+        else if (isAudio)
+        {
+            // 音频单击：在底部播放条就地播放（wav/mp3 等），并以同文件夹音频组成播放队列
+            row.Cursor = Cursors.Hand;
+            row.MouseLeftButtonUp += (_, _) => PlayAudioFromTree(path);
+        }
         else
         {
             row.MouseLeftButtonDown += (_, e) =>
@@ -1510,6 +1573,35 @@ public partial class MediaLibPage : UserControl
         row.MouseEnter += (_, _) => row.Background = RowHoverBrush;
         row.MouseLeave += (_, _) => row.Background = Brushes.Transparent;
         return row;
+    }
+
+    /// <summary>点击音频：把同文件夹内的所有音频按名称排序组成播放队列，从点击的这首开始播放。</summary>
+    private void PlayAudioFromTree(string path)
+    {
+        List<(string Path, string Title)> queue = [];
+        var index = 0;
+        var dir = Path.GetDirectoryName(path);
+        if (dir != null)
+        {
+            try
+            {
+                var files = Directory.GetFiles(dir)
+                    .Where(f => AudioExts.Contains(Path.GetExtension(f).ToLowerInvariant()))
+                    .OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                index = files.FindIndex(f => string.Equals(f, path, StringComparison.OrdinalIgnoreCase));
+                if (index < 0)
+                    index = 0;
+                queue = files.Select(f => (f, Path.GetFileName(f))).ToList();
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                // 枚举失败时退回单文件播放
+            }
+        }
+        if (queue.Count == 0)
+            queue = [(path, Path.GetFileName(path))];
+        AudioBar.PlayQueue(queue, index);
     }
 
     /// <summary>按扩展名选择文件类型图标。</summary>
@@ -1548,6 +1640,8 @@ public partial class MediaLibPage : UserControl
         var ext = Path.GetExtension(path).ToLowerInvariant();
         _inlinePlayer?.Shutdown();
         _inlinePlayer = null;
+        // 先显示整页遮罩，使随后挂入的视频播放器在“已加载且可见”的状态下开始播放（否则画面黑屏）
+        PreviewOverlay.Visibility = Visibility.Visible;
         if (DlsitePage.ImageExts.Contains(ext))
         {
             var dir = Path.GetDirectoryName(path)!;
@@ -1563,23 +1657,33 @@ public partial class MediaLibPage : UserControl
                 _previewImages = [path];
             }
             _previewIndex = Math.Max(0, _previewImages.IndexOf(path));
-            PreviewNavBar.Visibility = _previewImages.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
+            SetPreviewNavVisible(_previewImages.Count > 1);
             LoadPreviewImage();
         }
         else if (VideoExts.Contains(ext))
         {
+            AudioBar.Stop();   // 视频自带声音：开始播视频前停掉底部音频，避免两路声音重叠
             _previewImages = [];
-            PreviewNavBar.Visibility = Visibility.Collapsed;
+            SetPreviewNavVisible(false);
             PreviewTitle.Text = Path.GetFileName(path);
             _inlinePlayer = new InlineMediaPlayer(path);
             PreviewContent.Child = _inlinePlayer;
         }
         else
         {
+            PreviewOverlay.Visibility = Visibility.Collapsed;
             return;
         }
-        PreviewOverlay.Visibility = Visibility.Visible;
         PreviewOverlay.Focus();
+    }
+
+    /// <summary>统一切换顶部"上一张/下一张"与图片两侧覆盖箭头的显示。</summary>
+    private void SetPreviewNavVisible(bool visible)
+    {
+        var v = visible ? Visibility.Visible : Visibility.Collapsed;
+        PreviewNavBar.Visibility = v;
+        PreviewPrevArrow.Visibility = v;
+        PreviewNextArrow.Visibility = v;
     }
 
     private void LoadPreviewImage()

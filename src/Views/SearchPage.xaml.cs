@@ -78,6 +78,9 @@ public partial class SearchPage : UserControl
     private DlWork? _workData;     // 当前搜索作品的 DL API 数据，加入下载时写入 works 表
     private int _searchGeneration;  // 旧一轮缩略图/检测结果作废用
 
+    /// <summary>点击"← 下载列表"按钮时触发，由主窗口切回下载视图。</summary>
+    public event Action? BackToDownloadRequested;
+
     public SearchPage()
     {
         InitializeComponent();
@@ -90,6 +93,7 @@ public partial class SearchPage : UserControl
     private void RetranslateUi()
     {
         InputBox.ToolTip = I18n.Tr("输入作品番号，例如 RJ01234567");
+        BackToDownloadButton.Content = I18n.Tr("← 下载列表");
         SearchButton.Content = I18n.Tr("查询");
         BackButton.Content = I18n.Tr("← 返回结果");
         LoadingText.Text = I18n.Tr("正在查询…");
@@ -111,6 +115,9 @@ public partial class SearchPage : UserControl
     }
 
     private void BackButton_Click(object sender, RoutedEventArgs e) => ShowResultsPage();
+
+    private void BackToDownloadButton_Click(object sender, RoutedEventArgs e) =>
+        BackToDownloadRequested?.Invoke();
 
     private void ShowResultsPage()
     {

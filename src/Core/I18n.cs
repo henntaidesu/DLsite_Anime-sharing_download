@@ -77,6 +77,7 @@ public static class I18n
         ["DLsite 下载器"] = new() { ["zh_TW"] = "DLsite 下載器", ["ja"] = "DLsite ダウンローダー", ["en"] = "DLsite Downloader" },
         ["搜索"] = new() { ["zh_TW"] = "搜尋", ["ja"] = "検索", ["en"] = "Search" },
         ["下载"] = new() { ["zh_TW"] = "下載", ["ja"] = "ダウンロード", ["en"] = "Download" },
+        ["搜索/下载"] = new() { ["zh_TW"] = "搜尋/下載", ["ja"] = "検索/ダウンロード", ["en"] = "Search / Download" },
         ["已下载"] = new() { ["zh_TW"] = "已下載", ["ja"] = "ダウンロード済み", ["en"] = "Downloaded" },
         ["媒体库"] = new() { ["zh_TW"] = "媒體庫", ["ja"] = "ライブラリ", ["en"] = "Library" },
         ["标签"] = new() { ["zh_TW"] = "標籤", ["ja"] = "タグ", ["en"] = "Tags" },
@@ -102,6 +103,7 @@ public static class I18n
         },
         ["查询"] = new() { ["zh_TW"] = "查詢", ["ja"] = "検索", ["en"] = "Search" },
         ["← 返回结果"] = new() { ["zh_TW"] = "← 返回結果", ["ja"] = "← 結果に戻る", ["en"] = "← Back to results" },
+        ["← 下载列表"] = new() { ["zh_TW"] = "← 下載列表", ["ja"] = "← ダウンロード一覧", ["en"] = "← Downloads" },
         ["选择下载位置"] = new() { ["zh_TW"] = "選擇下載位置", ["ja"] = "ダウンロード先を選択", ["en"] = "Choose download location" },
         ["选择下载到哪个媒体库"] = new()
         {
@@ -153,6 +155,7 @@ public static class I18n
         ["debrid-link 使用量"] = new() { ["zh_TW"] = "debrid-link 使用量", ["ja"] = "debrid-link 使用量", ["en"] = "debrid-link usage" },
         ["debrid-link 使用量 --"] = new() { ["zh_TW"] = "debrid-link 使用量 --", ["ja"] = "debrid-link 使用量 --", ["en"] = "debrid-link usage --" },
         [" · {reset} 后重置"] = new() { ["zh_TW"] = " · {reset} 後重置", ["ja"] = " · {reset} 後にリセット", ["en"] = " · resets in {reset}" },
+        ["搜索作品"] = new() { ["zh_TW"] = "搜尋作品", ["ja"] = "作品を検索", ["en"] = "Search works" },
         ["开始下载"] = new() { ["zh_TW"] = "開始下載", ["ja"] = "ダウンロード開始", ["en"] = "Start" },
         ["暂停下载"] = new() { ["zh_TW"] = "暫停下載", ["ja"] = "ダウンロード停止", ["en"] = "Pause" },
         ["暂停中…"] = new() { ["zh_TW"] = "暫停中…", ["ja"] = "停止中…", ["en"] = "Pausing…" },

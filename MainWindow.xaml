@@ -15,18 +15,16 @@
             <StackPanel>
                 <TextBlock x:Name="LogoLabel" Text="DLsite 下载器" FontSize="17" FontWeight="Bold"
                            Margin="20,22,12,18" />
-                <RadioButton x:Name="NavSearch" Style="{StaticResource NavButton}" GroupName="nav"
-                             IsChecked="True" Checked="Nav_Checked" Tag="search" Content="搜索" />
-                <RadioButton x:Name="NavDownload" Style="{StaticResource NavButton}" GroupName="nav"
-                             Checked="Nav_Checked" Tag="download" Content="下载" />
                 <RadioButton x:Name="NavMediaLib" Style="{StaticResource NavButton}" GroupName="nav"
-                             Checked="Nav_Checked" Tag="medialib" Content="媒体库" />
+                             IsChecked="True" Checked="Nav_Checked" Tag="medialib" Content="媒体库" />
                 <RadioButton x:Name="NavTag" Style="{StaticResource NavButton}" GroupName="nav"
                              Checked="Nav_Checked" Tag="tag" Content="标签" />
                 <RadioButton x:Name="NavType" Style="{StaticResource NavButton}" GroupName="nav"
                              Checked="Nav_Checked" Tag="type" Content="作品形式" />
                 <RadioButton x:Name="NavFavorite" Style="{StaticResource NavButton}" GroupName="nav"
                              Checked="Nav_Checked" Tag="favorite" Content="收藏夹" />
+                <RadioButton x:Name="NavSearchDownload" Style="{StaticResource NavButton}" GroupName="nav"
+                             Checked="Nav_Checked" Tag="searchdownload" Content="搜索/下载" />
                 <RadioButton x:Name="NavSetting" Style="{StaticResource NavButton}" GroupName="nav"
                              Checked="Nav_Checked" Tag="setting" Content="设置" />
             </StackPanel>

@@ -10,14 +10,17 @@
         <!-- 搜索栏 -->
         <Grid Grid.Row="0" Margin="0,0,0,10">
             <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <TextBox x:Name="InputBox" FontSize="14" KeyDown="InputBox_KeyDown" />
-            <Button x:Name="SearchButton" Grid.Column="1" Margin="8,0,0,0" MinWidth="90"
+            <Button x:Name="BackToDownloadButton" Margin="0,0,8,0"
+                    Click="BackToDownloadButton_Click" Content="← 下载列表" />
+            <TextBox x:Name="InputBox" Grid.Column="1" FontSize="14" KeyDown="InputBox_KeyDown" />
+            <Button x:Name="SearchButton" Grid.Column="2" Margin="8,0,0,0" MinWidth="90"
                     Style="{StaticResource AccentButton}" Click="SearchButton_Click" Content="查询" />
-            <Button x:Name="BackButton" Grid.Column="2" Margin="8,0,0,0" Visibility="Collapsed"
+            <Button x:Name="BackButton" Grid.Column="3" Margin="8,0,0,0" Visibility="Collapsed"
                     Click="BackButton_Click" Content="← 返回结果" />
         </Grid>
 

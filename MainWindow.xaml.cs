@@ -24,16 +24,20 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         SourceInitialized += (_, _) => EnableDarkTitleBar();
-        PageHost.Content = _searchPage;
+        PageHost.Content = _mediaLibPage;
 
-        // 下载页解析失败点击"重新搜索"：切回搜索页并自动以该番号重新搜索
+        // 搜索/下载合并为同一导航：下载页"搜索作品"切到搜索视图，搜索页返回切回下载视图
+        _downloadPage.ShowSearchRequested += () => PageHost.Content = _searchPage;
+        _searchPage.BackToDownloadRequested += () => PageHost.Content = _downloadPage;
+
+        // 下载页解析失败点击"重新搜索"：切到搜索视图并自动以该番号重新搜索
         _downloadPage.ResearchRequested += workId =>
         {
-            NavSearch.IsChecked = true;
+            PageHost.Content = _searchPage;
             _searchPage.SearchFor(workId);
         };
 
-        // "已下载"已并入下载页：下载页按钮切到已下载视图，已下载页按钮切回下载视图（导航仍停留在"下载"）
+        // "已下载"已并入下载页：下载页按钮切到已下载视图，已下载页按钮切回下载视图（导航仍停留在"搜索/下载"）
         _downloadPage.ShowDownloadedRequested += () => PageHost.Content = _downloadedPage;
         _downloadedPage.BackToDownloadRequested += () => PageHost.Content = _downloadPage;
 
@@ -45,9 +49,8 @@ public partial class MainWindow : Window
     {
         LogoLabel.Text = I18n.Tr("DLsite 下载器");
         Title = I18n.Tr("DLsite 下载器");
-        NavSearch.Content = I18n.Tr("搜索");
-        NavDownload.Content = I18n.Tr("下载");
         NavMediaLib.Content = I18n.Tr("媒体库");
+        NavSearchDownload.Content = I18n.Tr("搜索/下载");
         NavTag.Content = I18n.Tr("标签");
         NavType.Content = I18n.Tr("作品形式");
         NavFavorite.Content = I18n.Tr("收藏夹");
@@ -60,13 +63,12 @@ public partial class MainWindow : Window
             return;  // InitializeComponent 期间的首次 Checked
         PageHost.Content = (sender as RadioButton)?.Tag switch
         {
-            "download" => _downloadPage,
-            "medialib" => _mediaLibPage,
+            "searchdownload" => _downloadPage,
             "tag" => _tagPage,
             "type" => _typePage,
             "favorite" => _favoritePage,
             "setting" => _settingsPage,
-            _ => (object)_searchPage,
+            _ => (object)_mediaLibPage,
         };
     }
 

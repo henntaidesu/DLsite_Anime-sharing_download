@@ -17,23 +17,26 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="200" />
             </Grid.ColumnDefinitions>
-            <Button x:Name="StartButton" Style="{StaticResource AccentButton}" MinWidth="100"
+            <Button x:Name="SearchWorkButton" Style="{StaticResource AccentButton}" MinWidth="100"
+                    Click="SearchWorkButton_Click" Content="搜索作品" />
+            <Button x:Name="StartButton" Grid.Column="1" Margin="8,0,0,0" MinWidth="100"
                     Click="StartButton_Click" Content="开始下载" />
-            <Button x:Name="RefreshButton" Grid.Column="1" Margin="8,0,0,0"
+            <Button x:Name="RefreshButton" Grid.Column="2" Margin="8,0,0,0"
                     Click="RefreshButton_Click" Content="刷新" />
-            <Button x:Name="ClearDoneButton" Grid.Column="2" Margin="8,0,0,0"
+            <Button x:Name="ClearDoneButton" Grid.Column="3" Margin="8,0,0,0"
                     Click="ClearDoneButton_Click" Content="清除已完成" />
-            <Button x:Name="ClearAllButton" Grid.Column="3" Margin="8,0,0,0"
+            <Button x:Name="ClearAllButton" Grid.Column="4" Margin="8,0,0,0"
                     Click="ClearAllButton_Click" Content="清空列表" />
-            <Button x:Name="ShowDownloadedButton" Grid.Column="4" Margin="8,0,0,0"
+            <Button x:Name="ShowDownloadedButton" Grid.Column="5" Margin="8,0,0,0"
                     Click="ShowDownloadedButton_Click" Content="已下载" />
-            <TextBlock x:Name="UsageLabel" Grid.Column="6" VerticalAlignment="Center"
+            <TextBlock x:Name="UsageLabel" Grid.Column="7" VerticalAlignment="Center"
                        Style="{StaticResource CaptionText}" Margin="0,0,8,0" Text="debrid-link 使用量 --" />
-            <ProgressBar x:Name="UsageBar" Grid.Column="7" Height="10" VerticalAlignment="Center" />
+            <ProgressBar x:Name="UsageBar" Grid.Column="8" Height="10" VerticalAlignment="Center" />
         </Grid>
 
         <!-- 下载列表（两级树：番号 -> 分卷文件） -->

@@ -6,6 +6,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
+    <!-- LibVLCSharp.WPF 的 VideoView 基于 WindowsFormsHost，需要启用 WinForms -->
+    <UseWindowsForms>true</UseWindowsForms>
   </PropertyGroup>
 
   <ItemGroup>
@@ -20,9 +22,19 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- UseWindowsForms 会隐式 using WinForms/Drawing，与 WPF 的 Brush/KeyEventArgs 等冲突，移除之 -->
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="HtmlAgilityPack" Version="1.12.4" />
+    <PackageReference Include="LibVLCSharp" Version="3.8.2" />
+    <PackageReference Include="LibVLCSharp.WPF" Version="3.8.2" />
+    <PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.21" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
+    <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="SharpCompress" Version="0.49.1" />
   </ItemGroup>
 

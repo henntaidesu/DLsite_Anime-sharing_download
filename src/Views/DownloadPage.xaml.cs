@@ -91,6 +91,9 @@ public partial class DownloadPage : UserControl
     /// <summary>点击"已下载"按钮时触发，由主窗口切到已下载视图。</summary>
     public event Action? ShowDownloadedRequested;
 
+    /// <summary>点击"搜索作品"按钮时触发，由主窗口切到搜索视图。</summary>
+    public event Action? ShowSearchRequested;
+
     // download_list.status -> 显示文本（中文原文，渲染时经 Tr 翻译）与颜色
     private static readonly Dictionary<string, (string Text, string Color)> StatusMap = new()
     {
@@ -117,6 +120,7 @@ public partial class DownloadPage : UserControl
 
     private void RetranslateUi()
     {
+        SearchWorkButton.Content = I18n.Tr("搜索作品");
         RefreshButton.Content = I18n.Tr("刷新");
         ClearDoneButton.Content = I18n.Tr("清除已完成");
         ClearAllButton.Content = I18n.Tr("清空列表");
@@ -127,6 +131,9 @@ public partial class DownloadPage : UserControl
 
     private void ShowDownloadedButton_Click(object sender, RoutedEventArgs e) =>
         ShowDownloadedRequested?.Invoke();
+
+    private void SearchWorkButton_Click(object sender, RoutedEventArgs e) =>
+        ShowSearchRequested?.Invoke();
 
     private void Page_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
