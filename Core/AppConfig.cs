@@ -1,0 +1,189 @@
+using System;
+using System.Collections.Generic;
+using System.Net;
+using System.Text.Json;
+
+namespace DASD.Core;
+
+/// <summary>一个媒体库：名称 + 文件夹列表。</summary>
+public class MediaLib
+{
+    public string Name { get; set; } = "";
+    public List<string> Folders { get; set; } = [];
+}
+
+/// <summary>
+/// 配置读写（对应 Python 版 conf_operate.py），数据保存在 SQLite 的 conf 表中（section / key / value）。
+/// 进程级缓存一次加载，section/key 全部小写；Reload() 丢弃缓存重新读库。
+/// </summary>
+public static class AppConfig
+{
+    // 默认配置：首次运行（conf 表中无对应项）时写入
+    private static readonly Dictionary<string, Dictionary<string, string>> Defaults = new()
+    {
+        ["processes"] = new() { ["processes"] = "5" },
+        ["downpath"] = new() { ["downpath"] = "" },
+        ["debrid"] = new() { ["api_key"] = "" },
+        ["proxy"] = new() { ["openproxy"] = "False", ["host"] = "127.0.0.1", ["port"] = "7890", ["type"] = "http" },
+        ["loglevel"] = new() { ["level"] = "info" },
+        ["encoding"] = new() { ["encoding"] = "cp437" },
+        ["down_list"] = new()
+        {
+            ["auto_download"] = "False", ["auto_unzip"] = "False", ["download_processes"] = "5",
+            ["folder_name"] = "rj", ["min_speed"] = "256", ["speed_limit"] = "0"
+        },
+        ["media_lib"] = new() { ["libs"] = "[]" },
+        ["language"] = new() { ["lang"] = "zh_CN" },
+    };
+
+    private static Dictionary<string, Dictionary<string, string>>? _cache;
+    private static readonly object Lock = new();
+
+    /// <summary>Logger 用的级别快捷缓存（避免日志路径反查数据库造成递归）。</summary>
+    internal static string LogLevelCached { get; private set; } = "info";
+
+    private static Dictionary<string, Dictionary<string, string>> Cache
+    {
+        get
+        {
+            if (_cache is null)
+                lock (Lock)
+                    _cache ??= Load();
+            return _cache;
+        }
+    }
+
+    /// <summary>丢弃缓存重新从数据库加载（页面切换时调用，保证读到最新值）。</summary>
+    public static void Reload()
+    {
+        lock (Lock)
+            _cache = Load();
+    }
+
+    private static Dictionary<string, Dictionary<string, string>> Load()
+    {
+        Db.EnsureTables();
+        // 补齐缺失的默认配置项
+        foreach (var (section, items) in Defaults)
+            foreach (var (key, value) in items)
+                Db.Execute(
+                    "INSERT OR IGNORE INTO \"conf\" (\"section\", \"key\", \"value\") VALUES (@s, @k, @v)",
+                    ("@s", section), ("@k", key), ("@v", value));
+
+        var conf = new Dictionary<string, Dictionary<string, string>>();
+        var rows = Db.Select("SELECT \"section\", \"key\", \"value\" FROM \"conf\"");
+        if (rows != null)
+            foreach (var row in rows)
+            {
+                var section = (string)row[0]!;
+                var key = (string)row[1]!;
+                var value = row[2] as string ?? "";
+                if (!conf.TryGetValue(section, out var dict))
+                    conf[section] = dict = new Dictionary<string, string>();
+                dict[key] = value;
+            }
+        LogLevelCached = conf.GetValueOrDefault("loglevel")?.GetValueOrDefault("level") ?? "info";
+        return conf;
+    }
+
+    // ---------- 通用读写 ----------
+
+    public static string? Read(string section, string key, string? fallback = null) =>
+        Cache.GetValueOrDefault(section.ToLowerInvariant())?.GetValueOrDefault(key.ToLowerInvariant())
+        ?? fallback;
+
+    public static void Write(string section, string key, string value)
+    {
+        section = section.ToLowerInvariant();
+        key = key.ToLowerInvariant();
+        Db.Execute(
+            "INSERT OR REPLACE INTO \"conf\" (\"section\", \"key\", \"value\") VALUES (@s, @k, @v)",
+            ("@s", section), ("@k", key), ("@v", value));
+        lock (Lock)
+        {
+            if (!Cache.TryGetValue(section, out var dict))
+                Cache[section] = dict = new Dictionary<string, string>();
+            dict[key] = value;
+            if (section == "loglevel" && key == "level")
+                LogLevelCached = value;
+        }
+    }
+
+    private static int ReadInt(string section, string key, int fallback) =>
+        int.TryParse(Read(section, key), out var v) ? Math.Max(0, v) : fallback;
+
+    // ---------- 读取 ----------
+
+    public static string DownloadPath => Read("downpath", "downpath", "") ?? "";
+
+    /// <summary>代理设置：开关 + WebProxy（供 HttpClient 使用）。</summary>
+    public static (bool Enabled, WebProxy Proxy) ReadProxy()
+    {
+        var enabled = Read("proxy", "openproxy") == "True";
+        var host = Read("proxy", "host", "127.0.0.1");
+        var port = Read("proxy", "port", "7890");
+        return (enabled, new WebProxy($"http://{host}:{port}"));
+    }
+
+    public static (string Enabled, string Host, string Port, string Type) ReadProxySetting() =>
+        (Read("proxy", "openproxy", "False")!, Read("proxy", "host", "")!,
+         Read("proxy", "port", "")!, Read("proxy", "type", "http")!);
+
+    public static string DebridApiKey => Read("debrid", "api_key", "") ?? "";
+
+    public static bool AutoDownload => Read("down_list", "auto_download") == "True";
+
+    public static bool AutoUnzip => Read("down_list", "auto_unzip") == "True";
+
+    /// <summary>单文件并发分段数（1 = 不分段，最大 16）。</summary>
+    public static int DownloadProcesses => Math.Clamp(ReadInt("down_list", "download_processes", 1), 1, 16);
+
+    /// <summary>下载文件夹命名方式："rj"=按RJ号，"work_name"=按作品名称。</summary>
+    public static string FolderNameMode => Read("down_list", "folder_name", "rj") ?? "rj";
+
+    /// <summary>最低下载速度阈值（KB/s），持续低于此值 30 秒后重试；0 表示不限制。</summary>
+    public static int MinSpeedKb => ReadInt("down_list", "min_speed", 256);
+
+    /// <summary>下载总速度上限（KB/s），所有并发下载共享；0 表示不限速。</summary>
+    public static int SpeedLimitKb => ReadInt("down_list", "speed_limit", 0);
+
+    public static string SysEncoding => Read("encoding", "encoding", "cp437") ?? "cp437";
+
+    public static string Language => Read("language", "lang", "zh_CN") ?? "zh_CN";
+
+    /// <summary>媒体库列表（media_lib.libs，JSON）。</summary>
+    public static List<MediaLib> ReadMediaLibs()
+    {
+        List<MediaLib> libs = [];
+        try
+        {
+            var raw = Read("media_lib", "libs", "[]") ?? "[]";
+            using var doc = JsonDocument.Parse(raw);
+            foreach (var item in doc.RootElement.EnumerateArray())
+            {
+                var name = item.TryGetProperty("name", out var n) ? n.GetString() : null;
+                if (string.IsNullOrEmpty(name) || !item.TryGetProperty("folders", out var f) ||
+                    f.ValueKind != JsonValueKind.Array)
+                    continue;
+                var lib = new MediaLib { Name = name };
+                foreach (var folder in f.EnumerateArray())
+                    if (folder.GetString() is { Length: > 0 } path)
+                        lib.Folders.Add(path);
+                libs.Add(lib);
+            }
+        }
+        catch (JsonException)
+        {
+            libs = [];
+        }
+        return libs;
+    }
+
+    public static void WriteMediaLibs(List<MediaLib> libs)
+    {
+        var json = JsonSerializer.Serialize(
+            libs.ConvertAll(l => new { name = l.Name, folders = l.Folders }),
+            new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
+        Write("media_lib", "libs", json);
+    }
+}

@@ -1,0 +1,109 @@
+<UserControl x:Class="DASD.Views.SettingsPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             IsVisibleChanged="Page_IsVisibleChanged">
+    <UserControl.Resources>
+        <Style x:Key="FieldLabel" TargetType="TextBlock"
+               BasedOn="{StaticResource {x:Type TextBlock}}">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="0,0,12,0" />
+            <Setter Property="MinWidth" Value="120" />
+        </Style>
+    </UserControl.Resources>
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel MaxWidth="720" HorizontalAlignment="Left">
+
+            <!-- 下载 -->
+            <GroupBox x:Name="DownloadGroup" Header="下载">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,4">
+                        <TextBlock x:Name="PathLabel" Text="缓存路径" Style="{StaticResource FieldLabel}" />
+                        <TextBox x:Name="PathBox" Width="380" LostFocus="PathBox_LostFocus" />
+                        <Button x:Name="PathChooseButton" Content="保存" Margin="8,0,0,0"
+                                Click="PathChooseButton_Click" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,4">
+                        <TextBlock x:Name="AutoDownloadLabel" Text="自动下载" Style="{StaticResource FieldLabel}" />
+                        <ComboBox x:Name="AutoDownloadCombo" Width="120"
+                                  SelectionChanged="AutoDownloadCombo_SelectionChanged" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,4">
+                        <TextBlock x:Name="AutoUnzipLabel" Text="自动解压" Style="{StaticResource FieldLabel}" />
+                        <ComboBox x:Name="AutoUnzipCombo" Width="120"
+                                  SelectionChanged="AutoUnzipCombo_SelectionChanged" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,4">
+                        <TextBlock x:Name="FolderNameLabel" Text="文件夹命名" Style="{StaticResource FieldLabel}" />
+                        <ComboBox x:Name="FolderNameCombo" Width="120"
+                                  SelectionChanged="FolderNameCombo_SelectionChanged" />
+                    </StackPanel>
+                </StackPanel>
+            </GroupBox>
+
+            <!-- 代理 -->
+            <GroupBox x:Name="ProxyGroup" Header="代理">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,4">
+                        <TextBlock x:Name="ProxyStatusLabel" Text="开启" Style="{StaticResource FieldLabel}" />
+                        <ComboBox x:Name="ProxyStatusCombo" Width="120"
+                                  SelectionChanged="ProxyStatusCombo_SelectionChanged" />
+                        <ComboBox x:Name="ProxyTypeCombo" Width="100" Margin="8,0,0,0"
+                                  SelectionChanged="ProxyTypeCombo_SelectionChanged" />
+                        <TextBox x:Name="ProxyHostBox" Width="160" Margin="8,0,0,0"
+                                 LostFocus="Proxy_LostFocus" />
+                        <TextBox x:Name="ProxyPortBox" Width="80" Margin="8,0,0,0"
+                                 LostFocus="Proxy_LostFocus" />
+                    </StackPanel>
+                </StackPanel>
+            </GroupBox>
+
+            <!-- Debrid-Link -->
+            <GroupBox x:Name="DebridGroup" Header="Debrid-Link 下载中转站">
+                <StackPanel Orientation="Horizontal" Margin="0,4">
+                    <TextBlock Text="API Key" Style="{StaticResource FieldLabel}" />
+                    <TextBox x:Name="DebridKeyBox" Width="380" LostFocus="DebridKeyBox_LostFocus" />
+                    <Button x:Name="DebridTestButton" Content="测试" Margin="8,0,0,0"
+                            Click="DebridTestButton_Click" />
+                </StackPanel>
+            </GroupBox>
+
+            <!-- 下载选项 -->
+            <GroupBox x:Name="OtherGroup" Header="下载选项">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,4">
+                        <TextBlock x:Name="DownProcLabel" Text="单文件线程数" Style="{StaticResource FieldLabel}" />
+                        <TextBox x:Name="DownProcBox" Width="100" LostFocus="DownProcBox_LostFocus" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,4">
+                        <TextBlock x:Name="MinSpeedLabel" Text="最低速度 (KB/s)" Style="{StaticResource FieldLabel}" />
+                        <TextBox x:Name="MinSpeedBox" Width="100" LostFocus="MinSpeedBox_LostFocus" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,4">
+                        <TextBlock x:Name="SpeedLimitLabel" Text="速度限制 (KB/s)" Style="{StaticResource FieldLabel}" />
+                        <TextBox x:Name="SpeedLimitBox" Width="100" LostFocus="SpeedLimitBox_LostFocus" />
+                    </StackPanel>
+                </StackPanel>
+            </GroupBox>
+
+            <!-- 系统 -->
+            <GroupBox x:Name="SystemGroup" Header="系统">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,4">
+                        <TextBlock x:Name="LanguageLabel" Text="语言" Style="{StaticResource FieldLabel}" />
+                        <ComboBox x:Name="LanguageCombo" Width="140"
+                                  SelectionChanged="LanguageCombo_SelectionChanged" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,4">
+                        <TextBlock x:Name="LogLevelLabel" Text="日志级别" Style="{StaticResource FieldLabel}" />
+                        <ComboBox x:Name="LogLevelCombo" Width="140"
+                                  SelectionChanged="LogLevelCombo_SelectionChanged" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,4">
+                        <TextBlock x:Name="EncodingLabel" Text="解压编码" Style="{StaticResource FieldLabel}" />
+                        <TextBox x:Name="EncodingBox" Width="140" LostFocus="EncodingBox_LostFocus" />
+                    </StackPanel>
+                </StackPanel>
+            </GroupBox>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

@@ -1,0 +1,18 @@
+using System.Windows;
+using DASD.Core;
+using DASD.Services;
+
+namespace DASD;
+
+public partial class App : Application
+{
+    protected override void OnStartup(StartupEventArgs e)
+    {
+        base.OnStartup(e);
+        Db.EnsureTables();
+        I18n.InitLanguage();  // 创建窗口前加载已保存的语言
+        // 设置中开启了自动下载时，随程序启动下载线程；否则由下载页"开始下载"按钮启动
+        if (AppConfig.AutoDownload)
+            DownloadEngine.Start();
+    }
+}

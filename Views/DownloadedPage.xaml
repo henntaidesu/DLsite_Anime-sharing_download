@@ -1,0 +1,69 @@
+<UserControl x:Class="DASD.Views.DownloadedPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             IsVisibleChanged="Page_IsVisibleChanged">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0" Margin="0,0,0,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Button x:Name="RefreshButton" Click="RefreshButton_Click" Content="刷新" />
+            <TextBlock x:Name="CountLabel" Grid.Column="2" VerticalAlignment="Center"
+                       Style="{StaticResource CaptionText}" />
+        </Grid>
+
+        <DataGrid x:Name="WorksGrid" Grid.Row="1" AutoGenerateColumns="False" IsReadOnly="True"
+                  HeadersVisibility="Column" GridLinesVisibility="None"
+                  Background="{StaticResource BaseBrush}" RowBackground="Transparent"
+                  AlternatingRowBackground="#191c23" BorderThickness="0"
+                  Foreground="{StaticResource TextBrush}" SelectionMode="Single"
+                  SelectionUnit="FullRow" CanUserAddRows="False"
+                  ContextMenuOpening="WorksGrid_ContextMenuOpening">
+            <DataGrid.Resources>
+                <Style TargetType="DataGridColumnHeader">
+                    <Setter Property="Background" Value="{StaticResource CardBrush}" />
+                    <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+                    <Setter Property="Padding" Value="8,6" />
+                    <Setter Property="BorderThickness" Value="0" />
+                </Style>
+                <Style TargetType="DataGridCell">
+                    <Setter Property="BorderThickness" Value="0" />
+                    <Setter Property="Padding" Value="6,4" />
+                    <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+                    <Style.Triggers>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter Property="Background" Value="{StaticResource ButtonHoverBrush}" />
+                        </Trigger>
+                    </Style.Triggers>
+                </Style>
+            </DataGrid.Resources>
+            <DataGrid.Columns>
+                <DataGridTextColumn x:Name="ColId" Header="RJ号" Binding="{Binding WorkId}" Width="110" />
+                <DataGridTextColumn x:Name="ColName" Header="作品名称" Binding="{Binding WorkName}" Width="*" />
+                <DataGridTextColumn x:Name="ColMaker" Header="社团" Binding="{Binding MakerName}" Width="150" />
+                <DataGridTextColumn x:Name="ColType" Header="类型" Binding="{Binding WorkType}" Width="70" />
+                <DataGridTemplateColumn x:Name="ColState" Header="状态" Width="90">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding StateText}" Foreground="{Binding StateBrush}"
+                                       VerticalAlignment="Center" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTextColumn x:Name="ColTime" Header="下载时间" Binding="{Binding DownTime}" Width="160" />
+            </DataGrid.Columns>
+            <DataGrid.ContextMenu>
+                <ContextMenu>
+                    <MenuItem x:Name="MarkMenuItem" Header="标记为已品悦" Click="MarkEnjoyed_Click" />
+                </ContextMenu>
+            </DataGrid.ContextMenu>
+        </DataGrid>
+    </Grid>
+</UserControl>

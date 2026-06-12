@@ -1,0 +1,713 @@
+using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.IO;
+using System.Net;
+using System.Net.Http;
+using System.Threading;
+using System.Threading.Tasks;
+using DASD.Core;
+
+namespace DASD.Services;
+
+/// <summary>正在下载任务的实时进度（UUID -> 进度），由下载线程写入、下载页 UI 读取。</summary>
+public class DownloadProgressInfo
+{
+    public long Downloaded { get; init; }
+    public long Total { get; init; }
+    public double Speed { get; init; }   // B/s
+}
+
+/// <summary>正在解压/移动作品的实时进度（work_id -> 进度）。</summary>
+public class UnzipProgressInfo
+{
+    public string State { get; init; } = "pending";  // pending / extracting / moving
+    public int Pct { get; init; }
+}
+
+/// <summary>
+/// debrid-link 中转下载引擎（对应 Python 版 debrid_link.py 的下载线程部分）：
+/// 队列领取 → debrid-link 解析 → 断点续传下载 → 全部分卷完成后触发解压。
+/// 支持暂停（停到断点）、低速重试、全局限速。
+/// </summary>
+public static class DownloadEngine
+{
+    private const int Chunk = 64 * 1024;
+
+    public static readonly ConcurrentDictionary<string, DownloadProgressInfo> DownloadProgress = new();
+    public static readonly ConcurrentDictionary<string, UnzipProgressInfo> UnzipProgress = new();
+
+    // 暂停信号：置位后下载线程停止当前文件（保留断点）并退出
+    private static volatile bool _stopRequested;
+    private static Thread? _mainThread;
+
+    // UI 指定的每作品媒体库目标根目录与所属媒体库名（内存缓存，同时持久化到 works 表）
+    private static readonly ConcurrentDictionary<string, string> WorkTargetPaths = new();
+    private static readonly ConcurrentDictionary<string, string?> WorkTargetLibs = new();
+    // 作品名缓存：同一作品的多个分卷只调一次 DL API
+    private static readonly ConcurrentDictionary<string, string> WorkNameCache = new();
+
+    // 领取任务与占位需原子进行，避免多个下载线程领到同一条记录
+    private static readonly object ClaimLock = new();
+
+    // 正在解压的番号，避免多个分卷同时完成时对同一目录重复解压
+    private static readonly object UnzipLock = new();
+    private static readonly HashSet<string> Unzipping = [];
+
+    // ---------- 作品目录 ----------
+
+    /// <summary>由 UI 在入队时设定作品解压完成后要移动到的媒体库目标目录及所属媒体库名（立即落库防重启丢失）。</summary>
+    public static void SetWorkTargetPath(string workId, string path, string? libName = null)
+    {
+        WorkTargetPaths[workId] = path;
+        WorkTargetLibs[workId] = libName;
+        Db.Execute(
+            "UPDATE \"works\" SET \"target\" = @t, \"target_lib\" = @l WHERE \"work_id\" = @w",
+            ("@t", path), ("@l", libName ?? ""), ("@w", workId));
+    }
+
+    /// <summary>作品子文件夹名：按设置以 RJ号 或 DL API 返回的作品名称命名。</summary>
+    private static string FolderLeafName(string workId)
+    {
+        if (AppConfig.FolderNameMode != "work_name")
+            return workId;
+        var name = WorkNameCache.GetOrAdd(workId, id =>
+        {
+            try
+            {
+                return DlsiteApi.GetWorkNameAsync(id).GetAwaiter().GetResult() ?? "";
+            }
+            catch (Exception e)
+            {
+                Logger.Error(e, "获取作品名");
+                return "";
+            }
+        });
+        // 去掉 Windows 文件夹名中的非法字符；未获取到作品名时回退到 RJ 号
+        foreach (var ch in "\\/:*?\"<>|")
+            name = name.Replace(ch, ' ');
+        name = string.Join(' ', name.Split(' ', StringSplitOptions.RemoveEmptyEntries)).TrimEnd('.');
+        if (name.Length == 0)
+        {
+            Logger.Error($"{workId} 未从 DL API 获取到作品名称，文件夹按 RJ 号命名");
+            return workId;
+        }
+        return name;
+    }
+
+    /// <summary>
+    /// 作品的缓存文件夹完整路径（下载与解压都在此进行）。
+    /// 优先使用 works 表中已持久化的路径，保证同一作品的所有分卷、以及进程重启后的
+    /// 续传与解压都落在同一目录；未持久化时再按缓存路径设置计算。
+    /// </summary>
+    public static string WorkFolderPath(string workId)
+    {
+        var persisted = Db.Scalar(
+            "SELECT \"folder\" FROM \"works\" WHERE \"work_id\" = @w", ("@w", workId)) as string;
+        if (!string.IsNullOrEmpty(persisted))
+            return persisted;
+        return Path.Combine(AppConfig.DownloadPath, FolderLeafName(workId));
+    }
+
+    /// <summary>把作品的缓存文件夹路径写入 works 表（仅在尚未写入时）。</summary>
+    public static void PersistWorkFolder(string workId, string path) =>
+        Db.Execute(
+            "UPDATE \"works\" SET \"folder\" = @p WHERE \"work_id\" = @w AND (\"folder\" IS NULL OR \"folder\" = '')",
+            ("@p", path), ("@w", workId));
+
+    /// <summary>作品所属媒体库名：优先本次会话的内存选择，其次 works.target_lib（重启后用）。</summary>
+    public static string? ReadWorkTargetLib(string workId)
+    {
+        if (WorkTargetLibs.TryGetValue(workId, out var lib) && !string.IsNullOrEmpty(lib))
+            return lib;
+        var fromDb = Db.Scalar(
+            "SELECT \"target_lib\" FROM \"works\" WHERE \"work_id\" = @w", ("@w", workId)) as string;
+        return string.IsNullOrEmpty(fromDb) ? null : fromDb;
+    }
+
+    private static string? ReadWorkTarget(string workId)
+    {
+        if (WorkTargetPaths.TryGetValue(workId, out var path) && !string.IsNullOrEmpty(path))
+            return path;
+        var fromDb = Db.Scalar(
+            "SELECT \"target\" FROM \"works\" WHERE \"work_id\" = @w", ("@w", workId)) as string;
+        return string.IsNullOrEmpty(fromDb) ? null : fromDb;
+    }
+
+    private static long FolderSize(string folder)
+    {
+        long total = 0;
+        if (!Directory.Exists(folder))
+            return 0;
+        try
+        {
+            foreach (var file in Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories))
+                try { total += new FileInfo(file).Length; } catch (IOException) { }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+        return total;
+    }
+
+    /// <summary>
+    /// 解压完成后把作品从缓存目录移动到媒体库目标目录，并更新 works.folder，返回最终目录路径。
+    /// 未设置目标、目标即缓存、或移动失败时，保持在缓存目录。
+    /// 移动期间把进度写入 UnzipProgress（state='moving'）供下载页显示。
+    /// </summary>
+    public static string MoveToTargetFolder(string workId, string cacheFolder)
+    {
+        var targetRoot = ReadWorkTarget(workId);
+        if (string.IsNullOrEmpty(targetRoot))
+        {
+            Logger.Warning($"{workId} 未设置媒体库目标目录，保留在缓存目录: {cacheFolder}");
+            return cacheFolder;
+        }
+        var leaf = Path.GetFileName(Path.TrimEndingDirectorySeparator(cacheFolder));
+        var dest = Path.Combine(targetRoot, leaf);
+        if (string.Equals(Path.GetFullPath(dest), Path.GetFullPath(cacheFolder),
+                StringComparison.OrdinalIgnoreCase))
+            return cacheFolder;  // 缓存路径就是媒体库目录，无需移动
+
+        // 跨盘移动是复制+删除，用目标目录已写入字节数 / 源目录总字节数估算进度
+        var total = Math.Max(1, FolderSize(cacheFolder));
+        UnzipProgress[workId] = new UnzipProgressInfo { State = "moving", Pct = 0 };
+        using var stop = new ManualResetEventSlim(false);
+        var monitor = new Thread(() =>
+        {
+            while (!stop.Wait(1000))
+            {
+                var pct = (int)Math.Min(99, FolderSize(dest) * 100 / total);
+                // 移动若已结束，绝不能再写回进度，否则进度条目被"复活"卡在 99%
+                if (stop.IsSet)
+                    break;
+                UnzipProgress[workId] = new UnzipProgressInfo { State = "moving", Pct = pct };
+            }
+        }) { IsBackground = true, Name = $"move-mon-{workId}" };
+        monitor.Start();
+        try
+        {
+            Directory.CreateDirectory(targetRoot);
+            if (Directory.Exists(dest))
+            {
+                Logger.Warning($"{workId} 媒体库已存在同名目录，先删除再移动: {dest}");
+                Directory.Delete(dest, true);
+            }
+            Logger.Info($"{workId} 开始移动到媒体库: {dest}");
+            MoveDirectory(cacheFolder, dest);
+        }
+        catch (Exception e)
+        {
+            Logger.Error(e, "移动到媒体库");
+            Logger.Error($"{workId} 移动到媒体库失败，保留在缓存目录: {cacheFolder}");
+            return cacheFolder;
+        }
+        finally
+        {
+            stop.Set();
+            monitor.Join();  // 等监控线程退出，确保返回后不会再写 UnzipProgress
+        }
+        // cover 随文件夹一起被移动，数据库里的绝对路径必须同步改写，否则主图无法显示
+        Db.Execute(
+            "UPDATE \"works\" SET \"folder\" = @d, \"cover\" = REPLACE(\"cover\", @s, @d) WHERE \"work_id\" = @w",
+            ("@d", dest), ("@s", cacheFolder), ("@w", workId));
+        Logger.Info($"{workId} 解压完成，已移动到媒体库: {dest}");
+        return dest;
+    }
+
+    /// <summary>跨盘安全的目录移动：同盘直接 Move，跨盘复制后删除源。</summary>
+    private static void MoveDirectory(string source, string dest)
+    {
+        try
+        {
+            Directory.Move(source, dest);
+        }
+        catch (IOException)
+        {
+            CopyDirectory(source, dest);
+            Directory.Delete(source, true);
+        }
+    }
+
+    private static void CopyDirectory(string source, string dest)
+    {
+        Directory.CreateDirectory(dest);
+        foreach (var file in Directory.GetFiles(source))
+            File.Copy(file, Path.Combine(dest, Path.GetFileName(file)), true);
+        foreach (var dir in Directory.GetDirectories(source))
+            CopyDirectory(dir, Path.Combine(dest, Path.GetFileName(dir)));
+    }
+
+    /// <summary>
+    /// 重新搜索前清理该作品：删除已下载的分卷文件与作品文件夹，并清空其
+    /// download_list 记录与未完成（下载中）的 works 行，使其可从头重新下载。
+    /// </summary>
+    public static bool PurgeWorkDownload(string workId)
+    {
+        // 先取文件夹路径再删 works 行，否则删除后无法定位
+        var folder = WorkFolderPath(workId);
+        var removed = false;
+        if (!string.IsNullOrEmpty(folder) && Directory.Exists(folder))
+        {
+            try { Directory.Delete(folder, true); } catch (IOException) { }
+            removed = !Directory.Exists(folder);
+            Logger.Info($"{workId} 重新搜索，删除已下载文件夹: {folder}");
+        }
+        Db.Execute("DELETE FROM \"download_list\" WHERE \"work_id\" = @w", ("@w", workId));
+        Db.Execute("DELETE FROM \"works\" WHERE \"work_id\" = @w AND \"state\" = '下载中'", ("@w", workId));
+        WorkTargetPaths.TryRemove(workId, out _);
+        WorkTargetLibs.TryRemove(workId, out _);
+        WorkNameCache.TryRemove(workId, out _);
+        return removed;
+    }
+
+    // ---------- 全局限速（令牌桶）----------
+
+    private sealed class RateLimiter
+    {
+        private readonly object _lock = new();
+        private long _rate;            // 字节/秒，0=不限速
+        private double _allowance;
+        private DateTime? _last;
+
+        public void SetRate(long bytesPerSec)
+        {
+            lock (_lock)
+            {
+                _rate = Math.Max(0, bytesPerSec);
+                if (_rate == 0)
+                {
+                    _allowance = 0;
+                    _last = null;
+                }
+            }
+        }
+
+        /// <summary>登记本次已下载 n 字节，返回需要 sleep 的毫秒数（计算在锁内，睡眠在锁外）。</summary>
+        public int Consume(int nbytes)
+        {
+            if (_rate <= 0)
+                return 0;
+            lock (_lock)
+            {
+                var now = DateTime.UtcNow;
+                _last ??= now;
+                _allowance += (now - _last.Value).TotalSeconds * _rate;
+                _last = now;
+                if (_allowance > _rate)   // 突发上限：最多积累 1 秒额度
+                    _allowance = _rate;
+                _allowance -= nbytes;
+                if (_allowance >= 0)
+                    return 0;
+                return (int)(-_allowance * 1000 / _rate);
+            }
+        }
+    }
+
+    private static readonly RateLimiter Limiter = new();
+
+    // ---------- 下载 ----------
+
+    private static void SetStatus(string key, string status, int? progress = null)
+    {
+        if (progress is { } p)
+            Db.Execute(
+                "UPDATE \"download_list\" SET \"status\" = @s, \"long\" = @p WHERE \"UUID\" = @k",
+                ("@s", status), ("@p", p.ToString()), ("@k", key));
+        else
+            Db.Execute(
+                "UPDATE \"download_list\" SET \"status\" = @s WHERE \"UUID\" = @k",
+                ("@s", status), ("@k", key));
+    }
+
+    /// <summary>从队列原子地领取一条待下载任务并立即标记为下载中；无任务返回 null。</summary>
+    private static (string Key, string WorkId, string Url)? ClaimNext()
+    {
+        lock (ClaimLock)
+        {
+            var rows = Db.Select(
+                "SELECT \"UUID\", \"work_id\", \"url\" FROM \"download_list\" WHERE \"status\" = '0' LIMIT 1");
+            if (rows is not { Count: > 0 })
+                return null;
+            var key = rows[0][0] as string ?? "";
+            SetStatus(key, "3", 0);  // 立即占位，其它线程不会重复领取
+            return (key, rows[0][1] as string ?? "", rows[0][2] as string ?? "");
+        }
+    }
+
+    /// <summary>探测文件总大小；返回 (总字节数, 是否支持 Range)。</summary>
+    private static (long Total, bool Range) ProbeSize(HttpClient client, string url)
+    {
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(0, 0);
+            using var response = client.Send(request, HttpCompletionOption.ResponseHeadersRead);
+            if (response.StatusCode == HttpStatusCode.PartialContent)
+            {
+                var len = response.Content.Headers.ContentRange?.Length;
+                if (len is { } l)
+                    return (l, true);
+            }
+            if (response.StatusCode == HttpStatusCode.OK)
+                return (response.Content.Headers.ContentLength ?? 0, false);
+        }
+        catch (Exception e) when (e is HttpRequestException or TaskCanceledException) { }
+        return (0, false);
+    }
+
+    private static string MetaPath(string filePath) => filePath + ".dlmeta";
+
+    /// <summary>单连接下载（断点续传 + 暂停 + 低速重试），返回 done/paused/slow/failed。</summary>
+    private static string DownloadSingle(HttpClient client, string url, string filePath,
+        string filename, string key)
+    {
+        long downloaded = 0;
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        if (File.Exists(filePath))
+        {
+            downloaded = new FileInfo(filePath).Length;
+            request.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(downloaded, null);
+        }
+
+        HttpResponseMessage response;
+        try
+        {
+            response = client.Send(request, HttpCompletionOption.ResponseHeadersRead);
+        }
+        catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
+        {
+            Logger.Error($"{filename} 下载请求失败: {e.Message}");
+            SetStatus(key, "0");
+            return "failed";
+        }
+        using (response)
+        {
+            if (response.StatusCode == HttpStatusCode.RequestedRangeNotSatisfiable)
+                return "done";  // 文件已完整
+            if (response.StatusCode != HttpStatusCode.OK &&
+                response.StatusCode != HttpStatusCode.PartialContent)
+            {
+                Logger.Error($"{filename} 下载失败 HTTP {(int)response.StatusCode}");
+                SetStatus(key, "0");
+                return "failed";
+            }
+            var append = response.StatusCode == HttpStatusCode.PartialContent;
+            if (!append)
+                downloaded = 0;  // 服务器不支持续传，从头下载
+
+            var totalSize = downloaded + (response.Content.Headers.ContentLength ?? 0);
+            var minSpeedBytes = AppConfig.MinSpeedKb * 1024L;
+            // 全局限速：所有下载线程共享同一总上限；限速时关闭低速重试，避免被限的速度误判为卡死
+            var speedLimited = AppConfig.SpeedLimitKb > 0;
+            Limiter.SetRate(AppConfig.SpeedLimitKb * 1024L);
+
+            var result = "done";
+            double speed = 0;
+            var speedTime = DateTime.UtcNow;
+            var speedBytes = downloaded;
+            DateTime? lowSpeedStart = null;
+            var lastDbWrite = DateTime.MinValue;
+
+            using var stream = response.Content.ReadAsStream();
+            using var file = new FileStream(filePath, append ? FileMode.Append : FileMode.Create,
+                FileAccess.Write);
+            var buffer = new byte[Chunk];
+            while (true)
+            {
+                if (_stopRequested)
+                {
+                    result = "paused";
+                    break;
+                }
+                int read;
+                try
+                {
+                    read = stream.Read(buffer, 0, buffer.Length);
+                }
+                catch (IOException e)
+                {
+                    Logger.Error($"{filename} 下载中断: {e.Message}");
+                    SetStatus(key, "0");
+                    return "failed";
+                }
+                if (read <= 0)
+                    break;
+                file.Write(buffer, 0, read);
+                downloaded += read;
+                var sleepMs = Limiter.Consume(read);
+                if (sleepMs > 0)
+                    Thread.Sleep(sleepMs);
+                var now = DateTime.UtcNow;
+                if ((now - speedTime).TotalSeconds >= 1)
+                {
+                    speed = (downloaded - speedBytes) / (now - speedTime).TotalSeconds;
+                    speedTime = now;
+                    speedBytes = downloaded;
+                    if (minSpeedBytes > 0 && speed > 0 && !speedLimited)
+                    {
+                        if (speed < minSpeedBytes)
+                        {
+                            lowSpeedStart ??= now;
+                            if ((now - lowSpeedStart.Value).TotalSeconds >= 30)
+                            {
+                                result = "slow";
+                                break;
+                            }
+                        }
+                        else
+                        {
+                            lowSpeedStart = null;
+                        }
+                    }
+                }
+                DownloadProgress[key] = new DownloadProgressInfo
+                {
+                    Downloaded = downloaded, Total = totalSize, Speed = speed,
+                };
+                if (totalSize > 0 && (now - lastDbWrite).TotalSeconds >= 2)
+                {
+                    SetStatus(key, "3", (int)(downloaded * 100 / totalSize));
+                    lastDbWrite = now;
+                }
+            }
+            if (result is "paused" or "slow")
+            {
+                var pct = totalSize > 0 ? (int)(downloaded * 100 / totalSize) : 0;
+                SetStatus(key, "0", pct);
+                if (result == "slow")
+                    Logger.Warning($"{filename} 速度持续低于 {AppConfig.MinSpeedKb} KB/s，重新排队");
+            }
+            return result;
+        }
+    }
+
+    /// <summary>下载单个文件：清理旧版分段下载元数据后单连接下载，返回 done/paused/slow/failed。</summary>
+    private static string DownloadFile(HttpClient client, string directUrl, string filePath,
+        string filename, string key)
+    {
+        var (totalSize, _) = ProbeSize(client, directUrl);
+
+        // 旧版分段下载遗留的元数据：其预分配的整文件内容不可信，连同文件一起清掉后重下
+        if (File.Exists(MetaPath(filePath)))
+        {
+            try { File.Delete(MetaPath(filePath)); } catch (IOException) { }
+            if (File.Exists(filePath))
+                try { File.Delete(filePath); } catch (IOException) { }
+        }
+
+        // 已完整下载
+        if (totalSize > 0 && File.Exists(filePath) && new FileInfo(filePath).Length == totalSize)
+            return "done";
+
+        return DownloadSingle(client, directUrl, filePath, filename, key);
+    }
+
+    /// <summary>单个下载线程：不断领取队列任务，通过 debrid-link 中转下载（支持断点续传）。</summary>
+    private static void WorkerLoop()
+    {
+        using var client = Http.CreateClient(Timeout.InfiniteTimeSpan);
+        while (true)
+        {
+            string? key = null;
+            try
+            {
+                if (_stopRequested)
+                    return;
+
+                var claimed = ClaimNext();
+                if (claimed is null)
+                {
+                    // 队列空，等待新任务；期间收到暂停信号立即退出
+                    for (var i = 0; i < 100; i++)
+                    {
+                        if (_stopRequested)
+                            return;
+                        Thread.Sleep(100);
+                    }
+                    continue;
+                }
+
+                var (k, workId, url) = claimed.Value;
+                key = k;
+                Logger.Info($"通过 debrid-link 解析: {url}");
+
+                System.Text.Json.JsonElement? value;
+                using (var debrid = new DebridLinkClient())
+                    value = debrid.AddDownloadAsync(url).GetAwaiter().GetResult();
+                var directUrl = value is { } v ? DlsiteApi.JStr(v, "downloadUrl") : "";
+                if (string.IsNullOrEmpty(directUrl))
+                {
+                    Logger.Error($"{workId} debrid-link 解析失败: {url}");
+                    SetStatus(key, "2");
+                    continue;
+                }
+
+                var filename = value is { } v2 ? DlsiteApi.JStr(v2, "name") : "";
+                if (string.IsNullOrEmpty(filename))
+                    filename = directUrl.TrimEnd('/').Split('/')[^1].Split('?')[0];
+                var downloadPath = WorkFolderPath(workId);
+                // 首个分卷处理时落库缓存目录，保证后续分卷、重启续传后的解压都用同一目录
+                PersistWorkFolder(workId, downloadPath);
+                Directory.CreateDirectory(downloadPath);
+                var filePath = Path.Combine(downloadPath, filename);
+
+                var result = DownloadFile(client, directUrl, filePath, filename, key);
+                DownloadProgress.TryRemove(key, out _);
+                if (result == "paused")
+                    return;  // 暂停：部分文件保留在磁盘上，下次从断点续传
+                if (result is "slow" or "failed")
+                {
+                    Thread.Sleep(5000);
+                    continue;
+                }
+
+                Logger.Info($"{workId}已完成下载");
+                SetStatus(key, "1", 100);
+                MarkWorkDownloaded(workId);
+                AutoUnzipIfDone(workId);
+            }
+            catch (Exception e)
+            {
+                Logger.Error(e, "下载线程");
+                if (key != null)
+                {
+                    DownloadProgress.TryRemove(key, out _);
+                    SetStatus(key, "0");  // 重新排队，下次从断点继续
+                }
+                Thread.Sleep(5000);
+            }
+        }
+    }
+
+    /// <summary>下载调度：把遗留的"下载中"任务重新排队，再按设置启动 N 个下载线程。</summary>
+    private static void Run()
+    {
+        // 上次运行中断时遗留的"下载中"任务重新排队，靠断点续传从已下载部分继续
+        Db.Execute("UPDATE \"download_list\" SET \"status\" = '0' WHERE \"status\" = '3'");
+
+        // 上次解压中途中断的作品：分卷已全部下载完但还未解压入库，重新触发解压 → 移动 → 入库
+        var stuck = Db.Select("""
+            SELECT w."work_id" FROM "works" w
+            WHERE w."state" IN ('下载中', '已下载')
+            AND EXISTS (SELECT 1 FROM "download_list" d WHERE d."work_id" = w."work_id")
+            AND NOT EXISTS (SELECT 1 FROM "download_list" d
+                            WHERE d."work_id" = w."work_id" AND d."status" != '1')
+            """);
+        if (stuck != null)
+            foreach (var row in stuck)
+            {
+                var stuckId = row[0] as string ?? "";
+                Logger.Info($"{stuckId} 分卷已全部下载但未完成解压入库，重新触发解压");
+                MarkWorkDownloaded(stuckId);
+                AutoUnzipIfDone(stuckId);
+            }
+
+        var workers = new List<Thread>();
+        for (var i = 0; i < AppConfig.DownloadProcesses; i++)
+        {
+            var thread = new Thread(WorkerLoop) { IsBackground = true, Name = $"download-{i}" };
+            thread.Start();
+            workers.Add(thread);
+        }
+        foreach (var thread in workers)
+            thread.Join();
+    }
+
+    /// <summary>该番号的所有任务都下载完成后，works 表状态从 下载中 改为 已下载。</summary>
+    private static void MarkWorkDownloaded(string workId)
+    {
+        var pending = Db.Scalar(
+            "SELECT COUNT(*) FROM \"download_list\" WHERE \"work_id\" = @w AND \"status\" != '1'",
+            ("@w", workId));
+        if (pending is not long and not int || Convert.ToInt64(pending) != 0)
+            return;  // 还有未完成的分卷
+        Db.Execute(
+            "UPDATE \"works\" SET \"state\" = '已下载' WHERE \"work_id\" = @w AND \"state\" = '下载中'",
+            ("@w", workId));
+    }
+
+    /// <summary>开启自动解压时，该番号的所有任务都下载完成后在后台线程解压（每个番号只解压一次）。</summary>
+    private static void AutoUnzipIfDone(string workId)
+    {
+        if (!AppConfig.AutoUnzip)
+            return;
+        var pending = Db.Scalar(
+            "SELECT COUNT(*) FROM \"download_list\" WHERE \"work_id\" = @w AND \"status\" != '1'",
+            ("@w", workId));
+        if (pending is null || Convert.ToInt64(pending) != 0)
+            return;  // 还有未完成的分卷，等全部下载完再解压
+
+        lock (UnzipLock)
+        {
+            if (!Unzipping.Add(workId))
+                return;  // 已有线程在解压该番号（并发完成时去重）
+        }
+
+        // 立即置为"待解压"，避免下载完成到解压线程启动之间 UI 短暂显示"已完成"
+        UnzipProgress[workId] = new UnzipProgressInfo { State = "pending", Pct = 0 };
+        Logger.Info($"{workId} 下载完成，开始自动解压");
+        new Thread(() => RunUnzip(workId)) { IsBackground = true, Name = $"unzip-{workId}" }.Start();
+    }
+
+    /// <summary>在后台解压一个作品，并用独立线程按解压产出量估算进度写入 UnzipProgress。</summary>
+    private static void RunUnzip(string workId)
+    {
+        var folder = WorkFolderPath(workId);
+        long total = 0;
+        foreach (var f in UnzipService.GetAllArchiveFiles(folder))
+            try { total += new FileInfo(f).Length; } catch (IOException) { }
+        if (total == 0)
+            total = 1;
+
+        using var stop = new ManualResetEventSlim(false);
+        var monitor = new Thread(() =>
+        {
+            while (!stop.Wait(1000))
+            {
+                if (UnzipProgress.TryGetValue(workId, out var current) && current.State == "moving")
+                    continue;  // 已进入移动阶段，进度改由移动逻辑维护
+                if (!Directory.Exists(folder))
+                    continue;  // 解压完成后已移动到媒体库，保持上次进度直到解压线程收尾
+                var pct = (int)Math.Min(99, UnzipService.ExtractedSize(folder) * 100 / total);
+                // 解压流程若已收尾，不能把弹出的条目再写回去
+                if (stop.IsSet)
+                    break;
+                UnzipProgress[workId] = new UnzipProgressInfo { State = "extracting", Pct = pct };
+            }
+        }) { IsBackground = true, Name = $"unzip-mon-{workId}" };
+
+        UnzipProgress[workId] = new UnzipProgressInfo { State = "extracting", Pct = 0 };
+        monitor.Start();
+        try
+        {
+            UnzipService.Unzip(workId);
+        }
+        finally
+        {
+            stop.Set();
+            monitor.Join();  // 先等监控线程退出再弹出条目，避免条目被"复活"卡在解压中
+            UnzipProgress.TryRemove(workId, out _);
+            lock (UnzipLock)
+                Unzipping.Remove(workId);
+        }
+    }
+
+    // ---------- 启停 ----------
+
+    /// <summary>启动后台下载线程；已在运行时不重复启动，返回是否新启动。</summary>
+    public static bool Start()
+    {
+        if (IsRunning)
+            return false;
+        _stopRequested = false;
+        _mainThread = new Thread(Run) { IsBackground = true, Name = "download-main" };
+        _mainThread.Start();
+        return true;
+    }
+
+    /// <summary>请求暂停下载：当前文件停到断点后线程退出，再次开始时续传。</summary>
+    public static void Stop() => _stopRequested = true;
+
+    public static bool StopRequested => _stopRequested;
+
+    public static bool IsRunning => _mainThread is { IsAlive: true };
+}

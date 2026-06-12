@@ -1,0 +1,88 @@
+<UserControl x:Class="DASD.Views.SearchPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- 搜索栏 -->
+        <Grid Grid.Row="0" Margin="0,0,0,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBox x:Name="InputBox" FontSize="14" KeyDown="InputBox_KeyDown" />
+            <Button x:Name="SearchButton" Grid.Column="1" Margin="8,0,0,0" MinWidth="90"
+                    Style="{StaticResource AccentButton}" Click="SearchButton_Click" Content="查询" />
+            <Button x:Name="BackButton" Grid.Column="2" Margin="8,0,0,0" Visibility="Collapsed"
+                    Click="BackButton_Click" Content="← 返回结果" />
+        </Grid>
+
+        <!-- 结果列表 / 网盘卡片 两页切换 -->
+        <Grid Grid.Row="1">
+            <!-- 搜索结果列表 -->
+            <ListBox x:Name="ResultList" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     SelectionChanged="ResultList_SelectionChanged">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <Grid Margin="2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="80" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Border Width="72" Height="96" Background="{StaticResource CardBrush}"
+                                    CornerRadius="4" VerticalAlignment="Top">
+                                <Image Source="{Binding Thumb}" Stretch="Uniform" />
+                            </Border>
+                            <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding Minor}" Style="{StaticResource CaptionText}"
+                                           TextWrapping="Wrap" Margin="0,2,0,0" />
+                                <TextBlock Text="{Binding Snippet}" Style="{StaticResource CaptionText}"
+                                           TextWrapping="Wrap" Margin="0,2,0,0" />
+                            </StackPanel>
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+
+            <!-- 下载网站卡片 -->
+            <ListBox x:Name="HostCardList" Visibility="Collapsed"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     SelectionChanged="HostCardList_SelectionChanged">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <Border Style="{StaticResource Card}" Margin="0,2">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Host}" FontWeight="SemiBold" FontSize="14" />
+                                    <TextBlock Text="{Binding CountText}" Style="{StaticResource CaptionText}" />
+                                </StackPanel>
+                                <TextBlock Grid.Column="1" Text="{Binding StatusText}"
+                                           Foreground="{Binding StatusBrush}" FontWeight="SemiBold"
+                                           VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+
+            <!-- 查询加载遮罩 -->
+            <Border x:Name="LoadingOverlay" Background="#96000000" Visibility="Collapsed">
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <ProgressBar IsIndeterminate="True" Width="220" Height="6"
+                                 Foreground="{StaticResource AccentLightBrush}" />
+                    <TextBlock x:Name="LoadingText" Text="正在查询…" Margin="0,12,0,0"
+                               HorizontalAlignment="Center" Foreground="#e6e9f0" />
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>
