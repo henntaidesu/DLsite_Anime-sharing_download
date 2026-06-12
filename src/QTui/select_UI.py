@@ -396,6 +396,9 @@ class SelectWindown(QMainWindow):
             if self.down_url_list:
                 self.ui_host_cards(self.down_url_list)
                 self.show_detail_page()
+            else:
+                # 帖子里没有解析出任何网盘下载链接（如 Request 求档帖），明确提示而不是无反应
+                QMessageBox.information(self, tr('提示'), tr('该帖子中没有找到下载链接'))
 
     def host_card_click(self, item):
         """点击检测通过的网站卡片，该网站全部链接通过 debrid-link 中转站下载"""

@@ -80,6 +80,10 @@ TRANSLATIONS = {
         'ja': '{id} {name}\nこの作品は {time} にダウンロードへ追加済みです。検索を続けますか？',
         'en': '{id} {name}\nThis work was added to downloads on {time}. Continue searching?'},
     '无匹配数据': {'zh_TW': '無相符資料', 'ja': '一致するデータがありません', 'en': 'No matching data'},
+    '该帖子中没有找到下载链接': {
+        'zh_TW': '該帖子中沒有找到下載連結',
+        'ja': 'このスレッドにダウンロードリンクが見つかりません',
+        'en': 'No download links found in this thread'},
 
     # ---------- 下载页 ----------
     'debrid-link 使用量': {'zh_TW': 'debrid-link 使用量', 'ja': 'debrid-link 使用量', 'en': 'debrid-link usage'},

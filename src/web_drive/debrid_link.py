@@ -162,6 +162,10 @@ def move_to_target_folder(work_id, cache_folder):
                 pct = min(99, int(_folder_size(dest) * 100 / total))
             except OSError:
                 continue
+            # 大目录遍历可能耗时数秒：移动若已结束，绝不能再写回进度，
+            # 否则会把已被弹出的 UNZIP_PROGRESS 条目"复活"，状态永远卡在移动中 99%
+            if stop.is_set():
+                break
             UNZIP_PROGRESS[work_id] = {'state': 'moving', 'pct': pct}
 
     monitor = threading.Thread(target=_monitor, daemon=True, name=f'move-mon-{work_id}')
@@ -179,6 +183,7 @@ def move_to_target_folder(work_id, cache_folder):
         return cache_folder
     finally:
         stop.set()
+        monitor.join()  # 等监控线程退出，确保返回后不会再写 UNZIP_PROGRESS
     esc = str(dest).replace("'", "''")
     SQLiteDB().update(
         f'''UPDATE "main"."works" SET "folder" = '{esc}' WHERE "work_id" = '{work_id}' ''')
@@ -618,6 +623,9 @@ def _run_unzip(work_id):
                 pct = min(99, int(_extracted_size(folder) * 100 / total))
             except OSError:
                 pct = UNZIP_PROGRESS.get(work_id, {}).get('pct', 0)
+            # 目录遍历可能耗时较久：解压流程若已收尾，不能把弹出的条目再写回去
+            if stop.is_set():
+                break
             UNZIP_PROGRESS[work_id] = {'state': 'extracting', 'pct': pct}
 
     UNZIP_PROGRESS[work_id] = {'state': 'extracting', 'pct': 0}
@@ -627,6 +635,7 @@ def _run_unzip(work_id):
         unzip(work_id)
     finally:
         stop.set()
+        monitor.join()  # 先等监控线程退出再弹出条目，避免条目被"复活"卡在解压中
         UNZIP_PROGRESS.pop(work_id, None)
         with _unzip_lock:
             _unzipping.discard(work_id)

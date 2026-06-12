@@ -164,3 +164,5 @@ cython_debug/
 
 
 main.exe
+DASD.db-shm
+DASD.db-wal
