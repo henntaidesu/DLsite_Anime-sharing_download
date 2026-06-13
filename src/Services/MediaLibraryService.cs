@@ -118,6 +118,49 @@ public static class MediaLibraryService
         return (added, rjList.Count);
     }
 
+    private static string NormalizeRoot(string path) =>
+        Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+    /// <summary>
+    /// 剔除某媒体库下磁盘上已不存在的作品：从 works 与 work_genres 删除其记录，返回被删除的 RJ 号列表。
+    /// 仅在能正常访问的已登记根目录范围内剔除——根目录离线（如网络盘掉线）时跳过其作品，避免误删整库。
+    /// </summary>
+    public static List<string> PruneMissingWorks(string libName, IReadOnlyList<string> scannedRoots)
+    {
+        var roots = scannedRoots.Where(Directory.Exists).Select(NormalizeRoot).ToList();
+        if (roots.Count == 0)
+            return [];
+
+        var rows = Db.Select(
+            "SELECT \"work_id\", \"folder\" FROM \"works\" WHERE \"library\" = @lib", ("@lib", libName));
+        if (rows == null)
+            return [];
+
+        var removed = new List<string>();
+        foreach (var row in rows)
+        {
+            var rj = row[0] as string ?? "";
+            var folder = row[1] as string;
+            if (rj.Length == 0 || string.IsNullOrEmpty(folder))
+                continue;  // 作品文件夹未知，无法判定是否缺失 → 保留
+            var full = Path.GetFullPath(folder);
+            if (Directory.Exists(full))
+                continue;  // 文件夹仍在 → 保留
+            // 仅剔除归属于本次已扫描根目录的作品；其根目录离线的作品无法判定 → 跳过
+            var underScannedRoot = roots.Any(r =>
+                string.Equals(full, r, StringComparison.OrdinalIgnoreCase) ||
+                full.StartsWith(r + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase));
+            if (!underScannedRoot)
+                continue;
+            Db.Execute("DELETE FROM \"work_genres\" WHERE \"work_id\" = @rj", ("@rj", rj));
+            Db.Execute("DELETE FROM \"works\" WHERE \"work_id\" = @rj", ("@rj", rj));
+            removed.Add(rj);
+        }
+        if (removed.Count > 0)
+            Logger.Info($"媒体库 {libName} 剔除已缺失作品 {removed.Count} 个: {string.Join(", ", removed)}");
+        return removed;
+    }
+
     /// <summary>
     /// 把作品文件夹移动到目标媒体库文件夹并改写 library/folder/cover，
     /// 移动成功后同步补全该作品元数据。返回 (是否成功, 新路径或失败原因)。

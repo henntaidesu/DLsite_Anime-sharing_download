@@ -11,12 +11,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- MainWindow 放在仓库根目录，需手动链接进项目 -->
-    <Page Include="..\MainWindow.xaml" Link="MainWindow.xaml" />
-    <Compile Include="..\MainWindow.xaml.cs" Link="MainWindow.xaml.cs" />
-  </ItemGroup>
-
-  <ItemGroup>
     <!-- 外部访问网页：作为嵌入资源打包，由 WebAssets 读取 -->
     <EmbeddedResource Include="Web\index.html" />
   </ItemGroup>

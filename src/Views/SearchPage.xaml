@@ -24,93 +24,145 @@
                     Click="BackButton_Click" Content="← 返回结果" />
         </Grid>
 
-        <!-- 结果列表 / 网盘卡片 两页切换 -->
+        <!-- 结果列表 / 社团卡片 两页切换 -->
         <Grid Grid.Row="1">
-            <!-- 搜索结果列表 -->
+            <!-- 搜索结果列表（每个帖子内联展示抓取到的网盘卡片与自动检测状态） -->
             <ListBox x:Name="ResultList" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     VirtualizingPanel.ScrollUnit="Pixel"
                      SelectionChanged="ResultList_SelectionChanged">
+                <ListBox.ItemContainerStyle>
+                    <Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
+                        <Setter Property="Padding" Value="0" />
+                        <Setter Property="Margin" Value="0,3" />
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                    </Style>
+                </ListBox.ItemContainerStyle>
                 <ListBox.ItemTemplate>
                     <DataTemplate>
-                        <Grid Margin="2">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="80" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <Border Width="72" Height="96" Background="{StaticResource CardBrush}"
-                                    CornerRadius="4" VerticalAlignment="Top">
-                                <Image Source="{Binding Thumb}" Stretch="Uniform" />
-                            </Border>
-                            <StackPanel Grid.Column="1" Margin="8,0,0,0">
-                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
-                                <TextBlock Text="{Binding Minor}" Style="{StaticResource CaptionText}"
-                                           TextWrapping="Wrap" Margin="0,2,0,0" />
-                                <TextBlock Text="{Binding Snippet}" Style="{StaticResource CaptionText}"
-                                           TextWrapping="Wrap" Margin="0,2,0,0" />
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="80" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border Width="72" Height="96" Background="{StaticResource WindowBrush}"
+                                            CornerRadius="4" VerticalAlignment="Top">
+                                        <Image Source="{Binding Thumb}" Stretch="Uniform" />
+                                    </Border>
+                                    <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                        <TextBlock Text="{Binding Minor}" Style="{StaticResource CaptionText}"
+                                                   TextWrapping="Wrap" Margin="0,2,0,0" />
+                                        <TextBlock Text="{Binding Snippet}" Style="{StaticResource CaptionText}"
+                                                   TextWrapping="Wrap" Margin="0,2,0,0" />
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="2" Text="{Binding ScanText}" Foreground="{Binding ScanBrush}"
+                                               FontWeight="SemiBold" VerticalAlignment="Top" Margin="10,0,0,0" />
+                                </Grid>
+                                <!-- 内联网盘卡片：抓取到的下载链接 + 自动检测 + 直接下载 -->
+                                <ItemsControl ItemsSource="{Binding Hosts}" Visibility="{Binding HostsVisibility}"
+                                              Margin="0,8,0,0">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="{StaticResource WindowBrush}" CornerRadius="6"
+                                                    Padding="10,8" Margin="0,3,0,0">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel>
+                                                        <TextBlock Text="{Binding Host}" FontWeight="SemiBold" FontSize="14" />
+                                                        <TextBlock Text="{Binding CountText}" Style="{StaticResource CaptionText}" />
+                                                        <ItemsControl ItemsSource="{Binding Urls}" Margin="0,4,12,0">
+                                                            <ItemsControl.ItemTemplate>
+                                                                <DataTemplate>
+                                                                    <TextBox Text="{Binding Mode=OneWay}" IsReadOnly="True"
+                                                                             BorderThickness="0" Background="Transparent"
+                                                                             Padding="0" Margin="0,1" FontSize="12"
+                                                                             Foreground="{StaticResource AccentLightBrush}"
+                                                                             TextWrapping="Wrap" ToolTip="{Binding Mode=OneWay}" />
+                                                                </DataTemplate>
+                                                            </ItemsControl.ItemTemplate>
+                                                        </ItemsControl>
+                                                    </StackPanel>
+                                                    <TextBlock Grid.Column="1" Text="{Binding StatusText}"
+                                                               Foreground="{Binding StatusBrush}" FontWeight="SemiBold"
+                                                               VerticalAlignment="Center" Margin="8,0" />
+                                                    <Button Grid.Column="2" Content="下载" MinWidth="64"
+                                                            Style="{StaticResource AccentButton}" VerticalAlignment="Center"
+                                                            Visibility="{Binding DownloadVisibility}"
+                                                            Click="HostDownload_Click" />
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
                             </StackPanel>
-                        </Grid>
-                    </DataTemplate>
-                </ListBox.ItemTemplate>
-            </ListBox>
-
-            <!-- 下载网站卡片 -->
-            <ListBox x:Name="HostCardList" Visibility="Collapsed"
-                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                     SelectionChanged="HostCardList_SelectionChanged">
-                <ListBox.ItemTemplate>
-                    <DataTemplate>
-                        <Border Style="{StaticResource Card}" Margin="0,2">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel>
-                                    <TextBlock Text="{Binding Host}" FontWeight="SemiBold" FontSize="14" />
-                                    <TextBlock Text="{Binding CountText}" Style="{StaticResource CaptionText}" />
-                                    <!-- 具体下载链接（可选中复制）；多分卷逐行显示 -->
-                                    <ItemsControl ItemsSource="{Binding Urls}" Margin="0,6,12,0">
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate>
-                                                <TextBox Text="{Binding Mode=OneWay}" IsReadOnly="True"
-                                                         BorderThickness="0" Background="Transparent"
-                                                         Padding="0" Margin="0,1,0,1" FontSize="12"
-                                                         Foreground="{StaticResource AccentLightBrush}"
-                                                         TextWrapping="Wrap" ToolTip="{Binding Mode=OneWay}" />
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-                                </StackPanel>
-                                <TextBlock Grid.Column="1" Text="{Binding StatusText}"
-                                           Foreground="{Binding StatusBrush}" FontWeight="SemiBold"
-                                           VerticalAlignment="Center" />
-                            </Grid>
                         </Border>
                     </DataTemplate>
                 </ListBox.ItemTemplate>
             </ListBox>
 
-            <!-- 社团作品列表（RG 搜索：点击作品后自动用其 RJ 号搜索 AS） -->
+            <!-- 社团作品卡片网格（RG 搜索：点击作品后自动用其 RJ 号搜索 AS） -->
             <ListBox x:Name="MakerList" Visibility="Collapsed"
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     ScrollViewer.CanContentScroll="False"
                      ScrollViewer.ScrollChanged="MakerList_ScrollChanged"
                      SelectionChanged="MakerList_SelectionChanged">
+                <ListBox.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                </ListBox.ItemsPanel>
+                <ListBox.ItemContainerStyle>
+                    <Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
+                        <Setter Property="Padding" Value="0" />
+                        <Setter Property="Margin" Value="5" />
+                        <Setter Property="HorizontalContentAlignment" Value="Left" />
+                    </Style>
+                </ListBox.ItemContainerStyle>
                 <ListBox.ItemTemplate>
                     <DataTemplate>
-                        <Grid Margin="2">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="120" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <Border Width="112" Height="84" Background="{StaticResource CardBrush}"
-                                    CornerRadius="4" VerticalAlignment="Top">
-                                <Image Source="{Binding Thumb}" Stretch="UniformToFill" />
-                            </Border>
-                            <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
-                                <TextBlock Text="{Binding WorkId}" Style="{StaticResource CaptionText}" />
-                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap"
-                                           Margin="0,2,0,0" />
+                        <Border Width="158" CornerRadius="8" Background="{StaticResource CardBrush}"
+                                Opacity="{Binding CardOpacity}">
+                            <StackPanel>
+                                <Grid>
+                                    <Border Height="118" CornerRadius="8,8,0,0" ClipToBounds="True"
+                                            Background="{StaticResource WindowBrush}">
+                                        <Image Source="{Binding Thumb}" Stretch="UniformToFill" />
+                                    </Border>
+                                    <!-- RJ 角标 -->
+                                    <Border HorizontalAlignment="Left" VerticalAlignment="Top" Margin="6"
+                                            Background="#9E000000" CornerRadius="4" Padding="6,1">
+                                        <TextBlock Text="{Binding WorkId}" Foreground="#F3F3F3" FontSize="11" />
+                                    </Border>
+                                    <!-- 已在库角标 -->
+                                    <Border VerticalAlignment="Bottom" Margin="6" Background="#E66E6E7A"
+                                            CornerRadius="4" Padding="6,1" Visibility="{Binding LibBadgeVisibility}">
+                                        <TextBlock Text="{Binding StateText}" Foreground="#F3F3F3"
+                                                   FontSize="11" HorizontalAlignment="Center" />
+                                    </Border>
+                                    <!-- AS 扫描状态角标 -->
+                                    <Border VerticalAlignment="Bottom" Margin="6" Background="#A6000000"
+                                            CornerRadius="4" Padding="6,1" Visibility="{Binding AsBadgeVisibility}">
+                                        <TextBlock Text="{Binding AsStatusText}" Foreground="{Binding AsStatusBrush}"
+                                                   FontSize="11" HorizontalAlignment="Center" />
+                                    </Border>
+                                    <!-- 下载状态角标（与下载页同步） -->
+                                    <Border VerticalAlignment="Bottom" Margin="6" Background="#C8000000"
+                                            CornerRadius="4" Padding="6,1" Visibility="{Binding DownBadgeVisibility}">
+                                        <TextBlock Text="{Binding DownText}" Foreground="{Binding DownBrush}"
+                                                   FontSize="11" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                                    </Border>
+                                </Grid>
+                                <TextBlock Text="{Binding Title}" FontSize="12.5" FontWeight="Medium"
+                                           TextWrapping="Wrap" MaxHeight="40" Margin="9,7,9,10" />
                             </StackPanel>
-                        </Grid>
+                        </Border>
                     </DataTemplate>
                 </ListBox.ItemTemplate>
             </ListBox>

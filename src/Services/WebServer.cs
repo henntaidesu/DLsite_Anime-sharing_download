@@ -65,6 +65,7 @@ public static class WebServer
         ["3"] = ("下载中", "#60a5fa"),
         ["1"] = ("已完成", "#4ade80"),
         ["2"] = ("解析失败", "#f87171"),
+        ["4"] = ("已暂停", "#9aa4b2"),
     };
 
     // 设置页可写入的 section/key 白名单（web_server 段不允许从网页改，避免自我锁死）。
@@ -296,12 +297,15 @@ public static class WebServer
                 case "/api/libs": ApiLibs(stream); break;
                 case "/api/makers": ApiMakers(stream, req); break;
                 case "/api/works": ApiWorks(stream, req); break;
+                case "/api/libworks": ApiLibWorks(stream, req); break;
                 case "/api/genres": ApiGenres(stream); break;
                 case "/api/types": ApiTypes(stream); break;
                 case "/api/favorites": ApiFavorites(stream, req); break;
                 case "/api/filter": ApiFilter(stream, req); break;
                 case "/api/detail": ApiDetail(stream, req); break;
                 case "/api/toggle": ApiToggle(stream, req); break;
+                case "/api/searchworks": ApiSearchWorks(stream, req); break;
+                case "/api/movework": ApiMoveWork(stream, req); break;
                 case "/api/cover": ApiCover(stream, req); break;
                 case "/api/asset": ApiAsset(stream, req); break;
                 case "/api/files": ApiFiles(stream, req); break;
@@ -309,6 +313,7 @@ public static class WebServer
                 // 搜索
                 case "/api/search": ApiSearch(stream, req); break;
                 case "/api/maker": ApiMaker(stream, req); break;
+                case "/api/asscan": ApiAsScan(stream, req); break;
                 case "/api/thumb": ApiThumb(stream, req); break;
                 case "/api/posturls": ApiPostUrls(stream, req); break;
                 case "/api/checkhost": ApiCheckHost(stream, req); break;
@@ -319,6 +324,9 @@ public static class WebServer
                 case "/api/usage": ApiUsage(stream); break;
                 case "/api/engine": ApiEngine(stream, req); break;
                 case "/api/reparse": ApiReparse(stream, req); break;
+                case "/api/pausework": ApiPauseWork(stream, req); break;
+                case "/api/resumework": ApiResumeWork(stream, req); break;
+                case "/api/deletework": ApiDeleteWork(stream, req); break;
                 case "/api/research": ApiResearch(stream, req); break;
                 case "/api/cleardone": ApiClearDone(stream); break;
                 case "/api/clearall": ApiClearAll(stream); break;
@@ -462,6 +470,18 @@ public static class WebServer
                 "FROM \"works\" WHERE \"state\" = '已品悦' AND \"library\" = @lib AND " + makerCond.Replace("{p}", "") + " " +
                 order.Replace("{p}", ""),
                 ("@lib", lib ?? ""), ("@maker", maker));
+        WriteJson(stream, 200, new { works = WorksJson(rows) });
+    }
+
+    /// <summary>某媒体库内全部已品悦作品（媒体库默认"显示作品"视图）。</summary>
+    private static void ApiLibWorks(NetworkStream stream, Request req)
+    {
+        var lib = req.Query.GetValueOrDefault("lib") ?? "";
+        var rows = Db.Select(
+            "SELECT \"work_id\", \"work_name\", \"maker_name\", \"work_type\", \"age_category\", \"cover\" " +
+            "FROM \"works\" WHERE \"state\" = '已品悦' AND \"library\" = @lib " +
+            WorkOrderClause(GetInt(req, "sort")).Replace("{p}", ""),
+            ("@lib", lib));
         WriteJson(stream, 200, new { works = WorksJson(rows) });
     }
 
@@ -939,11 +959,63 @@ public static class WebServer
         if (page < 1)
             page = 1;
         var (works, hasMore) = DlsiteApi.GetMakerWorksAsync(id, page).GetAwaiter().GetResult();
+        // 校验后台：本页作品号哪些已在库（works 表已有记录），供前端置灰标记
+        var states = LookupWorkStates(works.Select(w => w.WorkId));
         WriteJson(stream, 200, new
         {
-            works = works.Select(w => new { id = w.WorkId, title = w.Title, thumb = w.Thumb }),
+            works = works.Select(w => new
+            {
+                id = w.WorkId, title = w.Title, thumb = w.Thumb,
+                inLib = states.ContainsKey(w.WorkId),
+                state = states.GetValueOrDefault(w.WorkId, ""),
+            }),
             hasMore,
         });
+    }
+
+    /// <summary>批量查询作品号在 works 表中的状态（不存在则不在结果里），用于搜索时标记"已在库"。</summary>
+    private static Dictionary<string, string> LookupWorkStates(IEnumerable<string> ids)
+    {
+        var list = ids.Where(s => s.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (list.Count == 0)
+            return result;
+        var names = new List<string>();
+        var args = new List<(string, object?)>();
+        for (var i = 0; i < list.Count; i++)
+        {
+            names.Add($"@w{i}");
+            args.Add(($"@w{i}", list[i]));
+        }
+        var rows = Db.Select(
+            $"SELECT \"work_id\", \"state\" FROM \"works\" WHERE \"work_id\" IN ({string.Join(",", names)})",
+            args.ToArray());
+        foreach (var row in rows ?? [])
+            result[row[0] as string ?? ""] = row[1] as string ?? "";
+        return result;
+    }
+
+    /// <summary>对单个作品号做一次 AS 论坛扫描，返回匹配帖子数（-1 表示扫描出错）。
+    /// 供 RG 搜索时前端按 3 秒间隔逐个探测未在库作品的可下载性。</summary>
+    private static void ApiAsScan(NetworkStream stream, Request req)
+    {
+        var id = (req.Query.GetValueOrDefault("id") ?? "").Trim().ToUpperInvariant();
+        if (!WorkIdRe.IsMatch(id))
+        {
+            WriteJson(stream, 400, new { error = "番号格式错误（RJ/BJ/VJ + 数字）" });
+            return;
+        }
+        int count;
+        try
+        {
+            count = AnimeSharing.SearchWorkAsync(id).GetAwaiter().GetResult().Count;
+        }
+        catch (Exception)
+        {
+            WriteJson(stream, 200, new { id, count = -1 });
+            return;
+        }
+        WriteJson(stream, 200, new { id, count });
     }
 
     private static string TrimSnippet(string snippet) =>
@@ -1100,9 +1172,9 @@ public static class WebServer
     private static void ApiDownloads(NetworkStream stream)
     {
         var rows = Db.Select(
-            "SELECT \"UUID\", \"work_id\", \"url\", \"status\", \"long\" FROM \"download_list\" ORDER BY rowid");
+            "SELECT \"UUID\", \"work_id\", \"url\", \"status\", \"long\", \"error\" FROM \"download_list\" ORDER BY rowid");
         var order = new List<string>();
-        var grouped = new Dictionary<string, List<(string Uuid, string Url, string Status, string Long)>>();
+        var grouped = new Dictionary<string, List<(string Uuid, string Url, string Status, string Long, string? Error)>>();
         foreach (var row in rows ?? [])
         {
             var workId = row[1] as string ?? "";
@@ -1112,7 +1184,7 @@ public static class WebServer
                 order.Add(workId);
             }
             list.Add((row[0] as string ?? "", row[2] as string ?? "",
-                row[3] as string ?? "", row[4]?.ToString() ?? ""));
+                row[3] as string ?? "", row[4]?.ToString() ?? "", row[5] as string));
         }
         var groups = order.Select(workId =>
         {
@@ -1130,9 +1202,11 @@ public static class WebServer
                     ? m : ($"未知({it.Status})", "#cdd3de");
                 return new
                 {
-                    fileName = FileNameOf(it.Url), pct,
+                    fileName = FileNameOf(it.Url), url = it.Url, pct,
                     speed = speed is { } sp ? FormatSpeed(sp) : "",
                     statusText = text, color,
+                    // 解析失败的分卷附带可读错误原因
+                    errorReason = it.Status == "2" ? MapParseError(it.Error) : "",
                 };
             }).ToList();
             var groupPct = DownloadEngine.UnzipProgress.TryGetValue(workId, out var unzip)
@@ -1142,6 +1216,10 @@ public static class WebServer
                 id = workId, pct = (int)groupPct, statusText = aggText, color = aggColor,
                 speed = totalSpeed > 0 ? FormatSpeed(totalSpeed) : "",
                 canReparse = statuses.Contains("2") && workId.Length > 0,
+                // 有下载中/等待分卷可"停止"；有已暂停分卷可"下载"（继续）；非空番号始终可"删除"
+                canPause = statuses.Any(s => s is "0" or "3") && workId.Length > 0,
+                canResume = statuses.Contains("4") && workId.Length > 0,
+                canDelete = workId.Length > 0,
                 children,
             };
         });
@@ -1159,6 +1237,8 @@ public static class WebServer
             return ($"下载中 {done}/{statuses.Count}", "#60a5fa");
         if (statuses.Contains("0"))
             return ($"等待下载 {done}/{statuses.Count}", "#facc15");
+        if (statuses.Contains("4"))
+            return ($"已暂停 {done}/{statuses.Count}", "#9aa4b2");
         if (statuses.Contains("2"))
             return ($"{statuses.Count(s => s == "2")} 个解析失败", "#f87171");
         if (DownloadEngine.UnzipProgress.TryGetValue(workId, out var unzip))
@@ -1242,11 +1322,126 @@ public static class WebServer
         var id = ReadStringField(req.Body, "id");
         if (id.Length > 0)
         {
-            Db.Execute("UPDATE \"download_list\" SET \"status\" = '0' WHERE \"work_id\" = @w AND \"status\" = '2'",
+            Db.Execute("UPDATE \"download_list\" SET \"status\" = '0', \"error\" = NULL WHERE \"work_id\" = @w AND \"status\" = '2'",
                 ("@w", id));
             DownloadEngine.Start();
         }
         WriteJson(stream, 200, new { ok = true });
+    }
+
+    /// <summary>单独停止某作品下载（停到断点，镜像下载页"停止"）。</summary>
+    private static void ApiPauseWork(NetworkStream stream, Request req)
+    {
+        var id = ReadStringField(req.Body, "id");
+        if (id.Length > 0)
+            DownloadEngine.PauseWork(id);
+        WriteJson(stream, 200, new { ok = true });
+    }
+
+    /// <summary>单独继续某作品下载（解除暂停并启动引擎，镜像下载页"下载"）。</summary>
+    private static void ApiResumeWork(NetworkStream stream, Request req)
+    {
+        var id = ReadStringField(req.Body, "id");
+        if (id.Length > 0)
+            DownloadEngine.ResumeWork(id);
+        WriteJson(stream, 200, new { ok = true });
+    }
+
+    /// <summary>单独删除某作品（移除下载列表与作品记录、删下载缓存，镜像下载页"删除"）。</summary>
+    private static void ApiDeleteWork(NetworkStream stream, Request req)
+    {
+        var id = ReadStringField(req.Body, "id");
+        if (id.Length > 0)
+            DownloadEngine.DeleteWork(id);
+        WriteJson(stream, 200, new { ok = true });
+    }
+
+    /// <summary>把 debrid-link 解析失败错误码翻译为可读说明（镜像 DownloadPage.MapParseError）。</summary>
+    private static string MapParseError(string? raw)
+    {
+        if (string.IsNullOrEmpty(raw))
+            return "解析失败（原因未知，可能是链接失效或网盘不支持）";
+        return raw switch
+        {
+            "badToken" => "debrid-link API Key 无效或已过期",
+            "maxData" or "maxDataHost" => "debrid-link 流量额度已用尽",
+            "maxLink" or "maxLinkHost" => "链接数超过 debrid-link 限制",
+            "hostUnsupported" or "notDebrid" or "hostNotValid" or "noServer"
+                => "该网盘不被 debrid-link 支持",
+            "notFreeHost" or "hostNotFree" or "disabledHost" or "disabledServerHost"
+                => "该网盘需要会员或已停用",
+            "fileNotFound" or "fileUnavailable" or "notFound" or "fileError"
+                => "文件已失效或被删除",
+            "floodDetected" => "请求过于频繁，请稍后再试",
+            "badFileType" => "不支持的文件类型",
+            _ => $"解析失败（{raw}）",
+        };
+    }
+
+    /// <summary>把作品移动到另一个媒体库（镜像详情页"移动媒体库"）。</summary>
+    private static void ApiMoveWork(NetworkStream stream, Request req)
+    {
+        string id = "", lib = "", folder = "";
+        try
+        {
+            using var doc = JsonDocument.Parse(Encoding.UTF8.GetString(req.Body));
+            var root = doc.RootElement;
+            id = (root.TryGetProperty("id", out var i) ? i.GetString() ?? "" : "").ToUpperInvariant();
+            lib = root.TryGetProperty("lib", out var l) ? l.GetString() ?? "" : "";
+            folder = root.TryGetProperty("folder", out var f) ? f.GetString() ?? "" : "";
+        }
+        catch (Exception)
+        {
+            // 解析失败按非法请求处理
+        }
+        if (id.Length == 0 || lib.Length == 0 || folder.Length == 0)
+        {
+            WriteJson(stream, 400, new { ok = false, message = "参数缺失" });
+            return;
+        }
+        var (ok, message) = MediaLibraryService.MoveWorkToLibraryAsync(id, lib, folder).GetAwaiter().GetResult();
+        WriteJson(stream, 200, new { ok, message });
+    }
+
+    /// <summary>媒体库作用域作品搜索（镜像 MediaLibPage.ShowScopedSearch）：
+    /// 媒体库根搜全部库；指定 lib/genre/type 时限定该范围；按 RJ号/作品名 LIKE 匹配已品悦作品。</summary>
+    private static void ApiSearchWorks(NetworkStream stream, Request req)
+    {
+        var kw = (req.Query.GetValueOrDefault("kw") ?? "").Trim();
+        if (kw.Length == 0)
+        {
+            WriteJson(stream, 200, new { works = Array.Empty<object>() });
+            return;
+        }
+        var lib = req.Query.GetValueOrDefault("lib");
+        var genre = req.Query.GetValueOrDefault("genre");
+        var type = req.Query.GetValueOrDefault("type");
+        var conds = new List<string> { "\"works\".\"state\" = '已品悦'", "(\"works\".\"work_id\" LIKE @kw OR \"works\".\"work_name\" LIKE @kw)" };
+        var pars = new List<(string, object?)> { ("@kw", $"%{kw}%") };
+        var join = "";
+        if (!string.IsNullOrEmpty(genre))
+        {
+            join = "JOIN \"work_genres\" g ON g.\"work_id\" = \"works\".\"work_id\" ";
+            conds.Add("g.\"genre\" = @g");
+            pars.Add(("@g", genre));
+        }
+        else if (!string.IsNullOrEmpty(type))
+        {
+            conds.Add("\"works\".\"work_type\" = @t");
+            pars.Add(("@t", type));
+        }
+        else if (!string.IsNullOrEmpty(lib))
+        {
+            conds.Add("\"works\".\"library\" = @lib");
+            pars.Add(("@lib", lib));
+        }
+        var rows = Db.Select(
+            "SELECT \"works\".\"work_id\", \"works\".\"work_name\", \"works\".\"maker_name\", " +
+            "\"works\".\"work_type\", \"works\".\"age_category\", \"works\".\"cover\" FROM \"works\" " +
+            join + "WHERE " + string.Join(" AND ", conds) + " " +
+            WorkOrderClause(GetInt(req, "sort")).Replace("{p}", "\"works\"."),
+            pars.ToArray());
+        WriteJson(stream, 200, new { works = WorksJson(rows) });
     }
 
     private static void ApiResearch(NetworkStream stream, Request req)

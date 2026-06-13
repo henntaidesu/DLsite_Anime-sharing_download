@@ -6,19 +6,19 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Runtime.CompilerServices;
-using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using DASD.Core;
 using DASD.Services;
 
 namespace DASD.Views;
 
-/// <summary>搜索结果条目。</summary>
+/// <summary>搜索结果条目（AS 论坛一个帖子，内联展示其网盘卡片与自动检测状态）。</summary>
 public class SearchResultItem : INotifyPropertyChanged
 {
     public string Title { get; init; } = "";
@@ -27,11 +27,39 @@ public class SearchResultItem : INotifyPropertyChanged
     public string Url { get; init; } = "";
     public string ThumbUrl { get; init; } = "";
 
+    // 自动扫描进度标记（非绑定，仅供逻辑判断，避免重复扫描）
+    public bool Scanning;
+    public bool Scanned;
+
+    /// <summary>本帖子抓取到的网盘卡片（按域名分组）。</summary>
+    public ObservableCollection<HostCardItem> Hosts { get; } = [];
+
     private ImageSource? _thumb;
     public ImageSource? Thumb
     {
         get => _thumb;
         set { _thumb = value; OnPropertyChanged(); }
+    }
+
+    private string _scanText = "";
+    public string ScanText
+    {
+        get => _scanText;
+        set { _scanText = value; OnPropertyChanged(); }
+    }
+
+    private Brush _scanBrush = Brushes.Gray;
+    public Brush ScanBrush
+    {
+        get => _scanBrush;
+        set { _scanBrush = value; OnPropertyChanged(); }
+    }
+
+    private Visibility _hostsVisibility = Visibility.Collapsed;
+    public Visibility HostsVisibility
+    {
+        get => _hostsVisibility;
+        set { _hostsVisibility = value; OnPropertyChanged(); }
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -63,6 +91,16 @@ public class HostCardItem : INotifyPropertyChanged
         set { _statusBrush = value; OnPropertyChanged(); }
     }
 
+    // 检测通过后允许在列表中直接点击下载
+    private bool _canDownload;
+    public bool CanDownload
+    {
+        get => _canDownload;
+        set { _canDownload = value; OnPropertyChanged(); OnPropertyChanged(nameof(DownloadVisibility)); }
+    }
+
+    public Visibility DownloadVisibility => CanDownload ? Visibility.Visible : Visibility.Collapsed;
+
     public event PropertyChangedEventHandler? PropertyChanged;
     private void OnPropertyChanged([CallerMemberName] string? name = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
@@ -75,11 +113,68 @@ public class MakerWorkItem : INotifyPropertyChanged
     public string Title { get; init; } = "";
     public string ThumbUrl { get; init; } = "";
 
+    /// <summary>已在库（works 表已有记录）：卡片置灰降亮。</summary>
+    public bool InLib { get; init; }
+
+    /// <summary>在库状态文本（下载中/已下载/已品悦），仅 InLib 时显示。</summary>
+    public string StateText { get; init; } = "";
+
+    /// <summary>卡片不透明度：在库作品降到 0.45 以示区别。</summary>
+    public double CardOpacity { get; init; } = 1.0;
+
+    // 下载状态角标（与下载页同步）：加入下载后展示 待下载 / 下载中 N/M / 解压中 X% / 已完成 …，优先于 AS/在库角标
+    private bool _downActive;
+    public bool DownActive
+    {
+        get => _downActive;
+        set
+        {
+            _downActive = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(LibBadgeVisibility));
+            OnPropertyChanged(nameof(AsBadgeVisibility));
+            OnPropertyChanged(nameof(DownBadgeVisibility));
+        }
+    }
+
+    private string _downText = "";
+    public string DownText
+    {
+        get => _downText;
+        set { _downText = value; OnPropertyChanged(); }
+    }
+
+    private Brush _downBrush = Brushes.Gray;
+    public Brush DownBrush
+    {
+        get => _downBrush;
+        set { _downBrush = value; OnPropertyChanged(); }
+    }
+
+    public Visibility LibBadgeVisibility => !DownActive && InLib ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility AsBadgeVisibility => !DownActive && !InLib ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility DownBadgeVisibility => DownActive ? Visibility.Visible : Visibility.Collapsed;
+
     private ImageSource? _thumb;
     public ImageSource? Thumb
     {
         get => _thumb;
         set { _thumb = value; OnPropertyChanged(); }
+    }
+
+    // AS 扫描状态（仅未在库作品）：待扫描 → 扫描中 → AS·N帖 / AS·无 / AS·失败
+    private string _asStatusText = "";
+    public string AsStatusText
+    {
+        get => _asStatusText;
+        set { _asStatusText = value; OnPropertyChanged(); }
+    }
+
+    private Brush _asStatusBrush = Brushes.Gray;
+    public Brush AsStatusBrush
+    {
+        get => _asStatusBrush;
+        set { _asStatusBrush = value; OnPropertyChanged(); }
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -91,20 +186,26 @@ public class MakerWorkItem : INotifyPropertyChanged
 public partial class SearchPage : UserControl
 {
     private readonly ObservableCollection<SearchResultItem> _results = [];
-    private readonly ObservableCollection<HostCardItem> _hostCards = [];
     private readonly ObservableCollection<MakerWorkItem> _makerWorks = [];
 
     private string? _selectId;
-    private DlWork? _workData;     // 当前搜索作品的 DL API 数据，加入下载时写入 works 表
-    private int _searchGeneration;  // 新一轮搜索作废旧缩略图加载（仅在重新查询时递增）
-    private int _hostGeneration;    // 进入/离开详情时作废旧的网站检测，互不影响缩略图加载
+    private DlWork? _workData;       // 当前搜索作品的 DL API 数据，加入下载时写入 works 表
+    private int _searchGeneration;   // 作品（AS 帖子）搜索代际：新一轮作品搜索作废旧缩略图/帖子扫描
+    private int _makerGeneration;    // 社团（RG）搜索代际：独立于作品搜索，使社团扫描可在后台持续
 
     // 社团（RG）搜索状态
-    private bool _fromMaker;        // 当前 AS 结果是否来自社团作品列表（决定返回去向）
+    private bool _fromMaker;         // 当前 AS 结果是否来自社团作品列表（决定返回去向）
     private string? _makerId;
-    private int _makerPage;         // 已加载到第几页（0=未加载）
+    private int _makerPage;          // 已加载到第几页（0=未加载）
     private bool _makerHasMore;
     private bool _makerLoading;
+
+    // 未在库作品的 AS 扫描队列：按 3 秒间隔逐个探测可下载性
+    private readonly Queue<MakerWorkItem> _scanQueue = new();
+    private bool _makerScanning;
+
+    // 社团卡片与下载页状态同步：每秒把下载列表的聚合状态写回对应卡片角标
+    private readonly DispatcherTimer _downSyncTimer = new() { Interval = TimeSpan.FromSeconds(1) };
 
     /// <summary>点击"← 下载列表"按钮时触发，由主窗口切回下载视图。</summary>
     public event Action? BackToDownloadRequested;
@@ -113,8 +214,8 @@ public partial class SearchPage : UserControl
     {
         InitializeComponent();
         ResultList.ItemsSource = _results;
-        HostCardList.ItemsSource = _hostCards;
         MakerList.ItemsSource = _makerWorks;
+        _downSyncTimer.Tick += (_, _) => SyncMakerDownloadStates();
         RetranslateUi();
         I18n.LanguageChanged += RetranslateUi;
     }
@@ -124,7 +225,7 @@ public partial class SearchPage : UserControl
         InputBox.ToolTip = I18n.Tr("输入作品号(RJ/BJ/VJ)、社团号(RG)或 DLsite 链接");
         BackToDownloadButton.Content = I18n.Tr("← 下载列表");
         SearchButton.Content = I18n.Tr("查询");
-        BackButton.Content = I18n.Tr("← 返回结果");
+        BackButton.Content = I18n.Tr("← 返回社团作品");
         LoadingText.Text = I18n.Tr("正在查询…");
     }
 
@@ -145,10 +246,8 @@ public partial class SearchPage : UserControl
 
     private void BackButton_Click(object sender, RoutedEventArgs e)
     {
-        // 网盘卡片 → 结果列表；结果列表（来自社团）→ 社团作品列表
-        if (HostCardList.Visibility == Visibility.Visible)
-            ShowResultsPage();
-        else if (ResultList.Visibility == Visibility.Visible && _fromMaker)
+        // 结果列表（来自社团）→ 社团作品列表
+        if (ResultList.Visibility == Visibility.Visible && _fromMaker)
             ShowMakerPage();
     }
 
@@ -158,23 +257,13 @@ public partial class SearchPage : UserControl
     private void ShowResultsPage()
     {
         ResultList.Visibility = Visibility.Visible;
-        HostCardList.Visibility = Visibility.Collapsed;
         MakerList.Visibility = Visibility.Collapsed;
         BackButton.Visibility = _fromMaker ? Visibility.Visible : Visibility.Collapsed;
-    }
-
-    private void ShowDetailPage()
-    {
-        ResultList.Visibility = Visibility.Collapsed;
-        HostCardList.Visibility = Visibility.Visible;
-        MakerList.Visibility = Visibility.Collapsed;
-        BackButton.Visibility = Visibility.Visible;
     }
 
     private void ShowMakerPage()
     {
         ResultList.Visibility = Visibility.Collapsed;
-        HostCardList.Visibility = Visibility.Collapsed;
         MakerList.Visibility = Visibility.Visible;
         BackButton.Visibility = Visibility.Collapsed;
     }
@@ -202,13 +291,15 @@ public partial class SearchPage : UserControl
 
     // ---------- 作品搜索（AS 论坛）----------
 
-    /// <summary>按作品号搜索 Anime-sharing 论坛并展示结果。</summary>
+    /// <summary>
+    /// 按作品号搜索 Anime-sharing 论坛并展示结果。
+    /// 注意：只递增 _searchGeneration、不触碰 _makerGeneration / _scanQueue，
+    /// 使来自社团的后台 AS 扫描能在查看本帖子列表时继续进行。
+    /// </summary>
     private async Task RunWorkSearchAsync(string workId)
     {
-        _searchGeneration++;   // 作废旧缩略图加载
-        _hostGeneration++;     // 作废旧网站检测
+        _searchGeneration++;   // 作废旧的作品缩略图加载与帖子扫描
         _results.Clear();
-        _hostCards.Clear();
         _selectId = workId;
 
         // 已下载过的作品提示用户
@@ -231,6 +322,7 @@ public partial class SearchPage : UserControl
 
         // 查询期间显示加载遮罩，网络请求在后台执行
         LoadingOverlay.Visibility = Visibility.Visible;
+        var generation = _searchGeneration;
         List<AsSearchResult> results;
         try
         {
@@ -244,6 +336,8 @@ public partial class SearchPage : UserControl
         {
             LoadingOverlay.Visibility = Visibility.Collapsed;
         }
+        if (generation != _searchGeneration)
+            return;   // 期间又发起了新搜索
         if (results.Count == 0)
         {
             InAppDialog.Info(this, I18n.Tr("无匹配数据"), I18n.Tr("提示"));
@@ -259,9 +353,107 @@ public partial class SearchPage : UserControl
                 Snippet = TrimSnippet(res.Snippet),
                 Url = res.Url,
                 ThumbUrl = res.Thumb,
+                ScanText = I18n.Tr("待扫描"),
+                ScanBrush = (Brush)FindResource("CaptionBrush"),
             });
         ShowResultsPage();
-        _ = LoadThumbnailsAsync(_searchGeneration);
+        _ = LoadThumbnailsAsync(generation);
+        _ = AutoScanPostsAsync(generation);   // 自动逐帖抓链接 + 检测，命中有效下载即止
+    }
+
+    /// <summary>自动从上到下扫描帖子：抓取网盘链接并检测，命中一个含有效下载的帖子即停止。</summary>
+    private async Task AutoScanPostsAsync(int generation)
+    {
+        foreach (var post in _results.ToList())
+        {
+            if (generation != _searchGeneration)
+                return;
+            if (post.Scanned || post.Scanning)
+                continue;
+            var hasValid = await ScanPostAsync(post, generation);
+            if (generation != _searchGeneration)
+                return;
+            if (hasValid)
+                return;   // 已找到含有效下载网盘的帖子，停止继续测试后续帖子
+        }
+    }
+
+    /// <summary>扫描单个帖子：抓取其网盘链接、按域名分组内联展示并逐组检测。返回是否存在全部有效的网盘组。</summary>
+    private async Task<bool> ScanPostAsync(SearchResultItem post, int generation)
+    {
+        post.Scanning = true;
+        post.HostsVisibility = Visibility.Collapsed;
+        post.Hosts.Clear();
+        post.ScanText = I18n.Tr("扫描中…");
+        post.ScanBrush = (Brush)FindResource("CaptionBrush");
+
+        List<string> urls;
+        try
+        {
+            (urls, _) = await AnimeSharing.GetWorkDownUrlsAsync(post.Url);
+        }
+        catch (Exception)
+        {
+            urls = [];
+        }
+        if (generation != _searchGeneration)
+        {
+            post.Scanning = false;
+            return false;
+        }
+        if (urls.Count == 0)
+        {
+            post.ScanText = I18n.Tr("无下载链接");
+            post.ScanBrush = (Brush)FindResource("CaptionBrush");
+            post.Scanning = false;
+            post.Scanned = true;
+            return false;
+        }
+
+        // 按域名分组，保持链接出现顺序
+        var groups = new Dictionary<string, List<string>>();
+        foreach (var url in urls)
+        {
+            var host = HostOf(url);
+            if (!groups.TryGetValue(host, out var list))
+                groups[host] = list = [];
+            list.Add(url);
+        }
+        var cards = new List<HostCardItem>();
+        foreach (var (host, hostUrls) in groups)
+        {
+            var card = new HostCardItem
+            {
+                Host = host,
+                Urls = hostUrls,
+                CountText = I18n.Format(I18n.Tr("{count} 个文件"), ("count", hostUrls.Count)),
+                StatusText = I18n.Tr("检测中…"),
+                StatusBrush = (Brush)FindResource("CaptionBrush"),
+            };
+            post.Hosts.Add(card);
+            cards.Add(card);
+        }
+        post.HostsVisibility = Visibility.Visible;
+        post.ScanText = I18n.Tr("检测中…");
+        post.ScanBrush = (Brush)FindResource("CaptionBrush");
+
+        var anyValid = false;
+        foreach (var card in cards)
+        {
+            await CheckHostAsync(card, generation);
+            if (generation != _searchGeneration)
+            {
+                post.Scanning = false;
+                return false;
+            }
+            if (card.Status is true)
+                anyValid = true;
+        }
+        post.ScanText = anyValid ? I18n.Tr("有有效下载") : I18n.Tr("无有效下载");
+        post.ScanBrush = (Brush)FindResource(anyValid ? "GreenBrush" : "YellowBrush");
+        post.Scanning = false;
+        post.Scanned = true;
+        return anyValid;
     }
 
     // ---------- 社团搜索（DLsite 作品列表）----------
@@ -270,10 +462,10 @@ public partial class SearchPage : UserControl
     private async Task RunMakerSearchAsync(string makerId)
     {
         _searchGeneration++;
-        _hostGeneration++;
+        _makerGeneration++;
         _results.Clear();
-        _hostCards.Clear();
         _makerWorks.Clear();
+        _scanQueue.Clear();
         _makerId = makerId;
         _makerPage = 0;
         _makerHasMore = true;
@@ -288,7 +480,7 @@ public partial class SearchPage : UserControl
         if (_makerId == null || _makerLoading || !_makerHasMore)
             return;
         _makerLoading = true;
-        var gen = _searchGeneration;
+        var gen = _makerGeneration;
         var firstPage = _makerPage == 0;
         if (firstPage)
             LoadingOverlay.Visibility = Visibility.Visible;
@@ -302,7 +494,7 @@ public partial class SearchPage : UserControl
             if (firstPage)
                 LoadingOverlay.Visibility = Visibility.Collapsed;
         }
-        if (gen != _searchGeneration)   // 期间发起了新搜索，丢弃本次结果
+        if (gen != _makerGeneration)   // 期间发起了新社团搜索，丢弃本次结果
         {
             _makerLoading = false;
             return;
@@ -317,15 +509,197 @@ public partial class SearchPage : UserControl
         }
         _makerPage++;
         _makerHasMore = page.HasMore;
+        // 校验后台：本页作品号在 works 表中的状态。
+        // 下载中 → 下载状态角标（实时同步下载页）；已下载/已品悦 → 置灰在库角标；无记录 → 排入 AS 扫描。
+        var states = LookupWorkStates(page.Works.Select(w => w.WorkId));
         var added = new List<MakerWorkItem>();
+        var hasDownloading = false;
         foreach (var w in page.Works)
         {
-            var item = new MakerWorkItem { WorkId = w.WorkId, Title = w.Title, ThumbUrl = w.Thumb };
+            var state = states.GetValueOrDefault(w.WorkId);
+            var inLib = state is "已品悦" or "已下载";
+            var downloading = state == "下载中";
+            var item = new MakerWorkItem
+            {
+                WorkId = w.WorkId, Title = w.Title, ThumbUrl = w.Thumb,
+                InLib = inLib, StateText = inLib ? state ?? "" : "",
+                CardOpacity = inLib ? 0.45 : 1.0,
+                DownActive = downloading,
+                DownText = downloading ? I18n.Tr("下载中") : "",
+                DownBrush = (Brush)FindResource("BlueBrush"),
+                AsStatusText = inLib || downloading ? "" : I18n.Tr("待扫描"),
+                AsStatusBrush = (Brush)FindResource("CaptionBrush"),
+            };
             _makerWorks.Add(item);
             added.Add(item);
+            if (downloading)
+                hasDownloading = true;
+            else if (!inLib)
+                _scanQueue.Enqueue(item);   // 无记录 → 排入 AS 扫描队列
         }
         _makerLoading = false;
         _ = LoadMakerThumbnailsAsync(added, gen);
+        _ = RunMakerScansAsync(gen);
+        if (hasDownloading)
+            StartDownSync();
+    }
+
+    /// <summary>启动下载状态同步定时器（已运行则忽略；无活动下载时会自行停止）。</summary>
+    private void StartDownSync()
+    {
+        if (!_downSyncTimer.IsEnabled)
+            _downSyncTimer.Start();
+    }
+
+    /// <summary>每秒把下载列表聚合状态写回社团卡片角标（镜像下载页 AggregateStatus），无活动下载时停表。</summary>
+    private void SyncMakerDownloadStates()
+    {
+        if (_makerWorks.Count == 0)
+        {
+            _downSyncTimer.Stop();
+            return;
+        }
+        var rows = Db.Select("SELECT \"work_id\", \"status\" FROM \"download_list\"");
+        var groups = new Dictionary<string, List<string>>();
+        foreach (var row in rows ?? [])
+        {
+            var wid = row[0] as string ?? "";
+            if (!groups.TryGetValue(wid, out var list))
+                groups[wid] = list = [];
+            list.Add(row[1] as string ?? "");
+        }
+        foreach (var item in _makerWorks)
+        {
+            if (groups.TryGetValue(item.WorkId, out var statuses))
+            {
+                var (text, color) = AggregateStatus(item.WorkId, statuses);
+                item.DownText = text;
+                item.DownBrush = BrushOf(color);
+                item.DownActive = true;
+            }
+            else if (item.DownActive)
+            {
+                // 已不在下载列表：显示 works 最终状态（已下载/已品悦），否则回到原角标
+                var state = Db.Scalar("SELECT \"state\" FROM \"works\" WHERE \"work_id\" = @w",
+                    ("@w", item.WorkId)) as string;
+                if (state is "已下载" or "已品悦")
+                {
+                    item.DownText = state;
+                    item.DownBrush = BrushOf(state == "已品悦" ? "#4ade80" : "#60a5fa");
+                }
+                else
+                {
+                    item.DownActive = false;
+                }
+            }
+        }
+        if (groups.Count == 0)
+            _downSyncTimer.Stop();   // 无活动下载，最终状态已固化在卡片上
+    }
+
+    /// <summary>下载列表按番号聚合出一行显示状态（镜像下载页 DownloadPage.AggregateStatus）。</summary>
+    private static (string Text, string Color) AggregateStatus(string workId, List<string> statuses)
+    {
+        var done = statuses.Count(s => s == "1");
+        if (statuses.Contains("3"))
+            return (I18n.Format(I18n.Tr("下载中 {done}/{total}"), ("done", done), ("total", statuses.Count)), "#60a5fa");
+        if (statuses.Contains("0"))
+            return (I18n.Format(I18n.Tr("等待下载 {done}/{total}"), ("done", done), ("total", statuses.Count)), "#facc15");
+        if (statuses.Contains("4"))
+            return (I18n.Format(I18n.Tr("已暂停 {done}/{total}"), ("done", done), ("total", statuses.Count)), "#9aa4b2");
+        if (statuses.Contains("2"))
+            return (I18n.Format(I18n.Tr("{n} 个解析失败"), ("n", statuses.Count(s => s == "2"))), "#f87171");
+        if (DownloadEngine.UnzipProgress.TryGetValue(workId, out var unzip))
+        {
+            if (unzip.State == "pending")
+                return (I18n.Tr("待解压"), "#facc15");
+            if (unzip.State == "moving")
+                return (I18n.Format(I18n.Tr("移动中 {pct}%"), ("pct", unzip.Pct)), "#a78bfa");
+            return (I18n.Format(I18n.Tr("解压中 {pct}%"), ("pct", unzip.Pct)), "#60a5fa");
+        }
+        return (I18n.Tr("已完成"), "#4ade80");
+    }
+
+    private static Brush BrushOf(string hex) =>
+        new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex));
+
+    /// <summary>批量查询作品号在 works 表中的状态（不存在则不在结果里），用于标记"已在库"。</summary>
+    private static Dictionary<string, string> LookupWorkStates(IEnumerable<string> ids)
+    {
+        var list = ids.Where(s => !string.IsNullOrEmpty(s))
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (list.Count == 0)
+            return result;
+        var names = new List<string>();
+        var args = new List<(string, object?)>();
+        for (var i = 0; i < list.Count; i++)
+        {
+            names.Add($"@w{i}");
+            args.Add(($"@w{i}", list[i]));
+        }
+        var rows = Db.Select(
+            $"SELECT \"work_id\", \"state\" FROM \"works\" WHERE \"work_id\" IN ({string.Join(",", names)})",
+            args.ToArray());
+        foreach (var row in rows ?? [])
+            result[row[0] as string ?? ""] = row[1] as string ?? "";
+        return result;
+    }
+
+    /// <summary>
+    /// 对未在库作品按 3 秒间隔逐个扫描 AS 论坛，把匹配帖子数写回卡片角标。
+    /// 单实例运行（_makerScanning 守卫）；翻页追加的新作品会被同一队列消费。
+    /// 守卫 _makerGeneration：点击作品进入帖子列表（递增 _searchGeneration）不会中断本扫描，
+    /// 仅当发起新的社团搜索（递增 _makerGeneration）时停止。
+    /// </summary>
+    private async Task RunMakerScansAsync(int generation)
+    {
+        if (_makerScanning)
+            return;
+        _makerScanning = true;
+        try
+        {
+            while (_scanQueue.Count > 0)
+            {
+                if (generation != _makerGeneration)
+                    return;
+                var item = _scanQueue.Dequeue();
+                item.AsStatusText = I18n.Tr("扫描中…");
+                item.AsStatusBrush = (Brush)FindResource("CaptionBrush");
+                int count;
+                try
+                {
+                    count = (await AnimeSharing.SearchWorkAsync(item.WorkId)).Count;
+                }
+                catch (Exception)
+                {
+                    count = -1;
+                }
+                if (generation != _makerGeneration)
+                    return;
+                if (count > 0)
+                {
+                    item.AsStatusText = I18n.Format(I18n.Tr("AS · {count} 帖"), ("count", count));
+                    item.AsStatusBrush = (Brush)FindResource("GreenBrush");
+                }
+                else if (count == 0)
+                {
+                    item.AsStatusText = I18n.Tr("AS · 无");
+                    item.AsStatusBrush = (Brush)FindResource("CaptionBrush");
+                }
+                else
+                {
+                    item.AsStatusText = I18n.Tr("AS · 失败");
+                    item.AsStatusBrush = (Brush)FindResource("RedBrush");
+                }
+                if (_scanQueue.Count > 0)   // 仅在还有待扫描项时按 3 秒间隔
+                    await Task.Delay(3000);
+            }
+        }
+        finally
+        {
+            _makerScanning = false;
+        }
     }
 
     private void MakerList_ScrollChanged(object sender, ScrollChangedEventArgs e)
@@ -339,7 +713,7 @@ public partial class SearchPage : UserControl
 
     private async void MakerList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        // 点击社团作品 → 自动用其 RJ 号搜索 AS
+        // 点击社团作品 → 自动用其 RJ 号搜索 AS（社团页扫描在后台继续）
         if (MakerList.SelectedItem is not MakerWorkItem item)
             return;
         MakerList.SelectedItem = null;
@@ -354,14 +728,14 @@ public partial class SearchPage : UserControl
         using var client = Http.CreateClient(TimeSpan.FromSeconds(15));
         foreach (var item in items)
         {
-            if (generation != _searchGeneration)
+            if (generation != _makerGeneration)
                 return;
             if (string.IsNullOrEmpty(item.ThumbUrl))
                 continue;
             try
             {
                 var bytes = await client.GetByteArrayAsync(item.ThumbUrl);
-                if (generation != _searchGeneration)
+                if (generation != _makerGeneration)
                     return;
                 var image = new BitmapImage();
                 using (var ms = new MemoryStream(bytes))
@@ -424,30 +798,15 @@ public partial class SearchPage : UserControl
         }
     }
 
+    /// <summary>点击未扫描的帖子可手动触发其扫描（自动扫描已命中并停止后，仍可补扫后续帖子）。</summary>
     private async void ResultList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (ResultList.SelectedItem is not SearchResultItem item)
+        if (ResultList.SelectedItem is not SearchResultItem post)
             return;
         ResultList.SelectedItem = null;
-
-        LoadingOverlay.Visibility = Visibility.Visible;
-        List<string> urls;
-        try
-        {
-            (urls, _) = await AnimeSharing.GetWorkDownUrlsAsync(item.Url);
-        }
-        finally
-        {
-            LoadingOverlay.Visibility = Visibility.Collapsed;
-        }
-        if (urls.Count == 0)
-        {
-            // 帖子里没有解析出任何网盘下载链接（如 Request 求档帖），明确提示而不是无反应
-            InAppDialog.Info(this, I18n.Tr("该帖子中没有找到下载链接"), I18n.Tr("提示"));
-            return;
-        }
-        BuildHostCards(urls);
-        ShowDetailPage();
+        if (post.Scanning || post.Scanned)
+            return;   // 已扫描/扫描中的帖子不重复处理（下载按钮点击也会落到这里，需放行）
+        await ScanPostAsync(post, _searchGeneration);
     }
 
     private static string HostOf(string url)
@@ -463,38 +822,7 @@ public partial class SearchPage : UserControl
         }
     }
 
-    /// <summary>按下载网站分组生成卡片，并为每个网站启动检测任务。</summary>
-    private void BuildHostCards(List<string> urlList)
-    {
-        _hostCards.Clear();
-        var generation = ++_hostGeneration;
-
-        // 按域名分组，保持链接出现顺序
-        var groups = new Dictionary<string, List<string>>();
-        foreach (var url in urlList)
-        {
-            var host = HostOf(url);
-            if (!groups.TryGetValue(host, out var list))
-                groups[host] = list = [];
-            list.Add(url);
-        }
-
-        foreach (var (host, urls) in groups)
-        {
-            var card = new HostCardItem
-            {
-                Host = host,
-                Urls = urls,
-                CountText = I18n.Format(I18n.Tr("{count} 个文件"), ("count", urls.Count)),
-                StatusText = I18n.Tr("检测中…"),
-                StatusBrush = (Brush)FindResource("CaptionBrush"),
-            };
-            _hostCards.Add(card);
-            _ = CheckHostAsync(card, generation);
-        }
-    }
-
-    /// <summary>每个网站一个任务，直连检测该网站下所有链接是否有效（不经过中转站）。</summary>
+    /// <summary>检测某网盘组下所有链接是否直连有效（不经过中转站）；全部有效则允许下载。</summary>
     private async Task CheckHostAsync(HostCardItem card, int generation)
     {
         using var client = LinkChecker.MakeClient();
@@ -505,19 +833,20 @@ public partial class SearchPage : UserControl
             checkedCount++;
             if (ok)
                 valid++;
-            if (generation != _hostGeneration)
+            if (generation != _searchGeneration)
                 return;
             if (checkedCount < card.Urls.Count)
                 card.StatusText = I18n.Format(I18n.Tr("检测中… {checked}/{total}"),
                     ("checked", checkedCount), ("total", card.Urls.Count));
         }
-        if (generation != _hostGeneration)
+        if (generation != _searchGeneration)
             return;
         if (valid == card.Urls.Count)
         {
             card.Status = true;
             card.StatusText = I18n.Tr("有效");
             card.StatusBrush = (Brush)FindResource("GreenBrush");
+            card.CanDownload = true;
         }
         else if (valid == 0)
         {
@@ -535,14 +864,11 @@ public partial class SearchPage : UserControl
         }
     }
 
-    /// <summary>点击检测通过的网站卡片，该网站全部链接通过 debrid-link 中转站下载。</summary>
-    private void HostCardList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    /// <summary>列表内点击"下载"：该网站全部链接通过 debrid-link 中转站下载。</summary>
+    private void HostDownload_Click(object sender, RoutedEventArgs e)
     {
-        if (HostCardList.SelectedItem is not HostCardItem card)
+        if ((sender as FrameworkElement)?.DataContext is not HostCardItem card || !card.CanDownload)
             return;
-        HostCardList.SelectedItem = null;
-        if (card.Status is not true)
-            return;  // 失效、分卷不全或还在检测中的网站不加入下载
 
         // 有媒体库配置时弹窗选择下载目标
         string? targetFolder = null, targetLib = null;
@@ -568,8 +894,19 @@ public partial class SearchPage : UserControl
         DownloadEngine.Start();
 
         card.Status = "queued";
+        card.CanDownload = false;
         card.StatusText = I18n.Tr("已加入下载");
         card.StatusBrush = (Brush)FindResource("AccentLightBrush");
+
+        // 同步社团卡片：该作品（若在社团网格中）立即转为"待下载"，并启动与下载页的状态同步
+        var makerItem = _makerWorks.FirstOrDefault(m => m.WorkId == _selectId);
+        if (makerItem != null)
+        {
+            makerItem.DownText = I18n.Tr("待下载");
+            makerItem.DownBrush = (Brush)FindResource("YellowBrush");
+            makerItem.DownActive = true;
+        }
+        StartDownSync();
     }
 
     /// <summary>

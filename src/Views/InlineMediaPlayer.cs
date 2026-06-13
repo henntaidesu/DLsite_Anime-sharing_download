@@ -51,6 +51,9 @@ public class InlineMediaPlayer : UserControl
     private bool _closed;
     private bool _started;
 
+    /// <summary>自然播放到结尾时触发（供外层做播放队列自动续播；手动 Shutdown/Stop 不触发）。</summary>
+    public event Action? Ended;
+
     public InlineMediaPlayer(string path)
     {
         _path = path;
@@ -103,6 +106,7 @@ public class InlineMediaPlayer : UserControl
         {
             _playing = false;
             _playButton.Content = I18n.Tr("播放");
+            Ended?.Invoke();
         });
         _player.EncounteredError += (_, _) => OnUi(() =>
         {

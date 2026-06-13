@@ -67,6 +67,12 @@
            background: rgba(0,0,0,.62); color: #f3f3f3; font-size: 11px; max-width: 70%;
            overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .badge.rj { left: 6px; } .badge.type { right: 6px; }
+  .badge.lib { left: 6px; right: 6px; top: auto; bottom: 6px; max-width: none; text-align: center;
+               background: rgba(110,110,122,.9); }
+  .badge.as { left: 6px; right: 6px; top: auto; bottom: 6px; max-width: none; text-align: center; }
+  /* 已在库作品：置灰降亮，仍可点击 */
+  .card.dim { opacity: .5; filter: grayscale(.9); }
+  .card.dim:hover { border-color: var(--line); }
   .card .wt { padding: 8px 10px 10px; font-size: 13.5px; font-weight: 500;
               display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 
@@ -107,6 +113,17 @@
   .host .hn { font-weight: 600; } .host .hc { color: var(--muted); font-size: 13px; }
   .host .hs { margin-left: auto; font-size: 13px; }
 
+  /* 帖子卡片（AS 列表内联自动扫描：抓链接 + 检测 + 直接下载） */
+  .post { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+          padding: 12px; margin-bottom: 10px; }
+  .post .phead { display: flex; gap: 12px; cursor: pointer; }
+  .post .phead:hover .rt { color: var(--accent); }
+  .post .phead img { width: 120px; height: 90px; object-fit: cover; border-radius: 6px; background: #15151a; flex: none; }
+  .post .pinfo { flex: 1; min-width: 0; }
+  .post .rstatus { font-size: 12.5px; font-weight: 600; white-space: nowrap; flex: none; }
+  .rhosts { margin-top: 8px; }
+  .rhosts .host { margin: 6px 0 0; background: var(--surface2); }
+
   /* 下载 */
   .dl { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
         padding: 12px 14px; margin-bottom: 10px; }
@@ -131,6 +148,9 @@
   .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; }
   .mini { background: var(--surface2); border: 1px solid var(--line); color: var(--text);
           border-radius: 6px; padding: 3px 8px; font-size: 12px; cursor: pointer; }
+  .mini.danger { color: #f87171; border-color: #6b3030; }
+  .mini.danger:hover { border-color: #f87171; }
+  .ferr { color: #f87171; font-size: 12px; padding: 0 0 6px 4px; word-break: break-word; }
   @media (max-width: 640px) { .dt .hide-sm { display: none; } }
 
   /* 设置 */
@@ -168,18 +188,34 @@
 
   /* 视频整页播放 */
   .voverlay { position: fixed; inset: 0; background: rgba(0,0,0,.95); z-index: 65;
-              display: none; align-items: center; justify-content: center; }
+              display: none; flex-direction: column; }
   .voverlay.show { display: flex; }
-  .voverlay video { max-width: 96vw; max-height: 90vh; background: #000; }
+  .vtop { display: flex; align-items: center; gap: 8px; padding: 10px max(12px, env(safe-area-inset-left)); flex: none; }
+  .vtop .vtitle { flex: 1; color: #ddd; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+  .voverlay video { flex: 1; min-height: 0; max-width: 96vw; max-height: 100%; background: #000; margin: 0 auto; }
 
   /* 底部音频条 */
   .abar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
           background: var(--surface); border-top: 1px solid var(--line);
-          display: none; align-items: center; gap: 12px;
+          display: none; align-items: center; gap: 8px;
           padding: 8px max(12px, env(safe-area-inset-left)) max(8px, env(safe-area-inset-bottom)); }
   .abar.show { display: flex; }
-  .abar .aname { max-width: 28%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 13px; }
+  .abar .aname { max-width: 22%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 13px; }
   .abar audio { flex: 1; min-width: 0; height: 36px; }
+  .icon-btn.on { background: var(--accent-dim); border-color: var(--accent-dim); color: #fff; }
+
+  /* 音频弹出层（播放列表 / 睡眠定时） */
+  .apopup { position: fixed; right: 12px; bottom: 64px; z-index: 55; display: none;
+            background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+            padding: 6px; min-width: 220px; max-height: 50vh; overflow-y: auto; box-shadow: 0 6px 24px rgba(0,0,0,.4); }
+  .apopup.show { display: block; }
+  .aprow { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 13.5px; }
+  .aprow:hover { background: var(--surface2); }
+  .aprow.cur { background: var(--accent-dim); color: #fff; }
+  .aprow .apn { width: 22px; flex: none; text-align: center; color: var(--muted); }
+  .aprow.cur .apn { color: #fff; }
+  .aprow .apt { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .apempty { padding: 14px; color: var(--muted); text-align: center; }
 
   .lightbox { position: fixed; inset: 0; background: rgba(0,0,0,.93); z-index: 60;
               display: none; align-items: center; justify-content: center; }
@@ -236,15 +272,26 @@
 <div id="picker" class="overlay"><div class="card2" id="pickerBox"></div></div>
 
 <div id="videoOverlay" class="voverlay">
-  <button class="lb-btn lb-close" onclick="closeVideo()">✕</button>
+  <div class="vtop">
+    <button class="icon-btn" id="vprev" onclick="videoPrev()">‹ 上一个</button>
+    <button class="icon-btn" id="vnext" onclick="videoNext()">下一个 ›</button>
+    <span id="vtitle" class="vtitle"></span>
+    <button class="icon-btn" onclick="closeVideo()">✕ 关闭</button>
+  </div>
   <video id="vplayer" controls playsinline></video>
 </div>
 
 <div id="audioBar" class="abar">
+  <button class="icon-btn" id="aprev" onclick="audioPrev()" title="上一曲">⏮</button>
+  <button class="icon-btn" id="anext" onclick="audioNext()" title="下一曲">⏭</button>
   <span id="aname" class="aname"></span>
   <audio id="aplayer" controls></audio>
-  <button class="icon-btn" onclick="closeAudio()">✕</button>
+  <button class="icon-btn" id="aplaylistBtn" onclick="toggleAudioPlaylist()" title="播放列表">☰</button>
+  <button class="icon-btn" id="asleepBtn" onclick="toggleSleepMenu()" title="睡眠定时">⏱</button>
+  <button class="icon-btn" onclick="closeAudio()" title="关闭">✕</button>
 </div>
+<div id="audioPlaylist" class="apopup"></div>
+<div id="sleepMenu" class="apopup"></div>
 
 <div id="login" class="login">
   <div class="box">
@@ -260,10 +307,23 @@ const $ = (id) => document.getElementById(id);
 const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
 const enc = encodeURIComponent;
 
+// 复制文本到剪贴板：优先 navigator.clipboard（需 https/localhost），否则退回 execCommand（局域网 http 下可用）
+function copyText(t) {
+  if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(t).catch(() => fallbackCopy(t)); }
+  else fallbackCopy(t);
+}
+function fallbackCopy(t) {
+  const ta = document.createElement('textarea');
+  ta.value = t; ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); } catch (e) { }
+  document.body.removeChild(ta);
+}
+
 const SECTIONS = [
-  { key: 'search',   label: '搜索' },
-  { key: 'download', label: '下载' },
   { key: 'medialib', label: '媒体库', root: 'libs' },
+  { key: 'download', label: '下载' },
+  { key: 'search',   label: '搜索' },
   { key: 'tag',      label: '标签',   root: 'genres' },
   { key: 'type',     label: '作品形式', root: 'types' },
   { key: 'favorite', label: '收藏',   root: 'favorites' },
@@ -277,7 +337,7 @@ const AUDIO_EXTS = ['.mp3', '.wav', '.flac', '.m4a', '.aac', '.ogg', '.wma', '.o
 const IMG_EXTS = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
 const fileUrl = (id, rel) => `/api/file?id=${enc(id)}&path=${enc(rel)}`;
 
-let section = 'search';
+let section = 'medialib';
 let stack = [];            // 卡片区导航栈
 let curItems = [];         // 卡片区原始数据（本地搜索过滤）
 let makerSort = 0, workSort = 0;
@@ -299,7 +359,7 @@ function showLogin(initial) { $('login').classList.add('show'); if (!initial) $(
 async function doLogin() {
   $('loginErr').textContent = '';
   const r = await apiPost('/api/login', { password: $('pw').value });
-  if (r.ok) { $('login').classList.remove('show'); $('pw').value = ''; selectSection('search'); }
+  if (r.ok) { $('login').classList.remove('show'); $('pw').value = ''; selectSection('medialib'); }
   else $('loginErr').textContent = '密码错误';
 }
 $('pw').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
@@ -325,6 +385,7 @@ function selectSection(key) {
   $('count').textContent = '';
   $('content').innerHTML = '';
   $('search').value = '';
+  history.replaceState({ nav: true }, '');   // 重置历史基线，切换分区不累积层级
   if (s.root) { makerSort = 0; workSort = 0; stack = [{ view: s.root, ctx: {} }]; render(); }
   else if (key === 'search') renderSearch();
   else if (key === 'download') renderDownloadSection();
@@ -332,12 +393,26 @@ function selectSection(key) {
 }
 
 // ========== 卡片区（媒体库/标签/作品形式/收藏）==========
-function pushView(view, ctx) { if (stack.length) stack[stack.length - 1].scroll = window.scrollY; stack.push({ view, ctx: ctx || {} }); render(); }
-function back() {
-  const s = SECTIONS.find(x => x.key === section);
-  if (s && s.root && stack.length > 1) { stack.pop(); render(); const top = stack[stack.length - 1]; if (top && top.scroll) window.scrollTo(0, top.scroll); }
+// 每深入一级 push 一个历史项：iOS/安卓的"返回"手势触发 popstate 即可逐级回退，并恢复浏览位置
+function pushView(view, ctx) {
+  if (stack.length) stack[stack.length - 1].scroll = window.scrollY;
+  stack.push({ view, ctx: ctx || {} });
+  history.pushState({ nav: true, depth: stack.length }, '');
+  render();
 }
-$('back').onclick = back;
+async function popView() {
+  if (stack.length <= 1) return false;
+  stack.pop();
+  const top = stack[stack.length - 1];
+  await render();
+  window.scrollTo(0, top.scroll || 0);   // 返回上一级后恢复之前的浏览位置
+  return true;
+}
+window.addEventListener('popstate', () => {
+  const s = SECTIONS.find(x => x.key === section);
+  if (s && s.root && stack.length > 1) popView();
+});
+$('back').onclick = () => history.back();   // 走 popstate，与手势行为一致
 
 async function render() {
   const st = stack[stack.length - 1];
@@ -347,6 +422,7 @@ async function render() {
   $('count').textContent = '';
   try {
     if (st.view === 'libs') await renderLibs();
+    else if (st.view === 'libview') await renderLibView(st.ctx);
     else if (st.view === 'genres') await renderGenres();
     else if (st.view === 'types') await renderTypes();
     else if (st.view === 'favorites') await renderWorks('/api/favorites', '收藏', true);
@@ -368,7 +444,35 @@ async function renderLibs() {
   $('title').textContent = '媒体库';
   const d = await api('/api/libs');
   curItems = d.libs.map(l => ({ ...l, _key: l.name.toLowerCase() }));
-  drawGroups(curItems, l => ({ title: l.name, caption: `${l.works} 个作品 · ${l.folders} 个文件夹`, onClick: () => pushView('makers', { lib: l.name }) }), '个媒体库');
+  // 进入媒体库默认显示作品（libview），而非社团
+  drawGroups(curItems, l => ({ title: l.name, caption: `${l.works} 个作品 · ${l.folders} 个文件夹`, onClick: () => pushView('libview', { lib: l.name, mode: 'works' }) }), '个媒体库');
+}
+
+// 媒体库内视图：默认平铺作品，带"显示作品/显示社团"就地切换（不算一级，便于手势返回）
+async function renderLibView(ctx) {
+  const mode = ctx.mode || 'works';
+  $('title').textContent = ctx.lib;
+  if (mode === 'works') {
+    setSort(WORK_SORTS, workSort, v => { workSort = v; render(); });
+    const d = await api(`/api/libworks?lib=${enc(ctx.lib)}&sort=${workSort}`);
+    curItems = d.works.map(w => ({ ...w, _key: `${w.id} ${w.name} ${w.maker}`.toLowerCase() }));
+    drawWorks(curItems);
+    prependLibToggle('🏢 显示社团', 'makers');
+  } else {
+    setSort(MAKER_SORTS, makerSort, v => { makerSort = v; render(); });
+    const d = await api(`/api/makers?lib=${enc(ctx.lib)}&sort=${makerSort}`);
+    curItems = d.makers.map(m => ({ ...m, _key: (m.maker || '未知社团').toLowerCase() }));
+    drawGroups(curItems, m => ({ title: m.maker || '未知社团', caption: `${m.count} 个作品`, onClick: () => pushView('works', { lib: ctx.lib, maker: m.maker }) }), '个社团');
+    prependLibToggle('▦ 显示作品', 'works');
+  }
+}
+function prependLibToggle(label, toMode) {
+  const bar = el('div', 'toolbar');
+  const b = el('button', 'icon-btn', label);
+  b.onclick = () => { stack[stack.length - 1].ctx.mode = toMode; render(); };  // 就地切换，不 push 新层级
+  bar.appendChild(b);
+  const host = $('content');
+  host.insertBefore(bar, host.firstChild);
 }
 async function renderGenres() {
   $('title').textContent = '标签';
@@ -419,22 +523,45 @@ function drawGroups(items, mapFn, unit) {
   items2.forEach(i => { const m = mapFn(i); const c = el('div', 'card group-card'); c.appendChild(el('div', 'gt', m.title)); c.appendChild(el('div', 'gc', m.caption)); c.onclick = m.onClick; grid.appendChild(c); });
   const host = $('content'); host.innerHTML = ''; host.appendChild(items2.length ? grid : el('div', 'empty', '没有内容'));
 }
+function makeWorkCard(w) {
+  const c = el('div', 'card');
+  const cov = el('div', 'cover');
+  if (w.cover) { const img = el('img'); img.loading = 'lazy'; img.src = `/api/cover?id=${enc(w.id)}`; cov.appendChild(img); }
+  cov.appendChild(el('div', 'badge rj', w.id));
+  if (w.type) cov.appendChild(el('div', 'badge type', w.type));
+  c.appendChild(cov); c.appendChild(el('div', 'wt', w.name || w.id));
+  c.onclick = () => pushView('detail', { id: w.id });
+  return c;
+}
 function drawWorks(items) {
   lastMap = null;
   const items2 = filtered();
   $('count').textContent = $('search').value.trim() ? `共 ${items.length} 个作品，匹配 ${items2.length} 个` : `共 ${items.length} 个作品`;
   const grid = el('div', 'grid cards');
-  items2.forEach(w => {
-    const c = el('div', 'card');
-    const cov = el('div', 'cover');
-    if (w.cover) { const img = el('img'); img.loading = 'lazy'; img.src = `/api/cover?id=${enc(w.id)}`; cov.appendChild(img); }
-    cov.appendChild(el('div', 'badge rj', w.id));
-    if (w.type) cov.appendChild(el('div', 'badge type', w.type));
-    c.appendChild(cov); c.appendChild(el('div', 'wt', w.name || w.id));
-    c.onclick = () => pushView('detail', { id: w.id });
-    grid.appendChild(c);
-  });
+  items2.forEach(w => grid.appendChild(makeWorkCard(w)));
   const host = $('content'); host.innerHTML = ''; host.appendChild(items2.length ? grid : el('div', 'empty', '没有内容'));
+}
+
+// 作用域作品搜索：媒体库根搜全部库 / 库内搜该库 / 标签·形式社团页搜对应分组（服务端 LIKE，对齐 WPF）
+let searchGen = 0;
+async function scopedWorkSearch(st, kw, gen) {
+  const ctx = st.ctx || {};
+  const q = new URLSearchParams(); q.set('kw', kw); q.set('sort', workSort);
+  if (st.view === 'libview') { if (ctx.lib) q.set('lib', ctx.lib); }
+  else if (st.view === 'makers') {
+    if (ctx.genre) q.set('genre', ctx.genre);
+    else if (ctx.type) q.set('type', ctx.type);
+    else if (ctx.lib) q.set('lib', ctx.lib);
+  }
+  // libs 根：不带范围参数 → 搜全部库
+  let d; try { d = await api('/api/searchworks?' + q); } catch (e) { return; }
+  if (gen !== searchGen) return;   // 已有更新的搜索请求
+  const works = d.works || [];
+  $('sort').hidden = true;
+  $('count').textContent = `搜索到 ${works.length} 个作品`;
+  const grid = el('div', 'grid cards');
+  works.forEach(w => grid.appendChild(makeWorkCard(w)));
+  const host = $('content'); host.innerHTML = ''; host.appendChild(works.length ? grid : el('div', 'empty', '没有匹配的作品'));
 }
 
 async function renderDetail(id) {
@@ -461,6 +588,9 @@ async function renderDetail(id) {
   const addF = (k, node) => { if (node == null) return; fields.appendChild(el('div', 'k', k)); const v = el('div', 'v'); if (typeof node === 'string') v.textContent = node; else v.appendChild(node); fields.appendChild(v); };
   const link = (text, col, val) => { const a = el('a', null, text); a.onclick = () => pushView('filter', { col, val, label: text }); return a; };
   const multi = (text, col, sep) => { const w = el('span'); const parts = (text || '').split(sep).map(s => s.trim()).filter(Boolean); parts.forEach((p, i) => { w.appendChild(link(p, col, p)); if (i < parts.length - 1) w.appendChild(document.createTextNode(' / ')); }); return parts.length ? w : null; };
+  // 作品号：点击在新标签打开 DLsite 作品页（对齐 WPF 详情 RJ 超链接）
+  const idLink = el('a', null, d.id); idLink.href = `https://www.dlsite.com/maniax/work/=/product_id/${enc(d.id)}.html`; idLink.target = '_blank'; idLink.rel = 'noopener';
+  addF('作品号', idLink);
   if (d.maker) addF('社团', link(d.maker, 'maker_name', d.maker));
   if (d.sellDate) addF('販売日', d.sellDate);
   if (d.series) addF('系列', link(d.series, 'series', d.series));
@@ -480,7 +610,23 @@ async function renderDetail(id) {
   const fb = el('button', 'toggle' + (d.favorite ? ' on' : ''), (d.favorite ? '♥ ' : '♡ ') + '收藏');
   fb.onclick = async () => { const r = await apiPost('/api/toggle', { id: d.id, field: 'favorite', value: !d.favorite }); d.favorite = r.value; fb.className = 'toggle' + (d.favorite ? ' on' : ''); fb.textContent = (d.favorite ? '♥ ' : '♡ ') + '收藏'; };
   actions.appendChild(rb); actions.appendChild(fb);
-  if (d.hasFiles) { const vb = el('button', 'toggle', '📂 查看作品'); vb.onclick = () => pushView('files', { id: d.id, name: d.name || d.id }); actions.appendChild(vb); }
+  if (d.hasFiles) {
+    const vb = el('button', 'toggle', '📂 查看作品'); vb.onclick = () => pushView('files', { id: d.id, name: d.name || d.id }); actions.appendChild(vb);
+    // 移动媒体库：选择目标库/文件夹 → 移动文件夹并改库（对齐 WPF 详情"移动媒体库"）
+    const mb = el('button', 'toggle', '📦 移动媒体库');
+    mb.onclick = async () => {
+      const t = await api('/api/downtargets');
+      if (!t.libs || !t.libs.length) { alert('尚未配置媒体库文件夹（请在桌面端添加）'); return; }
+      const target = await pickTarget(t.libs);
+      if (!target) return;
+      if (!confirm(`确定将 ${d.id} 移动到媒体库“${target.lib}”吗？`)) return;
+      mb.disabled = true; mb.textContent = '移动中…';
+      const r = await apiPost('/api/movework', { id: d.id, lib: target.lib, folder: target.folder });
+      alert(r.ok ? '已移动到新媒体库' : ('移动失败：' + (r.message || '')));
+      if (r.ok) render(); else { mb.disabled = false; mb.textContent = '📦 移动媒体库'; }
+    };
+    actions.appendChild(mb);
+  }
   root.appendChild(actions);
 
   if (d.body && d.body.length) {
@@ -499,6 +645,9 @@ async function renderDetail(id) {
 // ========== 搜索 ==========
 function renderSearch() {
   $('title').textContent = '搜索';
+  // 重置社团状态：让可能残留的后台扫描循环（makerState !== s）自行停止
+  if (makerState && makerState.io) makerState.io.disconnect();
+  makerState = null;
   const host = $('content'); host.innerHTML = '';
   const bar = el('div', 'toolbar');
   const inp = el('input'); inp.placeholder = '作品号(RJ/BJ/VJ)、社团号(RG) 或 DLsite 链接'; inp.className = 'grow'; inp.id = 'sId';
@@ -507,8 +656,15 @@ function renderSearch() {
   btn.onclick = runSearch;
   bar.appendChild(inp); bar.appendChild(btn);
   host.appendChild(bar);
-  host.appendChild(el('div', null)).id = 'searchResult';
+  // 社团网格与帖子列表分两个 pane：进入帖子列表时仅隐藏社团 pane（保留 DOM 与后台扫描），返回即缓存恢复
+  const wrap = el('div'); wrap.id = 'searchResult';
+  const mp = el('div'); mp.id = 'makerPane';
+  const wp = el('div'); wp.id = 'workPane';
+  wrap.append(mp, wp); host.appendChild(wrap);
 }
+function showMakerPane() { $('makerPane').style.display = ''; $('workPane').style.display = 'none'; }
+function showWorkPane() { $('makerPane').style.display = 'none'; $('workPane').style.display = ''; }
+function goBackToMaker() { showMakerPane(); if (makerState) $('count').textContent = makerState.countText || ''; }
 // 识别输入：作品号 / 社团号 / DLsite 链接
 function parseInput(raw) {
   raw = (raw || '').trim();
@@ -522,42 +678,102 @@ function parseInput(raw) {
 async function runSearch() {
   const p = parseInput($('sId').value);
   if (p.kind === 'maker') { await runMakerSearch(p.id); return; }
-  if (p.kind !== 'work') { $('searchResult').innerHTML = '<div class="empty">请输入作品号(RJ/BJ/VJ)、社团号(RG) 或 DLsite 链接</div>'; return; }
+  if (p.kind !== 'work') { showWorkPane(); $('workPane').innerHTML = '<div class="empty">请输入作品号(RJ/BJ/VJ)、社团号(RG) 或 DLsite 链接</div>'; return; }
   makerReturnId = null;
   $('sId').value = p.id;
   await runWorkSearch(p.id);
 }
+let workGen = 0;
 async function runWorkSearch(id) {
-  const box = $('searchResult'); box.innerHTML = '<div class="empty"><span class="spin"></span> 正在查询…</div>';
+  const gen = ++workGen;
+  showWorkPane();
+  const box = $('workPane'); box.innerHTML = '<div class="empty"><span class="spin"></span> 正在查询…</div>';
   let d;
   try { d = await api('/api/search?id=' + enc(id)); } catch (e) { return; }
+  if (gen !== workGen) return;
   if (d.error) { box.innerHTML = ''; box.appendChild(el('div', 'empty', d.error)); return; }
-  if (d.existed && !confirm(`${d.id} ${d.existedName || ''}\n该作品已于 ${d.existedTime || ''} 加入过下载，是否继续？`)) { box.innerHTML = ''; return; }
+  if (d.existed && !confirm(`${d.id} ${d.existedName || ''}\n该作品已于 ${d.existedTime || ''} 加入过下载，是否继续？`)) {
+    if (makerReturnId) goBackToMaker(); else box.innerHTML = '';
+    return;
+  }
   if (!d.results.length) { box.innerHTML = ''; box.appendChild(el('div', 'empty', '无匹配数据')); return; }
   box.innerHTML = '';
-  if (makerReturnId) { const bk = el('button', 'icon-btn', '← 返回社团作品'); bk.style.marginBottom = '10px'; bk.onclick = () => runMakerSearch(makerReturnId); box.appendChild(bk); }
+  if (makerReturnId) { const bk = el('button', 'icon-btn', '← 返回社团作品'); bk.style.marginBottom = '10px'; bk.onclick = goBackToMaker; box.appendChild(bk); }
   $('count').textContent = `${d.work.name || d.id} · ${d.results.length} 个帖子`;
+  const posts = [];
   d.results.forEach(r => {
-    const c = el('div', 'res');
-    if (r.thumb) { const img = el('img'); img.loading = 'lazy'; img.src = '/api/thumb?url=' + enc(r.thumb); c.appendChild(img); }
-    const info = el('div'); info.style.minWidth = '0';
+    const c = el('div', 'post');
+    const head = el('div', 'phead');
+    if (r.thumb) { const img = el('img'); img.loading = 'lazy'; img.src = '/api/thumb?url=' + enc(r.thumb); head.appendChild(img); }
+    const info = el('div', 'pinfo');
     info.appendChild(el('div', 'rt', r.title));
     if (r.minor) info.appendChild(el('div', 'rm', r.minor));
     if (r.snippet) info.appendChild(el('div', 'rs', r.snippet));
-    c.appendChild(info);
-    c.onclick = () => openPost(id, r.url, r.title);
+    head.appendChild(info);
+    const statusEl = el('div', 'rstatus', '待扫描'); statusEl.style.color = 'var(--muted)'; head.appendChild(statusEl);
+    const hostsEl = el('div', 'rhosts');
+    c.append(head, hostsEl);
+    const post = { url: r.url, statusEl, hostsEl, scanned: false, scanning: false };
+    // 点击未扫描的帖子可手动补扫（自动扫描命中并停止后，仍可点击后续帖子）
+    head.onclick = () => { if (!post.scanning && !post.scanned) scanPost(id, post, workGen); };
     box.appendChild(c);
+    posts.push(post);
   });
+  autoScanPosts(id, gen, posts);
+}
+// 从上到下自动扫描帖子，命中含有效下载的帖子即停止
+async function autoScanPosts(id, gen, posts) {
+  for (const post of posts) {
+    if (gen !== workGen) return;
+    if (post.scanned || post.scanning) continue;
+    const valid = await scanPost(id, post, gen);
+    if (gen !== workGen) return;
+    if (valid) return;
+  }
+}
+// 扫描单个帖子：抓网盘链接 → 内联展示 → 检测；存在有效网盘则返回 true 并可直接下载
+async function scanPost(id, post, gen) {
+  post.scanning = true;
+  post.statusEl.textContent = '扫描中…'; post.statusEl.style.color = 'var(--muted)';
+  let d;
+  try { d = await api('/api/posturls?url=' + enc(post.url)); } catch (e) { post.scanning = false; return false; }
+  if (gen !== workGen) { post.scanning = false; return false; }
+  post.hostsEl.innerHTML = '';
+  if (d.error || !d.hosts || !d.hosts.length) {
+    post.statusEl.textContent = '无下载链接'; post.statusEl.style.color = 'var(--muted)';
+    post.scanned = true; post.scanning = false; return false;
+  }
+  post.statusEl.textContent = '检测中…';
+  const checks = d.hosts.map(h => {
+    const c = el('div', 'host');
+    c.appendChild(el('div')).append(el('div', 'hn', h.host), el('div', 'hc', `${h.count} 个文件`));
+    const st = el('div', 'hs'); st.innerHTML = '<span class="spin"></span> 检测中…'; c.appendChild(st);
+    post.hostsEl.appendChild(c);
+    return apiPost('/api/checkhost', { urls: h.urls }).then(res => {
+      if (gen !== workGen) return false;
+      if (res.status === 'valid') { st.textContent = '点击下载'; st.style.color = '#4ade80'; c.classList.add('ok'); c.onclick = (ev) => { ev.stopPropagation(); enqueue(id, h.urls, c, st); }; return true; }
+      if (res.status === 'invalid') { st.textContent = '失效'; st.style.color = '#f87171'; return false; }
+      st.textContent = `部分有效 ${res.valid}/${res.total}`; st.style.color = '#facc15'; return false;
+    }).catch(() => { st.textContent = '检测失败'; st.style.color = '#f87171'; return false; });
+  });
+  const results = await Promise.all(checks);
+  if (gen !== workGen) { post.scanning = false; return false; }
+  const anyValid = results.some(Boolean);
+  post.statusEl.textContent = anyValid ? '有有效下载' : '无有效下载';
+  post.statusEl.style.color = anyValid ? '#4ade80' : '#facc15';
+  post.scanned = true; post.scanning = false;
+  return anyValid;
 }
 
 // 社团（RG）搜索：作品缩略图网格 + 下拉到底自动加载下一页
 let makerState = null, makerReturnId = null;
 async function runMakerSearch(makerId) {
+  showMakerPane();
   $('count').textContent = '';
-  const box = $('searchResult');
+  const box = $('makerPane');
   box.innerHTML = '<div class="empty"><span class="spin"></span> 正在获取社团作品…</div>';
   if (makerState && makerState.io) makerState.io.disconnect();
-  makerState = { id: makerId, page: 0, hasMore: true, loading: false };
+  makerState = { id: makerId, page: 0, hasMore: true, loading: false, scanQueue: [], scanning: false, cards: {}, countText: '' };
   box.innerHTML = '';
   const grid = el('div', 'grid cards'); box.appendChild(grid); makerState.grid = grid;
   const sentinel = el('div'); sentinel.style.height = '1px'; box.appendChild(sentinel);
@@ -571,43 +787,83 @@ async function loadMakerPage() {
   let d;
   try { d = await api(`/api/maker?id=${enc(s.id)}&page=${s.page + 1}`); } catch (e) { s.loading = false; return; }
   if (d.error || !d.works || !d.works.length) {
-    if (s.page === 0) $('searchResult').innerHTML = '<div class="empty">' + (d.error || '未找到该社团的作品') + '</div>';
+    if (s.page === 0) $('makerPane').innerHTML = '<div class="empty">' + (d.error || '未找到该社团的作品') + '</div>';
     s.hasMore = false; s.loading = false; if (s.io) s.io.disconnect(); return;
   }
   s.page++; s.hasMore = d.hasMore;
+  let hasDownloading = false;
   d.works.forEach(w => {
-    const c = el('div', 'card');
+    // 下载中 → 下载状态角标（同步下载页）；已下载/已品悦 → 置灰在库角标；无记录 → 排入 AS 扫描
+    const inLib = w.state === '已品悦' || w.state === '已下载';
+    const downloading = w.state === '下载中';
+    const c = el('div', 'card' + (inLib ? ' dim' : ''));
     const cov = el('div', 'cover');
     if (w.thumb) { const img = el('img'); img.loading = 'lazy'; img.src = '/api/thumb?url=' + enc(w.thumb); cov.appendChild(img); }
     cov.appendChild(el('div', 'badge rj', w.id));
+    let badge;
+    if (inLib) { badge = el('div', 'badge lib', w.state); }
+    else if (downloading) { badge = el('div', 'badge as', '下载中'); badge.style.color = '#60a5fa'; badge.dataset.dl = '1'; hasDownloading = true; }
+    else { badge = el('div', 'badge as', '待扫描'); s.scanQueue.push(w.id); }
+    cov.appendChild(badge);
+    s.cards[w.id] = badge;
     c.appendChild(cov);
     c.appendChild(el('div', 'wt', w.title || w.id));
-    c.onclick = () => { makerReturnId = s.id; if (s.io) s.io.disconnect(); $('sId').value = w.id; runWorkSearch(w.id); };
+    // 点击进入帖子列表：不断开 io、不清空扫描队列，社团 AS 扫描在后台继续
+    c.onclick = () => { makerReturnId = s.id; $('sId').value = w.id; runWorkSearch(w.id); };
     s.grid.appendChild(c);
   });
-  $('count').textContent = `${s.grid.children.length} 个作品`;
+  s.countText = `${s.grid.children.length} 个作品`;
+  $('count').textContent = s.countText;
   s.loading = false;
   if (!s.hasMore && s.io) s.io.disconnect();
+  runMakerScans();
+  if (hasDownloading) startMakerDownPoll();
 }
-async function openPost(id, url, title) {
-  const box = $('searchResult'); box.innerHTML = '<div class="empty"><span class="spin"></span> 正在解析下载链接…</div>';
-  $('count').textContent = title;
-  let d;
-  try { d = await api('/api/posturls?url=' + enc(url)); } catch (e) { return; }
-  if (d.error || !d.hosts.length) { box.innerHTML = ''; box.appendChild(el('div', 'empty', d.error || '该帖子中没有找到下载链接')); return; }
-  box.innerHTML = '';
-  const bk = el('button', 'icon-btn', '← 返回结果'); bk.style.marginBottom = '10px'; bk.onclick = () => runSearch(); box.appendChild(bk);
-  d.hosts.forEach(h => {
-    const c = el('div', 'host');
-    c.appendChild(el('div')).append(el('div', 'hn', h.host), el('div', 'hc', `${h.count} 个文件`));
-    const st = el('div', 'hs'); st.innerHTML = '<span class="spin"></span> 检测中…'; c.appendChild(st);
-    box.appendChild(c);
-    apiPost('/api/checkhost', { urls: h.urls }).then(res => {
-      if (res.status === 'valid') { st.textContent = '有效'; st.style.color = '#4ade80'; c.classList.add('ok'); c.onclick = () => enqueue(id, h.urls, c, st); }
-      else if (res.status === 'invalid') { st.textContent = '失效'; st.style.color = '#f87171'; }
-      else { st.textContent = `部分有效 ${res.valid}/${res.total}`; st.style.color = '#facc15'; }
-    }).catch(() => { st.textContent = '检测失败'; st.style.color = '#f87171'; });
-  });
+// 把下载列表聚合状态写回社团卡片角标（每秒，镜像 /api/downloads 的分组状态），无活动下载即止
+async function startMakerDownPoll() {
+  const s = makerState;
+  if (!s || s.dlPolling) return;
+  s.dlPolling = true;
+  while (true) {
+    if (makerState !== s || section !== 'search') break;
+    let d;
+    try { d = await api('/api/downloads'); } catch (e) { break; }
+    if (makerState !== s) break;
+    const map = {}; (d.groups || []).forEach(g => { map[g.id] = g; });
+    Object.keys(s.cards).forEach(id => {
+      const g = map[id]; if (!g) return;
+      const b = s.cards[id];
+      b.dataset.dl = '1';
+      b.textContent = g.statusText;
+      b.style.background = 'rgba(0,0,0,.72)';
+      b.style.color = g.color;
+      const card = b.closest('.card'); if (card) card.classList.remove('dim');
+    });
+    if (!(d.groups || []).length) break;   // 无活动下载则停止轮询
+    await new Promise(r => setTimeout(r, 1000));
+  }
+  s.dlPolling = false;
+}
+// 对未在库作品按 3 秒间隔逐个扫描 AS 论坛，把结果写回卡片角标
+async function runMakerScans() {
+  const s = makerState;
+  if (!s || s.scanning) return;
+  s.scanning = true;
+  while (s.scanQueue.length) {
+    if (makerState !== s || section !== 'search') break;   // 已开始新搜索或离开搜索页则停止
+    const id = s.scanQueue.shift();
+    const st = s.cards[id];
+    if (!st) continue;
+    st.innerHTML = '<span class="spin"></span>';
+    let d;
+    try { d = await api('/api/asscan?id=' + enc(id)); } catch (e) { break; }
+    if (makerState !== s || section !== 'search') break;
+    if (d.count > 0) { st.textContent = `AS · ${d.count} 帖`; st.style.background = 'rgba(34,160,80,.88)'; }
+    else if (d.count === 0) { st.textContent = 'AS · 无'; st.style.background = 'rgba(0,0,0,.62)'; }
+    else { st.textContent = 'AS · 失败'; st.style.background = 'rgba(180,60,60,.88)'; }
+    if (s.scanQueue.length) await new Promise(r => setTimeout(r, 3000));   // 仅在还有待扫描项时间隔等待
+  }
+  s.scanning = false;
 }
 async function enqueue(id, urls, card, st) {
   const d = await api('/api/downtargets');
@@ -619,8 +875,16 @@ async function enqueue(id, urls, card, st) {
   }
   st.innerHTML = '<span class="spin"></span>';
   const r = await apiPost('/api/enqueue', { id, urls, lib, folder });
-  if (r.ok) { st.textContent = '已加入下载'; st.style.color = '#6aa3ff'; card.classList.remove('ok'); card.onclick = null; }
-  else { st.textContent = '加入失败'; st.style.color = '#f87171'; }
+  if (r.ok) {
+    st.textContent = '已加入下载'; st.style.color = '#6aa3ff'; card.classList.remove('ok'); card.onclick = null;
+    // 同步社团卡片：该作品立即转为"待下载"，并启动与下载页的状态同步
+    if (makerState && makerState.cards[id]) {
+      const b = makerState.cards[id];
+      b.dataset.dl = '1'; b.textContent = '待下载'; b.style.background = 'rgba(0,0,0,.72)'; b.style.color = '#facc15';
+      const mc = b.closest('.card'); if (mc) mc.classList.remove('dim');
+      startMakerDownPoll();
+    }
+  } else { st.textContent = '加入失败'; st.style.color = '#f87171'; }
 }
 function pickTarget(libs) {
   return new Promise(resolve => {
@@ -691,12 +955,16 @@ async function loadDownloads() {
     const pc = el('div', 'sp', g.pct + '%'); row.appendChild(pc);
     c.appendChild(row);
     const bar = el('div', 'bar'); const i = el('i'); i.style.width = g.pct + '%'; i.style.background = g.color; bar.appendChild(i); c.appendChild(bar);
+    const act = el('div', 'actions');
+    if (g.canResume) { const b = el('button', 'mini', '下载'); b.onclick = async () => { await apiPost('/api/resumework', { id: g.id }); loadDownloads(); }; act.appendChild(b); }
+    if (g.canPause) { const b = el('button', 'mini', '停止'); b.onclick = async () => { await apiPost('/api/pausework', { id: g.id }); loadDownloads(); }; act.appendChild(b); }
     if (g.canReparse) {
-      const act = el('div', 'actions');
       const rp = el('button', 'mini', '重新解析'); rp.onclick = async () => { await apiPost('/api/reparse', { id: g.id }); loadDownloads(); };
       const rs = el('button', 'mini', '重新搜索'); rs.onclick = async () => { if (confirm(`将删除 ${g.id} 已下载的分卷与文件夹，并重新搜索。是否继续？`)) { await apiPost('/api/research', { id: g.id }); selectSection('search'); setTimeout(() => { $('sId').value = g.id; runSearch(); }, 50); } };
-      act.append(rp, rs); c.appendChild(act);
+      act.append(rp, rs);
     }
+    if (g.canDelete) { const b = el('button', 'mini danger', '删除'); b.onclick = async () => { if (confirm(`将从下载列表删除 ${g.id}，并删除其作品记录与下载缓存。是否继续？`)) { await apiPost('/api/deletework', { id: g.id }); loadDownloads(); } }; act.appendChild(b); }
+    if (act.children.length) c.appendChild(act);
     const ch = el('div', 'children' + (dlExpanded.has(g.id) ? ' open' : ''));
     g.children.forEach(f => {
       const fr = el('div', 'frow');
@@ -704,7 +972,9 @@ async function loadDownloads() {
       const fs = el('div', null, f.statusText); fs.style.color = f.color; fr.appendChild(fs);
       if (f.speed) fr.appendChild(el('div', null, f.speed));
       fr.appendChild(el('div', null, f.pct + '%'));
+      if (f.url) { const cp = el('button', 'mini', '复制链接'); cp.onclick = () => copyText(f.url); fr.appendChild(cp); }
       ch.appendChild(fr);
+      if (f.errorReason) ch.appendChild(el('div', 'ferr', f.errorReason));
     });
     c.appendChild(ch);
     list.appendChild(c);
@@ -792,7 +1062,7 @@ async function renderSettings() {
   // 代理
   s = el('div', 'sec'); s.appendChild(el('h3', null, '代理')); f = el('div', 'frm');
   f.append(el('label', null, '开启'), mkSelect(boolOpts, d.proxy.open ? 'True' : 'False', v => write('proxy', 'openproxy', v)));
-  f.append(el('label', null, '类型'), mkSelect([['http', 'http'], ['socks5', 'socks5']], d.proxy.type, v => write('proxy', 'type', v)));
+  f.append(el('label', null, '类型'), mkSelect([['http', 'http'], ['https', 'https'], ['socks5', 'socks5']], d.proxy.type, v => write('proxy', 'type', v)));
   f.append(el('label', null, '主机'), mkInput(d.proxy.host, v => write('proxy', 'host', v)));
   f.append(el('label', null, '端口'), mkInput(d.proxy.port, v => write('proxy', 'port', v)));
   s.appendChild(f); host.appendChild(s);
@@ -844,7 +1114,9 @@ function fileIcon(ext) {
   if (AUDIO_EXTS.includes(ext)) return '🎵';
   return '📄';
 }
-// 文件夹进入时携带子节点（ctx.nodes），无则首次拉取整棵树；缩略图网格展示
+// 查看作品视图模式：thumb=缩略图网格 / list=文件列表（折叠树+文件大小，对齐 WPF）
+let fileViewMode = 'thumb';
+// 文件夹进入时携带子节点（ctx.nodes），无则首次拉取整棵树
 async function renderFiles(ctx) {
   $('title').textContent = ctx.name || ctx.id;
   const host = $('content');
@@ -855,13 +1127,65 @@ async function renderFiles(ctx) {
     if (d.error) { host.innerHTML = ''; host.appendChild(el('div', 'empty', d.error)); return; }
     nodes = d.nodes || [];
   }
+  ctx.nodes = nodes;   // 缓存：切换视图无需重新请求
   host.innerHTML = '';
+  // 视图切换栏：缩略图 / 文件列表
+  const bar = el('div', 'toolbar');
+  const tb = el('button', 'icon-btn' + (fileViewMode === 'thumb' ? ' primary' : ''), '▦ 缩略图');
+  const lb = el('button', 'icon-btn' + (fileViewMode === 'list' ? ' primary' : ''), '☰ 文件列表');
+  tb.onclick = () => { if (fileViewMode !== 'thumb') { fileViewMode = 'thumb'; renderFiles(ctx); } };
+  lb.onclick = () => { if (fileViewMode !== 'list') { fileViewMode = 'list'; renderFiles(ctx); } };
+  bar.append(tb, lb); host.appendChild(bar);
   if (!nodes.length) { host.appendChild(el('div', 'empty', '此文件夹为空')); return; }
-  host.appendChild(drawFileGrid(nodes, ctx.id));
+  host.appendChild(fileViewMode === 'list' ? drawFileTree(nodes, ctx.id) : drawFileGrid(nodes, ctx.id));
+}
+// 文件列表视图：递归折叠树，文件夹默认收起，文件显示类型图标+名称+大小（镜像 WPF 文件列表）
+function drawFileTree(nodes, id) {
+  const wrap = el('div', 'tree');
+  buildTreeLevel(wrap, nodes, id, 0);
+  return wrap;
+}
+function buildTreeLevel(host, nodes, id, depth) {
+  nodes.forEach(n => {
+    const ext = (n.ext || '').toLowerCase();
+    if (n.dir) {
+      const row = el('div', 'trow'); row.style.paddingLeft = (8 + depth * 18) + 'px';
+      const arrow = el('span', 'arrow', '▸');
+      row.append(arrow, el('span', 'ticon', '📁'), el('span', 'tname', n.name), el('span', 'tsize', `${(n.children || []).length} 项`));
+      const childBox = el('div'); childBox.style.display = 'none';
+      let built = false, open = false;
+      row.onclick = () => {
+        open = !open; arrow.textContent = open ? '▾' : '▸';
+        if (open && !built) { buildTreeLevel(childBox, n.children || [], id, depth + 1); built = true; }
+        childBox.style.display = open ? '' : 'none';
+      };
+      host.append(row, childBox);
+    } else {
+      const row = el('div', 'trow file'); row.style.paddingLeft = (8 + depth * 18 + 18) + 'px';
+      row.append(el('span', 'ticon', fileIcon(ext)), el('span', 'tname', n.name), el('span', 'tsize', fmtSize(n.size)));
+      const url = fileUrl(id, n.rel);
+      if (IMG_EXTS.includes(ext)) {
+        const sib = nodes.filter(x => !x.dir && IMG_EXTS.includes((x.ext || '').toLowerCase())).map(x => fileUrl(id, x.rel));
+        row.onclick = () => LB.open(sib, Math.max(0, sib.indexOf(url)));
+      } else if (VIDEO_EXTS.includes(ext)) {
+        const q = nodes.filter(x => !x.dir && VIDEO_EXTS.includes((x.ext || '').toLowerCase())).map(x => ({ url: fileUrl(id, x.rel), name: x.name }));
+        row.onclick = () => playVideoQueue(q, Math.max(0, q.findIndex(v => v.url === url)));
+      } else if (AUDIO_EXTS.includes(ext)) {
+        const q = nodes.filter(x => !x.dir && AUDIO_EXTS.includes((x.ext || '').toLowerCase())).map(x => ({ url: fileUrl(id, x.rel), name: x.name }));
+        row.onclick = () => playAudioQueue(q, Math.max(0, q.findIndex(a => a.url === url)));
+      } else {
+        row.onclick = () => window.open(url, '_blank');
+      }
+      host.appendChild(row);
+    }
+  });
 }
 function drawFileGrid(nodes, id) {
   // 本层图片集合：图片缩略图点开后可在它们之间左右滑动
   const imgs = nodes.filter(n => !n.dir && IMG_EXTS.includes((n.ext || '').toLowerCase())).map(n => fileUrl(id, n.rel));
+  // 本层音频/视频集合：组成播放队列，支持上一/下一与自动续播（nodes 已按名称排序）
+  const audios = nodes.filter(n => !n.dir && AUDIO_EXTS.includes((n.ext || '').toLowerCase())).map(n => ({ url: fileUrl(id, n.rel), name: n.name }));
+  const videos = nodes.filter(n => !n.dir && VIDEO_EXTS.includes((n.ext || '').toLowerCase())).map(n => ({ url: fileUrl(id, n.rel), name: n.name }));
   const grid = el('div', 'fgrid');
   nodes.forEach(n => {
     const ext = (n.ext || '').toLowerCase();
@@ -877,10 +1201,12 @@ function drawFileGrid(nodes, id) {
       card.onclick = () => LB.open(imgs, Math.max(0, imgs.indexOf(url)));
     } else if (VIDEO_EXTS.includes(ext)) {
       thumb.appendChild(el('div', 'big', '🎬'));
-      card.onclick = () => openVideo(fileUrl(id, n.rel));
+      const url = fileUrl(id, n.rel);
+      card.onclick = () => playVideoQueue(videos, Math.max(0, videos.findIndex(v => v.url === url)));
     } else if (AUDIO_EXTS.includes(ext)) {
       thumb.appendChild(el('div', 'big', '🎵'));
-      card.onclick = () => playAudio(fileUrl(id, n.rel), n.name);
+      const url = fileUrl(id, n.rel);
+      card.onclick = () => playAudioQueue(audios, Math.max(0, audios.findIndex(a => a.url === url)));
     } else {
       thumb.appendChild(el('div', 'big', '📄'));
       card.onclick = () => window.open(fileUrl(id, n.rel), '_blank');
@@ -890,11 +1216,121 @@ function drawFileGrid(nodes, id) {
   });
   return grid;
 }
-function openVideo(url) { const v = $('vplayer'); v.src = url; $('videoOverlay').classList.add('show'); v.play().catch(() => {}); }
-function closeVideo() { const v = $('vplayer'); v.pause(); v.removeAttribute('src'); v.load(); $('videoOverlay').classList.remove('show'); }
-function playAudio(url, name) { $('aname').textContent = name; const a = $('aplayer'); a.src = url; $('audioBar').classList.add('show'); a.play().catch(() => {}); }
-function closeAudio() { const a = $('aplayer'); a.pause(); a.removeAttribute('src'); a.load(); $('audioBar').classList.remove('show'); }
+// ---------- 视频播放队列 ----------
+let videoQueue = [], videoIndex = -1;
+function playVideoQueue(queue, index) {
+  videoQueue = queue || []; videoIndex = index;
+  if (!videoQueue.length) return;
+  $('videoOverlay').classList.add('show');
+  playVideoAt(index);
+}
+function playVideoAt(i) {
+  if (i < 0 || i >= videoQueue.length) return;
+  videoIndex = i;
+  const it = videoQueue[i], v = $('vplayer');
+  v.src = it.url; v.play().catch(() => {});
+  $('vtitle').textContent = it.name + (videoQueue.length > 1 ? `　${i + 1} / ${videoQueue.length}` : '');
+  $('vprev').disabled = videoIndex <= 0;
+  $('vnext').disabled = videoIndex >= videoQueue.length - 1;
+}
+function videoPrev() { if (videoIndex > 0) playVideoAt(videoIndex - 1); }
+function videoNext() { if (videoIndex < videoQueue.length - 1) playVideoAt(videoIndex + 1); }   // 到队尾即停
+function closeVideo() {
+  const v = $('vplayer'); v.pause(); v.removeAttribute('src'); v.load();
+  $('videoOverlay').classList.remove('show'); videoQueue = []; videoIndex = -1;
+}
+$('vplayer').addEventListener('ended', videoNext);   // 自然结束自动续播下一个
 $('videoOverlay').addEventListener('click', e => { if (e.target.id === 'videoOverlay') closeVideo(); });
+
+// ---------- 音频播放队列 ----------
+let audioQueue = [], audioIndex = -1;
+function playAudioQueue(queue, index) {
+  audioQueue = queue || []; audioIndex = index;
+  if (!audioQueue.length) return;
+  $('audioBar').classList.add('show');
+  playAudioAt(index);
+}
+function playAudioAt(i) {
+  if (i < 0 || i >= audioQueue.length) return;
+  audioIndex = i;
+  const it = audioQueue[i], a = $('aplayer');
+  $('aname').textContent = it.name;
+  a.src = it.url; a.play().catch(() => {});
+  $('aprev').disabled = audioQueue.length <= 1;
+  $('anext').disabled = audioIndex >= audioQueue.length - 1;
+  if ($('audioPlaylist').classList.contains('show')) renderAudioPlaylist();
+}
+function audioPrev() {
+  const a = $('aplayer');
+  // 已播放超过 3 秒或已是第一首：回到本曲开头；否则上一曲
+  if (a.currentTime > 3 || audioIndex <= 0) { a.currentTime = 0; a.play().catch(() => {}); return; }
+  playAudioAt(audioIndex - 1);
+}
+function audioNext() { if (audioIndex < audioQueue.length - 1) playAudioAt(audioIndex + 1); }   // 到队尾即停
+function closeAudio() {
+  const a = $('aplayer'); a.pause(); a.removeAttribute('src'); a.load();
+  $('audioBar').classList.remove('show');
+  $('audioPlaylist').classList.remove('show'); $('sleepMenu').classList.remove('show');
+  audioQueue = []; audioIndex = -1; clearSleep();
+}
+$('aplayer').addEventListener('ended', audioNext);   // 自然结束自动续播下一首
+
+// 播放列表弹窗
+function toggleAudioPlaylist() {
+  const p = $('audioPlaylist');
+  $('sleepMenu').classList.remove('show');
+  if (p.classList.contains('show')) { p.classList.remove('show'); return; }
+  renderAudioPlaylist(); p.classList.add('show');
+}
+function renderAudioPlaylist() {
+  const p = $('audioPlaylist'); p.innerHTML = '';
+  if (!audioQueue.length) { p.appendChild(el('div', 'apempty', '播放列表为空')); return; }
+  audioQueue.forEach((it, i) => {
+    const cur = i === audioIndex;
+    const r = el('div', 'aprow' + (cur ? ' cur' : ''));
+    r.appendChild(el('span', 'apn', cur ? '▶' : String(i + 1)));
+    r.appendChild(el('span', 'apt', it.name));
+    r.onclick = () => playAudioAt(i);
+    p.appendChild(r);
+  });
+}
+
+// 睡眠定时（预设档位，到点暂停并保留进度）
+const SLEEP_PRESETS = [['关闭定时', 0], ['15 分钟', 15], ['30 分钟', 30], ['45 分钟', 45], ['60 分钟', 60], ['90 分钟', 90]];
+let sleepTimer = null, sleepUntil = 0;
+function toggleSleepMenu() {
+  const m = $('sleepMenu');
+  $('audioPlaylist').classList.remove('show');
+  if (m.classList.contains('show')) { m.classList.remove('show'); return; }
+  m.innerHTML = '';
+  SLEEP_PRESETS.forEach(([label, mins]) => {
+    const r = el('div', 'aprow'); r.appendChild(el('span', 'apt', label));
+    r.onclick = () => { m.classList.remove('show'); setSleep(mins); };
+    m.appendChild(r);
+  });
+  m.classList.add('show');
+}
+function setSleep(mins) {
+  clearSleep();
+  if (mins <= 0) return;
+  sleepUntil = Date.now() + mins * 60000;
+  sleepTimer = setInterval(tickSleep, 1000);
+  updateSleepBtn();
+}
+function tickSleep() {
+  if (sleepUntil - Date.now() <= 0) { clearSleep(); $('aplayer').pause(); return; }   // 到点暂停
+  updateSleepBtn();
+}
+function updateSleepBtn() {
+  const remain = Math.max(0, sleepUntil - Date.now());
+  const mm = Math.floor(remain / 60000), ss = Math.floor((remain % 60000) / 1000);
+  const b = $('asleepBtn'); b.textContent = `${mm}:${String(ss).padStart(2, '0')}`; b.classList.add('on');
+}
+function clearSleep() {
+  if (sleepTimer) clearInterval(sleepTimer);
+  sleepTimer = null; sleepUntil = 0;
+  const b = $('asleepBtn'); b.textContent = '⏱'; b.classList.remove('on');
+}
 
 // ---------- 灯箱 ----------
 const LB = {
@@ -919,18 +1355,26 @@ let searchTimer = null;
 $('search').addEventListener('input', () => {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(() => {
-    const v = stack.length ? stack[stack.length - 1].view : '';
-    if (v === 'detail') return;
+    const st = stack.length ? stack[stack.length - 1] : null;
+    const v = st ? st.view : '';
+    const kw = $('search').value.trim();
+    if (v === 'detail' || v === 'files') return;
+    // 媒体库根 / 库内 / 标签·形式社团页：键入关键字 → 服务端作用域作品搜索；清空 → 恢复原视图
+    if (['libs', 'libview', 'makers'].includes(v)) {
+      if (kw) scopedWorkSearch(st, kw, ++searchGen);
+      else { searchGen++; render(); }
+      return;
+    }
     if (['works', 'favorites', 'filter'].includes(v)) drawWorks(curItems);
     else if (lastMap) drawGroups(curItems, lastMap, lastUnit);
-  }, 120);
+  }, 200);
 });
 
 // ---------- 启动 ----------
 async function boot() {
   buildTabs();
   try { const s = await fetch('/api/state').then(r => r.json()); if (s.needLogin) { showLogin(true); return; } } catch (e) {}
-  selectSection('search');
+  selectSection('medialib');
 }
 boot();
 </script>

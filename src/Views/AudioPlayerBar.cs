@@ -28,11 +28,16 @@ public class AudioPlayerBar : UserControl
     private const double PeakLimit = 0.97;      // 增益后峰值上限，防削波
     private const string PlayIcon = "▶";
     private const string PauseIcon = "⏸";
+    private const string SleepIcon = "⏱";
+    // 睡眠定时预设：分钟（0=关闭）。到点暂停当前音频，保留进度。
+    private static readonly (string Label, int Minutes)[] SleepPresets =
+        [("关闭定时", 0), ("15 分钟", 15), ("30 分钟", 30), ("45 分钟", 45), ("60 分钟", 60), ("90 分钟", 90)];
 
     private static readonly ConcurrentDictionary<string, float> GainCache = new();
 
     private readonly Button _playButton = new() { Content = PlayIcon, Width = 48, VerticalAlignment = VerticalAlignment.Center, ToolTip = "播放 / 暂停" };
     private readonly Button _playlistButton = new() { Content = "☰", Width = 40, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 0, 0), ToolTip = "播放列表" };
+    private readonly Button _sleepButton = new() { Content = SleepIcon, Width = 56, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 0, 0), ToolTip = "睡眠定时" };
     private readonly Button _prevButton = new() { Content = "⏮", Width = 40, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0), ToolTip = "上一曲" };
     private readonly Button _nextButton = new() { Content = "⏭", Width = 40, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0), ToolTip = "下一曲" };
     private readonly TextBlock _title = new()
@@ -54,7 +59,10 @@ public class AudioPlayerBar : UserControl
     };
     private readonly Popup _playlistPopup = new() { Placement = PlacementMode.Top, StaysOpen = false, AllowsTransparency = true };
     private readonly StackPanel _playlistPanel = new();
+    private readonly Popup _sleepPopup = new() { Placement = PlacementMode.Top, StaysOpen = false, AllowsTransparency = true };
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromMilliseconds(250) };
+    private readonly DispatcherTimer _sleepTimer = new() { Interval = TimeSpan.FromSeconds(1) };
+    private DateTime? _sleepUntil;   // 睡眠定时到点时刻；null=未设定
 
     private WaveOutEvent? _output;
     private AudioFileReader? _reader;
@@ -87,6 +95,7 @@ public class AudioPlayerBar : UserControl
         bar.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); // 进度条
         bar.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });            // 下一曲
         bar.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });            // 时间
+        bar.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });            // 睡眠定时
         bar.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });            // 关闭
 
         _playButton.Click += (_, _) => Toggle();
@@ -126,14 +135,21 @@ public class AudioPlayerBar : UserControl
         Grid.SetColumn(_time, 6);
         bar.Children.Add(_time);
 
+        _sleepButton.Click += (_, _) => ToggleSleepMenu();
+        Grid.SetColumn(_sleepButton, 7);
+        bar.Children.Add(_sleepButton);
+
         _closeButton.Click += (_, _) => Stop();
-        Grid.SetColumn(_closeButton, 7);
+        Grid.SetColumn(_closeButton, 8);
         bar.Children.Add(_closeButton);
 
         border.Child = bar;
         Content = border;
 
         BuildPlaylistPopup();
+        BuildSleepPopup();
+
+        _sleepTimer.Tick += (_, _) => SleepTick();
 
         _timer.Tick += (_, _) =>
         {
@@ -236,6 +252,105 @@ public class AudioPlayerBar : UserControl
         _playlistPopup.IsOpen = false;
         _index = i;
         PlayCurrent();
+    }
+
+    // ---------- 睡眠定时 ----------
+
+    private void BuildSleepPopup()
+    {
+        var panel = new StackPanel { MinWidth = 160 };
+        var caption = TryFindResource("CaptionBrush") as Brush ?? Brushes.Gray;
+        var text = TryFindResource("TextBrush") as Brush ?? Brushes.White;
+        foreach (var (label, minutes) in SleepPresets)
+        {
+            var row = new Border
+            {
+                CornerRadius = new CornerRadius(6),
+                Padding = new Thickness(12, 7, 12, 7),
+                Margin = new Thickness(0, 1, 0, 1),
+                Cursor = Cursors.Hand,
+                Background = Brushes.Transparent,
+            };
+            row.Child = new TextBlock
+            {
+                Text = I18n.Tr(label),
+                Foreground = minutes == 0 ? caption : text,
+            };
+            var m = minutes;
+            row.MouseLeftButtonUp += (_, _) => { _sleepPopup.IsOpen = false; SetSleep(m); };
+            row.MouseEnter += (_, _) => row.Background = TryFindResource("BorderBrush") as Brush ?? Brushes.DimGray;
+            row.MouseLeave += (_, _) => row.Background = Brushes.Transparent;
+            panel.Children.Add(row);
+        }
+        var box = new Border
+        {
+            Background = TryFindResource("BaseBrush") as Brush ?? Brushes.Black,
+            BorderBrush = TryFindResource("BorderBrush") as Brush ?? Brushes.Gray,
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(6),
+            Margin = new Thickness(0, 0, 0, 6),
+            Child = panel,
+        };
+        _sleepPopup.Child = box;
+        _sleepPopup.PlacementTarget = _sleepButton;
+    }
+
+    private void ToggleSleepMenu() => _sleepPopup.IsOpen = !_sleepPopup.IsOpen;
+
+    /// <summary>设定睡眠定时（分钟，0=取消）。到点暂停当前音频并保留进度。</summary>
+    private void SetSleep(int minutes)
+    {
+        if (minutes <= 0)
+        {
+            ClearSleep();
+            return;
+        }
+        _sleepUntil = DateTime.Now.AddMinutes(minutes);
+        _sleepTimer.Start();
+        UpdateSleepButton();
+    }
+
+    private void ClearSleep()
+    {
+        _sleepTimer.Stop();
+        _sleepUntil = null;
+        _sleepButton.Content = SleepIcon;
+        _sleepButton.ToolTip = "睡眠定时";
+    }
+
+    private void SleepTick()
+    {
+        if (_sleepUntil == null)
+        {
+            _sleepTimer.Stop();
+            return;
+        }
+        var remain = _sleepUntil.Value - DateTime.Now;
+        if (remain <= TimeSpan.Zero)
+        {
+            ClearSleep();
+            // 到点暂停（保留进度，可继续播放），不触发自动续播
+            if (_playing && _output != null)
+            {
+                _output.Pause();
+                _playing = false;
+                _playButton.Content = PlayIcon;
+            }
+            return;
+        }
+        UpdateSleepButton();
+    }
+
+    private void UpdateSleepButton()
+    {
+        if (_sleepUntil == null)
+            return;
+        var remain = _sleepUntil.Value - DateTime.Now;
+        if (remain < TimeSpan.Zero)
+            remain = TimeSpan.Zero;
+        _sleepButton.Content = Fmt(remain);
+        _sleepButton.ToolTip = $"将在 {Fmt(remain)} 后暂停";
     }
 
     // ---------- 播放控制 ----------
@@ -381,6 +496,8 @@ public class AudioPlayerBar : UserControl
     {
         _timer.Stop();
         _playlistPopup.IsOpen = false;
+        _sleepPopup.IsOpen = false;
+        ClearSleep();
         DisposePlayer();
         _queue = [];
         _index = -1;

@@ -107,6 +107,8 @@ public partial class MediaLibPage : UserControl
     // 整页预览状态
     private InlineMediaPlayer? _inlinePlayer;
     private List<string> _previewImages = [];
+    private List<string> _previewVideos = [];   // 视频整页预览的播放队列（同文件夹视频，按名称排序）
+    private bool _previewVideoMode;              // 当前整页预览是否为视频（决定 StepPreview 切换图片还是视频）
     private int _previewIndex;
 
     private static readonly Brush RowHoverBrush = MakeFrozenBrush(Color.FromArgb(18, 255, 255, 255));
@@ -260,15 +262,14 @@ public partial class MediaLibPage : UserControl
 
     private void LibSettingButton_Click(object sender, RoutedEventArgs e)
     {
-        // 媒体库设置弹窗（常驻实例，扫描线程随其存活）
+        // 媒体库设置（程序内覆盖层，常驻实例，扫描线程随其存活）
         if (_settingDialog == null)
         {
-            _settingDialog = new MediaLibSettingDialog { Owner = Window.GetWindow(this) };
+            _settingDialog = new MediaLibSettingDialog();
             _settingDialog.LibsChanged += Refresh;
             _settingDialog.ScanDone += Refresh;
         }
-        _settingDialog.Show();
-        _settingDialog.Activate();
+        _settingDialog.Show(this);  // 程序内模态覆盖层，阻塞到关闭
     }
 
     private void LibToggleButton_Click(object sender, RoutedEventArgs e)
@@ -1756,12 +1757,18 @@ public partial class MediaLibPage : UserControl
     private void ShowPreview(string path)
     {
         var ext = Path.GetExtension(path).ToLowerInvariant();
-        _inlinePlayer?.Shutdown();
-        _inlinePlayer = null;
+        if (_inlinePlayer != null)
+        {
+            _inlinePlayer.Ended -= OnPreviewVideoEnded;
+            _inlinePlayer.Shutdown();
+            _inlinePlayer = null;
+        }
         // 先显示整页遮罩，使随后挂入的视频播放器在“已加载且可见”的状态下开始播放（否则画面黑屏）
         PreviewOverlay.Visibility = Visibility.Visible;
         if (DlsitePage.ImageExts.Contains(ext))
         {
+            _previewVideoMode = false;
+            _previewVideos = [];
             var dir = Path.GetDirectoryName(path)!;
             try
             {
@@ -1775,6 +1782,8 @@ public partial class MediaLibPage : UserControl
                 _previewImages = [path];
             }
             _previewIndex = Math.Max(0, _previewImages.IndexOf(path));
+            PreviewPrevButton.Content = "‹ " + I18n.Tr("上一张");
+            PreviewNextButton.Content = I18n.Tr("下一张") + " ›";
             SetPreviewNavVisible(_previewImages.Count > 1);
             LoadPreviewImage();
         }
@@ -1782,10 +1791,25 @@ public partial class MediaLibPage : UserControl
         {
             AudioBar.Stop();   // 视频自带声音：开始播视频前停掉底部音频，避免两路声音重叠
             _previewImages = [];
-            SetPreviewNavVisible(false);
-            PreviewTitle.Text = Path.GetFileName(path);
-            _inlinePlayer = new InlineMediaPlayer(path);
-            PreviewContent.Child = _inlinePlayer;
+            _previewVideoMode = true;
+            // 同文件夹视频按名称排序组成播放队列，从点击的这首开始，支持上一/下一个与自动续播
+            var dir = Path.GetDirectoryName(path)!;
+            try
+            {
+                _previewVideos = Directory.GetFiles(dir)
+                    .Where(f => VideoExts.Contains(Path.GetExtension(f).ToLowerInvariant()))
+                    .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                _previewVideos = [path];
+            }
+            _previewIndex = Math.Max(0, _previewVideos.IndexOf(path));
+            PreviewPrevButton.Content = "‹ " + I18n.Tr("上一个");
+            PreviewNextButton.Content = I18n.Tr("下一个") + " ›";
+            SetPreviewNavVisible(_previewVideos.Count > 1);
+            LoadPreviewVideo();
         }
         else
         {
@@ -1828,8 +1852,43 @@ public partial class MediaLibPage : UserControl
         }
     }
 
+    /// <summary>加载视频播放队列中当前索引的视频；订阅自然结束以自动续播下一个。</summary>
+    private void LoadPreviewVideo()
+    {
+        if (_previewVideos.Count == 0)
+            return;
+        var path = _previewVideos[_previewIndex];
+        PreviewTitle.Text = _previewVideos.Count > 1
+            ? $"{Path.GetFileName(path)}　{_previewIndex + 1} / {_previewVideos.Count}"
+            : Path.GetFileName(path);
+        if (_inlinePlayer != null)
+        {
+            _inlinePlayer.Ended -= OnPreviewVideoEnded;
+            _inlinePlayer.Shutdown();
+        }
+        _inlinePlayer = new InlineMediaPlayer(path);
+        _inlinePlayer.Ended += OnPreviewVideoEnded;
+        PreviewContent.Child = _inlinePlayer;
+    }
+
+    /// <summary>视频自然播放结束：未到队尾则自动续播下一个。</summary>
+    private void OnPreviewVideoEnded()
+    {
+        if (_previewVideoMode && _previewIndex < _previewVideos.Count - 1)
+            StepPreview(1);
+    }
+
     private void StepPreview(int delta)
     {
+        if (_previewVideoMode)
+        {
+            if (_previewVideos.Count == 0)
+                return;
+            _previewIndex = ((_previewIndex + delta) % _previewVideos.Count + _previewVideos.Count)
+                            % _previewVideos.Count;
+            LoadPreviewVideo();
+            return;
+        }
         if (_previewImages.Count == 0)
             return;
         _previewIndex = ((_previewIndex + delta) % _previewImages.Count + _previewImages.Count)
@@ -1840,9 +1899,15 @@ public partial class MediaLibPage : UserControl
     /// <summary>关闭整页预览：停止播放、释放图片，回到详情页。</summary>
     private void ClosePreview()
     {
-        _inlinePlayer?.Shutdown();
-        _inlinePlayer = null;
+        if (_inlinePlayer != null)
+        {
+            _inlinePlayer.Ended -= OnPreviewVideoEnded;
+            _inlinePlayer.Shutdown();
+            _inlinePlayer = null;
+        }
         _previewImages = [];
+        _previewVideos = [];
+        _previewVideoMode = false;
         PreviewContent.Child = null;
         PreviewOverlay.Visibility = Visibility.Collapsed;
     }

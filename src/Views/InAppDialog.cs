@@ -28,6 +28,97 @@ public static class InAppDialog
     public static bool Confirm(DependencyObject? owner, string message, string title) =>
         Show(owner, message, title, yesNo: true);
 
+    /// <summary>文本输入对话框（程序内覆盖层）：确定返回输入文本，取消返回 null。</summary>
+    public static string? Prompt(DependencyObject? owner, string message, string title, string defaultValue = "")
+    {
+        string? value = null;
+        var shown = OverlayHost.ShowModal(owner,
+            close => BuildPrompt(title, message, defaultValue, v => value = v, close));
+        if (shown == null)
+        {
+            // 兜底：无法定位窗口 AdornerLayer 时退回系统输入窗口
+            var dialog = new InputDialog(title, message);
+            if (owner != null && Window.GetWindow(owner) is { } w)
+                dialog.Owner = w;
+            return dialog.ShowDialog() == true ? dialog.Value : null;
+        }
+        return shown == true ? value : null;
+    }
+
+    private static FrameworkElement BuildPrompt(
+        string title, string message, string defaultValue, Action<string> onAccept, Action<bool> close)
+    {
+        var dim = new Grid
+        {
+            Background = new SolidColorBrush(Color.FromArgb(0x9A, 0, 0, 0)),
+            Focusable = true,
+        };
+        var card = new Border
+        {
+            Background = Res("CardBrush", Brushes.Black),
+            BorderBrush = Res("BorderBrush", Brushes.Gray),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(10),
+            Padding = new Thickness(24, 20, 24, 18),
+            MinWidth = 360,
+            MaxWidth = 480,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        var panel = new StackPanel();
+        panel.Children.Add(new TextBlock
+        {
+            Text = title,
+            FontWeight = FontWeights.SemiBold,
+            FontSize = 16,
+            Foreground = Res("TextBrush", Brushes.White),
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        });
+        panel.Children.Add(new TextBlock
+        {
+            Text = message,
+            TextWrapping = TextWrapping.Wrap,
+            Foreground = Res("TextBrush", Brushes.White),
+            Margin = new Thickness(0, 14, 0, 8),
+        });
+        var input = new TextBox { Text = defaultValue };
+        input.Loaded += (_, _) => { input.Focus(); input.SelectAll(); };
+        panel.Children.Add(input);
+
+        var buttons = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Margin = new Thickness(0, 20, 0, 0),
+        };
+        var ok = MakeButton(I18n.Tr("确定"), primary: true);
+        ok.Click += (_, _) => { onAccept(input.Text); close(true); };
+        buttons.Children.Add(ok);
+        var cancel = MakeButton(I18n.Tr("取消"), primary: false);
+        cancel.Margin = new Thickness(10, 0, 0, 0);
+        cancel.Click += (_, _) => close(false);
+        buttons.Children.Add(cancel);
+        panel.Children.Add(buttons);
+
+        card.Child = panel;
+        dim.Children.Add(card);
+        dim.KeyDown += (_, e) =>
+        {
+            if (e.Key == Key.Enter)
+            {
+                onAccept(input.Text);
+                close(true);
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Escape)
+            {
+                close(false);
+                e.Handled = true;
+            }
+        };
+        return dim;
+    }
+
     private static bool Show(DependencyObject? owner, string message, string title, bool yesNo)
     {
         var window = ResolveWindow(owner);
