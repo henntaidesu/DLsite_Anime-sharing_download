@@ -1,7 +1,84 @@
 <UserControl x:Class="DASD.Views.DownloadPage"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="clr-namespace:DASD.Views"
              IsVisibleChanged="Page_IsVisibleChanged">
+    <UserControl.Resources>
+        <!-- 目录树展开/收起小三角（文件夹节点用） -->
+        <Style x:Key="ExpandToggle" TargetType="ToggleButton">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="{StaticResource CaptionBrush}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Width" Value="18" />
+            <Setter Property="Height" Value="18" />
+            <Setter Property="Content" Value="▸" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border Background="Transparent">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsChecked" Value="True">
+                    <Setter Property="Content" Value="▾" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- 文件叶子节点（按类型隐式套用：目录树里出现 DownloadFileItem 即用此模板） -->
+        <DataTemplate DataType="{x:Type v:DownloadFileItem}">
+            <StackPanel Margin="0,2">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="220" />
+                        <ColumnDefinition Width="110" />
+                        <ColumnDefinition Width="130" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{Binding FileName}"
+                               Foreground="{StaticResource CaptionBrush}"
+                               ToolTip="{Binding Url}"
+                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                    <ProgressBar Grid.Column="1" Value="{Binding Pct}" Maximum="100"
+                                 Height="10" VerticalAlignment="Center"
+                                 Margin="0,0,12,0"
+                                 Foreground="#39507e" Background="#1c2130" />
+                    <TextBlock Grid.Column="2" Text="{Binding SpeedText}"
+                               Style="{StaticResource CaptionText}"
+                               VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="3" Text="{Binding StatusText}"
+                               Foreground="{Binding StatusBrush}"
+                               VerticalAlignment="Center" />
+                    <Button Grid.Column="4" Content="{Binding CopyUrlText}"
+                            FontSize="11" Padding="8,2" Margin="8,0,0,0"
+                            Click="CopyUrl_Click" />
+                </Grid>
+                <TextBlock Text="{Binding ErrorReason}"
+                           Visibility="{Binding ErrorVisibility}"
+                           Foreground="#f87171" FontSize="11"
+                           TextWrapping="Wrap" Margin="0,3,0,0" />
+            </StackPanel>
+        </DataTemplate>
+
+        <!-- 文件夹节点：标题行 + 递归子节点（子节点按类型隐式套用上面的文件/文件夹模板） -->
+        <DataTemplate DataType="{x:Type v:DownloadFolderItem}">
+            <StackPanel Margin="0,2,0,0">
+                <StackPanel Orientation="Horizontal">
+                    <ToggleButton IsChecked="{Binding IsExpanded}" Style="{StaticResource ExpandToggle}" />
+                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold"
+                               Foreground="{StaticResource TextBrush}"
+                               VerticalAlignment="Center" Margin="2,0,0,0" />
+                </StackPanel>
+                <ItemsControl ItemsSource="{Binding Children}" Visibility="{Binding ChildrenVisibility}"
+                              Margin="16,0,0,0" />
+            </StackPanel>
+        </DataTemplate>
+    </UserControl.Resources>
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -110,46 +187,11 @@
                                                 Margin="6,0,0,0" Click="DeleteOne_Click" />
                                     </StackPanel>
                                 </Grid>
-                                <!-- 子行：分卷文件 -->
-                                <ItemsControl ItemsSource="{Binding Children}"
-                                              Visibility="{Binding ChildrenVisibility}" Margin="24,4,0,0">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <StackPanel Margin="0,2">
-                                                <Grid>
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="*" />
-                                                        <ColumnDefinition Width="220" />
-                                                        <ColumnDefinition Width="110" />
-                                                        <ColumnDefinition Width="130" />
-                                                        <ColumnDefinition Width="Auto" />
-                                                    </Grid.ColumnDefinitions>
-                                                    <TextBlock Text="{Binding FileName}"
-                                                               Foreground="{StaticResource CaptionBrush}"
-                                                               ToolTip="{Binding Url}"
-                                                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                                                    <ProgressBar Grid.Column="1" Value="{Binding Pct}" Maximum="100"
-                                                                 Height="10" VerticalAlignment="Center"
-                                                                 Margin="0,0,12,0"
-                                                                 Foreground="#39507e" Background="#1c2130" />
-                                                    <TextBlock Grid.Column="2" Text="{Binding SpeedText}"
-                                                               Style="{StaticResource CaptionText}"
-                                                               VerticalAlignment="Center" />
-                                                    <TextBlock Grid.Column="3" Text="{Binding StatusText}"
-                                                               Foreground="{Binding StatusBrush}"
-                                                               VerticalAlignment="Center" />
-                                                    <Button Grid.Column="4" Content="{Binding CopyUrlText}"
-                                                            FontSize="11" Padding="8,2" Margin="8,0,0,0"
-                                                            Click="CopyUrl_Click" />
-                                                </Grid>
-                                                <TextBlock Text="{Binding ErrorReason}"
-                                                           Visibility="{Binding ErrorVisibility}"
-                                                           Foreground="#f87171" FontSize="11"
-                                                           TextWrapping="Wrap" Margin="0,3,0,0" />
-                                            </StackPanel>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
+                                <!-- 子树：作品内目录层级（文件夹/文件递归），最多约 10 行高，超出滚动 -->
+                                <ScrollViewer Visibility="{Binding ChildrenVisibility}" Margin="24,4,0,0"
+                                              MaxHeight="260" VerticalScrollBarVisibility="Auto">
+                                    <ItemsControl ItemsSource="{Binding Nodes}" />
+                                </ScrollViewer>
                             </StackPanel>
                         </Border>
                     </DataTemplate>

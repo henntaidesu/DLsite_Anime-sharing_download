@@ -190,6 +190,7 @@ public partial class SearchPage : UserControl
 
     private string? _selectId;
     private DlWork? _workData;       // 当前搜索作品的 DL API 数据，加入下载时写入 works 表
+    private bool _asmrForCurrent;    // 当前作品是否走 asmr.one：SOU + 优先 asmr + asmr.one 确实有该作品
     private int _searchGeneration;   // 作品（AS 帖子）搜索代际：新一轮作品搜索作废旧缩略图/帖子扫描
     private int _makerGeneration;    // 社团（RG）搜索代际：独立于作品搜索，使社团扫描可在后台持续
 
@@ -259,6 +260,8 @@ public partial class SearchPage : UserControl
         ResultList.Visibility = Visibility.Visible;
         MakerList.Visibility = Visibility.Collapsed;
         BackButton.Visibility = _fromMaker ? Visibility.Visible : Visibility.Collapsed;
+        // 仅当当前作品确认走 asmr.one 时，结果页顶部展示 asmr.one 直链下载横幅
+        AsmrBanner.Visibility = _asmrForCurrent ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void ShowMakerPage()
@@ -266,6 +269,7 @@ public partial class SearchPage : UserControl
         ResultList.Visibility = Visibility.Collapsed;
         MakerList.Visibility = Visibility.Visible;
         BackButton.Visibility = Visibility.Collapsed;
+        AsmrBanner.Visibility = Visibility.Collapsed;
     }
 
     /// <summary>搜索入口：识别输入是作品号还是社团号，分流到对应流程。</summary>
@@ -326,11 +330,40 @@ public partial class SearchPage : UserControl
         List<AsSearchResult> results;
         try
         {
-            var workTask = DlsiteApi.GetWorkDataAsync(_selectId);
-            var searchTask = AnimeSharing.SearchWorkAsync(_selectId);
-            await Task.WhenAll(workTask, searchTask);
-            _workData = workTask.Result;
-            results = searchTask.Result;
+            // 先取 DL API 作品数据判定类型；音声(SOU)作品判断是否走 asmr.one
+            _workData = await DlsiteApi.GetWorkDataAsync(_selectId);
+            var isSou = string.Equals(_workData?.WorkType, "SOU", StringComparison.OrdinalIgnoreCase);
+            _asmrForCurrent = false;
+
+            // SOU 且优先来源为 asmr.one：先校验 asmr.one 是否真的有该作品
+            if (isSou && AppConfig.SouUsesAsmr)
+            {
+                // 未配置 asmr 账号：仍显示横幅（点下载时会提示配置），不做可用性校验也不回退论坛
+                if (string.IsNullOrEmpty(AppConfig.AsmrUsername) || string.IsNullOrEmpty(AppConfig.AsmrPassword))
+                {
+                    _asmrForCurrent = true;
+                    ResetAsmrBanner();
+                    ShowResultsPage();
+                    return;
+                }
+                LoadingText.Text = I18n.Tr("正在检查 asmr.one…");
+                var detail = await AsmrApi.GetWorkDetailAsync(AsmrApi.RjToId(_selectId));
+                if (generation != _searchGeneration)
+                    return;
+                if (detail is { Files.Count: > 0 })
+                {
+                    // asmr.one 有该作品：直接走直链，不再请求 AS 论坛列表
+                    _asmrForCurrent = true;
+                    ResetAsmrBanner();
+                    ShowResultsPage();   // 空结果列表 + asmr.one 横幅
+                    return;
+                }
+                // asmr.one 查无此作品：自动回退到 Anime-sharing 论坛
+                Logger.Info($"{_selectId} asmr.one 无此作品，回退到 Anime-sharing 搜索");
+                LoadingText.Text = I18n.Tr("正在查询…");
+            }
+
+            results = await AnimeSharing.SearchWorkAsync(_selectId);
         }
         finally
         {
@@ -338,6 +371,9 @@ public partial class SearchPage : UserControl
         }
         if (generation != _searchGeneration)
             return;   // 期间又发起了新搜索
+
+        ResetAsmrBanner();   // 非 asmr 路径：横幅按"是否 SOU 且优先 asmr"决定显隐（此处为隐藏）
+
         if (results.Count == 0)
         {
             InAppDialog.Info(this, I18n.Tr("无匹配数据"), I18n.Tr("提示"));
@@ -907,6 +943,64 @@ public partial class SearchPage : UserControl
             makerItem.DownActive = true;
         }
         StartDownSync();
+    }
+
+    /// <summary>重置 asmr.one 横幅状态（每次新搜索时调用）：清空状态文案、恢复下载按钮。</summary>
+    private void ResetAsmrBanner()
+    {
+        AsmrBannerStatus.Text = "";
+        AsmrDownloadButton.IsEnabled = true;
+    }
+
+    /// <summary>横幅点击"asmr.one 下载"：用当前 RJ 号通过 asmr.one 直链下载该 SOU 作品。</summary>
+    private async void AsmrDownload_Click(object sender, RoutedEventArgs e)
+    {
+        if (string.IsNullOrEmpty(_selectId))
+            return;
+        if (string.IsNullOrEmpty(AppConfig.AsmrUsername) || string.IsNullOrEmpty(AppConfig.AsmrPassword))
+        {
+            InAppDialog.Warn(this, I18n.Tr("请先在设置中填写 ASMR.ONE 账号"), I18n.Tr("提示"));
+            return;
+        }
+
+        // 有媒体库配置时弹窗选择下载目标
+        string? targetFolder = null, targetLib = null;
+        if (AppConfig.ReadMediaLibs().Count > 0)
+        {
+            var dialog = new DownTargetDialog();
+            if (!dialog.Show(Window.GetWindow(this)))
+                return;
+            targetFolder = dialog.SelectedFolder;
+            targetLib = dialog.SelectedLib;
+        }
+
+        AsmrDownloadButton.IsEnabled = false;
+        AsmrBannerStatus.Text = I18n.Tr("入队中…");
+        AsmrBannerStatus.Foreground = (Brush)FindResource("CaptionBrush");
+
+        var result = await AsmrService.EnqueueByRjAsync(
+            _selectId, _workData?.WorkName ?? "", targetFolder, targetLib);
+
+        if (result.Ok)
+        {
+            AsmrBannerStatus.Text = I18n.Format(I18n.Tr("已加入下载：{count} 个文件"), ("count", result.FileCount));
+            AsmrBannerStatus.Foreground = (Brush)FindResource("AccentLightBrush");
+            // 同步社团卡片（若来自社团网格）：立即转为"待下载"并启动与下载页的状态同步
+            var makerItem = _makerWorks.FirstOrDefault(m => m.WorkId == _selectId);
+            if (makerItem != null)
+            {
+                makerItem.DownText = I18n.Tr("待下载");
+                makerItem.DownBrush = (Brush)FindResource("YellowBrush");
+                makerItem.DownActive = true;
+            }
+            StartDownSync();
+        }
+        else
+        {
+            AsmrBannerStatus.Text = result.Error ?? I18n.Tr("入队失败");
+            AsmrBannerStatus.Foreground = (Brush)FindResource("RedBrush");
+            AsmrDownloadButton.IsEnabled = true;
+        }
     }
 
     /// <summary>

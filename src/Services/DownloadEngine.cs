@@ -395,12 +395,12 @@ public static class DownloadEngine
     }
 
     /// <summary>从队列原子地领取一条待下载任务并立即标记为下载中；无任务返回 null。</summary>
-    private static (string Key, string WorkId, string Url)? ClaimNext()
+    private static (string Key, string WorkId, string Url, string Source, string SubPath)? ClaimNext()
     {
         lock (ClaimLock)
         {
             var rows = Db.Select(
-                "SELECT \"UUID\", \"work_id\", \"url\" FROM \"download_list\" WHERE \"status\" = '0' LIMIT 1");
+                "SELECT \"UUID\", \"work_id\", \"url\", \"source\", \"sub_path\" FROM \"download_list\" WHERE \"status\" = '0' LIMIT 1");
             if (rows is not { Count: > 0 })
                 return null;
             var key = rows[0][0] as string ?? "";
@@ -408,7 +408,8 @@ public static class DownloadEngine
             Db.Execute(
                 "UPDATE \"download_list\" SET \"status\" = '3', \"long\" = '0', \"error\" = NULL WHERE \"UUID\" = @k",
                 ("@k", key));
-            return (key, rows[0][1] as string ?? "", rows[0][2] as string ?? "");
+            return (key, rows[0][1] as string ?? "", rows[0][2] as string ?? "",
+                rows[0][3] as string ?? "", rows[0][4] as string ?? "");
         }
     }
 
@@ -611,30 +612,48 @@ public static class DownloadEngine
                     continue;
                 }
 
-                var (k, workId, url) = claimed.Value;
+                var (k, workId, url, source, subPath) = claimed.Value;
                 key = k;
-                Logger.Info($"通过 debrid-link 解析: {url}");
+                var isAsmr = source == "asmr";
 
-                System.Text.Json.JsonElement? value;
-                string? parseError;
-                using (var debrid = new DebridLinkClient())
-                    (value, parseError) = debrid.AddDownloadDetailedAsync(url).GetAwaiter().GetResult();
-                var directUrl = value is { } v ? DlsiteApi.JStr(v, "downloadUrl") : "";
-                if (string.IsNullOrEmpty(directUrl))
+                string directUrl;
+                string filename;
+                if (isAsmr)
                 {
-                    Logger.Error($"{workId} debrid-link 解析失败: {url} ({parseError})");
-                    SetParseFailed(key, parseError);
-                    continue;
+                    // asmr.one：download_list.url 本身就是直链，无需 debrid 解析；
+                    // sub_path 为作品内相对路径（含文件名），按其重建目录树落盘
+                    directUrl = url;
+                    filename = string.IsNullOrEmpty(subPath)
+                        ? url.TrimEnd('/').Split('/')[^1].Split('?')[0]
+                        : Path.GetFileName(subPath);
+                }
+                else
+                {
+                    Logger.Info($"通过 debrid-link 解析: {url}");
+                    System.Text.Json.JsonElement? value;
+                    string? parseError;
+                    using (var debrid = new DebridLinkClient())
+                        (value, parseError) = debrid.AddDownloadDetailedAsync(url).GetAwaiter().GetResult();
+                    directUrl = value is { } v ? DlsiteApi.JStr(v, "downloadUrl") : "";
+                    if (string.IsNullOrEmpty(directUrl))
+                    {
+                        Logger.Error($"{workId} debrid-link 解析失败: {url} ({parseError})");
+                        SetParseFailed(key, parseError);
+                        continue;
+                    }
+                    filename = value is { } v2 ? DlsiteApi.JStr(v2, "name") : "";
+                    if (string.IsNullOrEmpty(filename))
+                        filename = directUrl.TrimEnd('/').Split('/')[^1].Split('?')[0];
                 }
 
-                var filename = value is { } v2 ? DlsiteApi.JStr(v2, "name") : "";
-                if (string.IsNullOrEmpty(filename))
-                    filename = directUrl.TrimEnd('/').Split('/')[^1].Split('?')[0];
                 var downloadPath = WorkFolderPath(workId);
-                // 首个分卷处理时落库缓存目录，保证后续分卷、重启续传后的解压都用同一目录
+                // 首个分卷处理时落库缓存目录，保证后续分卷、重启续传后的解压/入库都用同一目录
                 PersistWorkFolder(workId, downloadPath);
-                Directory.CreateDirectory(downloadPath);
-                var filePath = Path.Combine(downloadPath, filename);
+                // asmr 保留作品内子目录结构；其它源扁平落盘
+                var filePath = isAsmr && !string.IsNullOrEmpty(subPath)
+                    ? Path.Combine(downloadPath, subPath.Replace('/', Path.DirectorySeparatorChar))
+                    : Path.Combine(downloadPath, filename);
+                Directory.CreateDirectory(Path.GetDirectoryName(filePath) ?? downloadPath);
 
                 var result = DownloadFile(client, directUrl, filePath, filename, key, workId);
                 DownloadProgress.TryRemove(key, out _);
@@ -651,7 +670,11 @@ public static class DownloadEngine
                 Logger.Info($"{workId}已完成下载");
                 SetStatus(key, "1", 100);
                 MarkWorkDownloaded(workId);
-                AutoUnzipIfDone(workId);
+                // asmr 直链下载无压缩包，下完直接入库；其它源走自动解压
+                if (isAsmr)
+                    AsmrFinalizeIfDone(workId);
+                else
+                    AutoUnzipIfDone(workId);
             }
             catch (Exception e)
             {
@@ -672,9 +695,9 @@ public static class DownloadEngine
         // 上次运行中断时遗留的"下载中"任务重新排队，靠断点续传从已下载部分继续
         Db.Execute("UPDATE \"download_list\" SET \"status\" = '0' WHERE \"status\" = '3'");
 
-        // 上次解压中途中断的作品：分卷已全部下载完但还未解压入库，重新触发解压 → 移动 → 入库
+        // 上次中途中断的作品：分卷已全部下载完但还未入库，重新触发解压/收尾 → 移动 → 入库
         var stuck = Db.Select("""
-            SELECT w."work_id" FROM "works" w
+            SELECT w."work_id", w."source" FROM "works" w
             WHERE w."state" IN ('下载中', '已下载')
             AND EXISTS (SELECT 1 FROM "download_list" d WHERE d."work_id" = w."work_id")
             AND NOT EXISTS (SELECT 1 FROM "download_list" d
@@ -684,9 +707,12 @@ public static class DownloadEngine
             foreach (var row in stuck)
             {
                 var stuckId = row[0] as string ?? "";
-                Logger.Info($"{stuckId} 分卷已全部下载但未完成解压入库，重新触发解压");
+                Logger.Info($"{stuckId} 分卷已全部下载但未完成入库，重新触发收尾");
                 MarkWorkDownloaded(stuckId);
-                AutoUnzipIfDone(stuckId);
+                if (row[1] as string == "asmr")
+                    AsmrFinalizeIfDone(stuckId);
+                else
+                    AutoUnzipIfDone(stuckId);
             }
 
         var workers = new List<Thread>();
@@ -734,6 +760,54 @@ public static class DownloadEngine
         UnzipProgress[workId] = new UnzipProgressInfo { State = "pending", Pct = 0 };
         Logger.Info($"{workId} 下载完成，开始自动解压");
         new Thread(() => RunUnzip(workId)) { IsBackground = true, Name = $"unzip-{workId}" }.Start();
+    }
+
+    /// <summary>
+    /// asmr.one 作品下完后的收尾（无解压）：所有分卷完成后在后台移动到媒体库、入库、
+    /// 补全元数据，并在 asmr.one 站上回标为「听完」。每个作品只执行一次。
+    /// </summary>
+    private static void AsmrFinalizeIfDone(string workId)
+    {
+        var pending = Db.Scalar(
+            "SELECT COUNT(*) FROM \"download_list\" WHERE \"work_id\" = @w AND \"status\" != '1'",
+            ("@w", workId));
+        if (pending is null || Convert.ToInt64(pending) != 0)
+            return;  // 还有未完成的文件
+
+        lock (UnzipLock)
+        {
+            if (!Unzipping.Add(workId))
+                return;  // 已有线程在收尾该作品（并发完成时去重）
+        }
+
+        UnzipProgress[workId] = new UnzipProgressInfo { State = "moving", Pct = 0 };
+        Logger.Info($"{workId} asmr 下载完成，开始入库");
+        new Thread(() => RunAsmrFinalize(workId)) { IsBackground = true, Name = $"asmr-finalize-{workId}" }.Start();
+    }
+
+    /// <summary>在后台把 asmr 作品移入媒体库并回标，进度由 MoveToTargetFolder 维护。</summary>
+    private static void RunAsmrFinalize(string workId)
+    {
+        try
+        {
+            // 复用解压流程的入库收尾：移动到媒体库 + 标记已品悦 + 补全元数据
+            UnzipService.FinalizeIntoLibrary(workId, WorkFolderPath(workId));
+            // 在 asmr.one 站上回标为「听完」
+            var asmrId = Db.Scalar(
+                "SELECT \"asmr_id\" FROM \"works\" WHERE \"work_id\" = @w", ("@w", workId)) as string;
+            if (long.TryParse(asmrId, out var id) && id > 0)
+                AsmrApi.ReviewAsync(id, listened: true).GetAwaiter().GetResult();
+        }
+        catch (Exception e)
+        {
+            Logger.Error(e, "asmr 入库收尾");
+        }
+        finally
+        {
+            UnzipProgress.TryRemove(workId, out _);
+            lock (UnzipLock)
+                Unzipping.Remove(workId);
+        }
     }
 
     /// <summary>在后台解压一个作品，并用独立线程按解压产出量估算进度写入 UnzipProgress。</summary>

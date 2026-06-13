@@ -24,6 +24,9 @@ public class DownloadFileItem : ObservableBase
     private string _fileName = "";
     public string FileName { get => _fileName; set => Set(ref _fileName, value); }
 
+    /// <summary>作品内相对路径（含子目录），用于构建目录树；论坛源即文件名。</summary>
+    public string RelPath { get; set; } = "";
+
     private double _pct;
     public double Pct { get => _pct; set => Set(ref _pct, value); }
 
@@ -46,11 +49,41 @@ public class DownloadFileItem : ObservableBase
     public string CopyUrlText => I18n.Tr("复制链接");
 }
 
+/// <summary>下载页目录树的文件夹节点（子项可为文件夹或文件，递归展示作品内目录层级）。</summary>
+public class DownloadFolderItem : ObservableBase
+{
+    public string Name { get; init; } = "";
+
+    /// <summary>子节点：DownloadFolderItem（子目录）或 DownloadFileItem（文件）混合。</summary>
+    public ObservableCollection<object> Children { get; } = [];
+
+    private bool _isExpanded = true;   // 默认展开，便于直接看到文件
+    public bool IsExpanded
+    {
+        get => _isExpanded;
+        set
+        {
+            if (Set(ref _isExpanded, value))
+                Raise(nameof(ChildrenVisibility));
+        }
+    }
+
+    public Visibility ChildrenVisibility => IsExpanded ? Visibility.Visible : Visibility.Collapsed;
+}
+
 /// <summary>下载页父行：番号分组。</summary>
 public class DownloadGroupItem : ObservableBase
 {
     public string WorkId { get; init; } = "";
+
+    /// <summary>全部分卷文件（扁平，按 UUID 就地更新进度/状态）。</summary>
     public ObservableCollection<DownloadFileItem> Children { get; } = [];
+
+    /// <summary>展示用目录树根节点（文件夹/文件混合），仅在文件集合结构变化时重建。</summary>
+    public ObservableCollection<object> Nodes { get; } = [];
+
+    /// <summary>上次构建目录树时的结构签名（相对路径序列），用于判断是否需要重建。</summary>
+    public string? TreeSignature { get; set; }
 
     private bool _isExpanded;
     public bool IsExpanded
@@ -292,8 +325,14 @@ public partial class DownloadPage : UserControl
     }
 
     /// <summary>从下载链接提取文件名（前台不直接显示链接）。</summary>
-    private static string FileNameOf(string url) =>
-        url.TrimEnd('/').Split('/')[^1].Split('?')[0];
+    private static string FileNameOf(string url)
+    {
+        var raw = url.TrimEnd('/').Split('/')[^1].Split('?')[0];
+        // 直链文件名常为 URL 百分号编码（asmr.one 的日文名尤其如此），解码为明文显示；
+        // 普通未编码文件名解码后保持不变
+        try { return Uri.UnescapeDataString(raw); }
+        catch (Exception) { return raw; }
+    }
 
     /// <summary>返回 (进度百分比, 实时速度 B/s 或 null)。</summary>
     private static (int Pct, double? Speed) FileProgress(string uuid, string status, string dbLong)
@@ -342,12 +381,12 @@ public partial class DownloadPage : UserControl
     {
         UpdateStartButton();
         var rows = Db.Select(
-            "SELECT \"UUID\", \"work_id\", \"url\", \"status\", \"long\", \"error\" FROM \"download_list\" ORDER BY rowid");
+            "SELECT \"UUID\", \"work_id\", \"url\", \"status\", \"long\", \"error\", \"sub_path\" FROM \"download_list\" ORDER BY rowid");
         if (rows == null)
             return;
 
         // 按番号分组，同一番号合并为一个父条目
-        var groups = new Dictionary<string, List<(string Uuid, string Url, string Status, string Long, string? Error)>>();
+        var groups = new Dictionary<string, List<(string Uuid, string Url, string Status, string Long, string? Error, string? SubPath)>>();
         var order = new List<string>();
         foreach (var row in rows)
         {
@@ -358,7 +397,7 @@ public partial class DownloadPage : UserControl
                 order.Add(workId);
             }
             list.Add((row[0] as string ?? "", row[2] as string ?? "",
-                row[3] as string ?? "", row[4]?.ToString() ?? "", row[5] as string));
+                row[3] as string ?? "", row[4]?.ToString() ?? "", row[5] as string, row[6] as string));
         }
 
         // 同步到现有集合（保留展开状态与滚动位置）
@@ -417,7 +456,13 @@ public partial class DownloadPage : UserControl
                     children.Add(child);
                 }
                 child.Url = it.Url;
-                child.FileName = FileNameOf(it.Url);
+                // asmr 直链有作品内目录层级（sub_path 含子目录），用于构建目录树；
+                // 论坛源无 sub_path，回退到 URL 解码后的文件名（位于根层级）
+                var rel = string.IsNullOrEmpty(it.SubPath) ? FileNameOf(it.Url) : it.SubPath!;
+                child.RelPath = rel;
+                // 树中文件夹单独成节点，文件叶子只显示最后一段文件名
+                var slash = rel.LastIndexOf('/');
+                child.FileName = slash >= 0 ? rel[(slash + 1)..] : rel;
                 child.Pct = pct;
                 child.SpeedText = speed is { } sp ? FormatSpeed(sp) : "";
                 child.StatusText = text;
@@ -439,6 +484,41 @@ public partial class DownloadPage : UserControl
             group.Pct = DownloadEngine.UnzipProgress.TryGetValue(workId, out var unzip)
                 ? unzip.Pct
                 : (double)totalPct / Math.Max(1, items.Count);
+
+            // 目录树仅在文件集合结构变化时重建（保留文件夹展开状态、避免每秒刷新闪烁）；
+            // 结构不变时叶子对象就地更新进度，树中引用同一对象自动刷新
+            var signature = string.Join("|", group.Children.Select(c => c.RelPath));
+            if (group.TreeSignature != signature)
+            {
+                group.TreeSignature = signature;
+                RebuildTree(group);
+            }
+        }
+    }
+
+    /// <summary>按各分卷的相对路径（含子目录）把扁平文件列表重建为文件夹/文件目录树。</summary>
+    private static void RebuildTree(DownloadGroupItem group)
+    {
+        group.Nodes.Clear();
+        // 按完整子目录路径缓存文件夹节点；空路径表示根（直接放入 group.Nodes）
+        var folderByPath = new Dictionary<string, DownloadFolderItem>(StringComparer.Ordinal);
+        foreach (var child in group.Children)
+        {
+            var parts = child.RelPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            ObservableCollection<object> parent = group.Nodes;
+            var accum = "";
+            for (var i = 0; i < parts.Length - 1; i++)   // 末段为文件名，前面均为目录
+            {
+                accum = accum.Length == 0 ? parts[i] : accum + "/" + parts[i];
+                if (!folderByPath.TryGetValue(accum, out var folder))
+                {
+                    folder = new DownloadFolderItem { Name = parts[i] };
+                    folderByPath[accum] = folder;
+                    parent.Add(folder);
+                }
+                parent = folder.Children;
+            }
+            parent.Add(child);
         }
     }
 

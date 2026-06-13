@@ -194,18 +194,20 @@
   .vtop .vtitle { flex: 1; color: #ddd; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
   .voverlay video { flex: 1; min-height: 0; max-width: 96vw; max-height: 100%; background: #000; margin: 0 auto; }
 
-  /* 底部音频条 */
+  /* 底部音频条（两行布局：曲名 + 整宽进度条在上，控制按钮在下） */
   .abar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
           background: var(--surface); border-top: 1px solid var(--line);
-          display: none; align-items: center; gap: 8px;
-          padding: 8px max(12px, env(safe-area-inset-left)) max(8px, env(safe-area-inset-bottom)); }
+          display: none; flex-direction: column; gap: 8px;
+          padding: 10px max(12px, env(safe-area-inset-left)) max(10px, env(safe-area-inset-bottom)); }
   .abar.show { display: flex; }
-  .abar .aname { max-width: 22%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 13px; }
-  .abar audio { flex: 1; min-width: 0; height: 36px; }
+  .abar .aname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 13px; }
+  .abar audio { width: 100%; min-width: 0; height: 40px; }
+  .abar .actrls { display: flex; align-items: center; gap: 8px; }
+  .abar .actrls .spacer { flex: 1; }
   .icon-btn.on { background: var(--accent-dim); border-color: var(--accent-dim); color: #fff; }
 
   /* 音频弹出层（播放列表 / 睡眠定时） */
-  .apopup { position: fixed; right: 12px; bottom: 64px; z-index: 55; display: none;
+  .apopup { position: fixed; right: 12px; bottom: 150px; z-index: 55; display: none;
             background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
             padding: 6px; min-width: 220px; max-height: 50vh; overflow-y: auto; box-shadow: 0 6px 24px rgba(0,0,0,.4); }
   .apopup.show { display: block; }
@@ -282,13 +284,16 @@
 </div>
 
 <div id="audioBar" class="abar">
-  <button class="icon-btn" id="aprev" onclick="audioPrev()" title="上一曲">⏮</button>
-  <button class="icon-btn" id="anext" onclick="audioNext()" title="下一曲">⏭</button>
   <span id="aname" class="aname"></span>
   <audio id="aplayer" controls></audio>
-  <button class="icon-btn" id="aplaylistBtn" onclick="toggleAudioPlaylist()" title="播放列表">☰</button>
-  <button class="icon-btn" id="asleepBtn" onclick="toggleSleepMenu()" title="睡眠定时">⏱</button>
-  <button class="icon-btn" onclick="closeAudio()" title="关闭">✕</button>
+  <div class="actrls">
+    <button class="icon-btn" id="aprev" onclick="audioPrev()" title="上一曲">⏮</button>
+    <button class="icon-btn" id="anext" onclick="audioNext()" title="下一曲">⏭</button>
+    <span class="spacer"></span>
+    <button class="icon-btn" id="aplaylistBtn" onclick="toggleAudioPlaylist()" title="播放列表">☰</button>
+    <button class="icon-btn" id="asleepBtn" onclick="toggleSleepMenu()" title="睡眠定时">⏱</button>
+    <button class="icon-btn" onclick="closeAudio()" title="关闭">✕</button>
+  </div>
 </div>
 <div id="audioPlaylist" class="apopup"></div>
 <div id="sleepMenu" class="apopup"></div>

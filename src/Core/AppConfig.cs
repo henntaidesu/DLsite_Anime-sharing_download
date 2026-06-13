@@ -34,7 +34,22 @@ public static class AppConfig
         },
         ["media_lib"] = new() { ["libs"] = "[]" },
         ["language"] = new() { ["lang"] = "zh_CN" },
+        // 作品类型优先搜索来源：SOU(音声) 可选 asmr / anime-sharing，其他类型固定 anime-sharing
+        ["search"] = new() { ["sou_source"] = "asmr" },
         ["web_server"] = new() { ["enabled"] = "False", ["port"] = "8080", ["password"] = "" },
+        // asmr.one 数据源：账号 + 登录后保存的 token / recommenderUuid + 镜像站选择
+        ["asmr"] = new()
+        {
+            ["username"] = "", ["password"] = "", ["token"] = "", ["recommender_uuid"] = "",
+            ["mirror_site"] = "Original",
+        },
+        // asmr.one 下载的文件类型过滤（仅勾选的类型会入队下载）
+        ["asmr_filetype"] = new()
+        {
+            ["mp3"] = "True", ["mp4"] = "True", ["flac"] = "True", ["wav"] = "True",
+            ["jpg"] = "True", ["png"] = "True", ["pdf"] = "True", ["txt"] = "True",
+            ["vtt"] = "True", ["lrc"] = "True",
+        },
     };
 
     private static Dictionary<string, Dictionary<string, string>>? _cache;
@@ -152,6 +167,12 @@ public static class AppConfig
 
     public static string Language => Read("language", "lang", "zh_CN") ?? "zh_CN";
 
+    /// <summary>SOU(音声) 作品优先搜索来源："asmr" = asmr.one 直链；"anime-sharing" = 论坛+debrid。</summary>
+    public static string SouSearchSource => Read("search", "sou_source", "asmr") ?? "asmr";
+
+    /// <summary>SOU 作品是否走 asmr.one 直链下载（由优先搜索设置决定）。</summary>
+    public static bool SouUsesAsmr => SouSearchSource == "asmr";
+
     // ---------- 外部访问（内嵌 Web 服务）----------
 
     /// <summary>是否开启外部访问（内嵌 HTTP 服务，手机/电脑浏览器可访问媒体库）。</summary>
@@ -205,4 +226,38 @@ public static class AppConfig
             new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
         Write("media_lib", "libs", json);
     }
+
+    // ---------- asmr.one 数据源 ----------
+
+    public static string AsmrUsername => Read("asmr", "username", "") ?? "";
+    public static string AsmrPassword => Read("asmr", "password", "") ?? "";
+    public static string AsmrToken => Read("asmr", "token", "") ?? "";
+    public static string AsmrRecommenderUuid => Read("asmr", "recommender_uuid", "") ?? "";
+
+    /// <summary>登录成功后保存 token 与 recommenderUuid。</summary>
+    public static void WriteAsmrToken(string recommenderUuid, string token)
+    {
+        Write("asmr", "recommender_uuid", recommenderUuid);
+        Write("asmr", "token", token);
+    }
+
+    /// <summary>镜像站选择（Original / Mirror-1 / Mirror-2 / Mirror-3）。</summary>
+    public static string AsmrMirrorSite => Read("asmr", "mirror_site", "Original") ?? "Original";
+
+    /// <summary>当前镜像站对应的 API 域名（asmr.one / asmr-100/200/300.com）。</summary>
+    public static string AsmrApiHost => AsmrMirrorSite switch
+    {
+        "Mirror-1" => "asmr-100.com",
+        "Mirror-2" => "asmr-200.com",
+        "Mirror-3" => "asmr-300.com",
+        _ => "asmr.one",
+    };
+
+    /// <summary>某文件扩展名（不含点，小写）是否启用下载。</summary>
+    public static bool AsmrFileTypeEnabled(string ext) =>
+        Read("asmr_filetype", ext.ToLowerInvariant()) != "False";
+
+    /// <summary>全部受支持的 asmr 文件类型（用于设置页勾选 + 默认放行未知扩展名）。</summary>
+    public static readonly string[] AsmrFileTypes =
+        ["mp3", "mp4", "flac", "wav", "jpg", "png", "pdf", "txt", "vtt", "lrc"];
 }

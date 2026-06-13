@@ -41,7 +41,76 @@ public partial class SettingsPage : UserControl
             LogLevelCombo.Items.Add(level);
         foreach (var (_, name) in I18n.Languages)
             LanguageCombo.Items.Add(name);
+        foreach (var site in new[] { "Original", "Mirror-1", "Mirror-2", "Mirror-3" })
+            AsmrMirrorCombo.Items.Add(site);
+        BuildSearchSourceRows();
+        BuildFileTypeChecks();
         _loading = false;
+    }
+
+    // 作品类型 → 来源下拉框（动态生成，按 WorkTypes.Known）
+    private readonly System.Collections.Generic.Dictionary<string, ComboBox> _sourceCombos = new();
+
+    private void BuildSearchSourceRows()
+    {
+        foreach (var (code, name) in WorkTypes.Known)
+        {
+            var row = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Margin = new Thickness(0, 0, 28, 8),
+            };
+            row.Children.Add(new TextBlock
+            {
+                Text = $"{name}（{code}）",
+                MinWidth = 100,
+                Margin = new Thickness(0, 0, 10, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+            });
+            var combo = new ComboBox { Width = 150, Tag = code };
+            // 目前仅 SOU 可走 asmr.one；其余类型仅 anime-sharing（下拉禁用以示固定）
+            if (WorkTypes.SupportsAsmr(code))
+            {
+                combo.Items.Add("ASMR.ONE");
+                combo.Items.Add("anime-sharing");
+            }
+            else
+            {
+                combo.Items.Add("anime-sharing");
+                combo.IsEnabled = false;
+            }
+            combo.SelectionChanged += SourceCombo_SelectionChanged;
+            _sourceCombos[code] = combo;
+            row.Children.Add(combo);
+            SearchSourcePanel.Children.Add(row);
+        }
+    }
+
+    // asmr 文件类型勾选框（动态生成，避免 10 个命名控件）
+    private readonly System.Collections.Generic.Dictionary<string, CheckBox> _fileTypeChecks = new();
+
+    private void BuildFileTypeChecks()
+    {
+        foreach (var ext in AppConfig.AsmrFileTypes)
+        {
+            var check = new CheckBox
+            {
+                Content = ext,
+                Margin = new Thickness(0, 0, 14, 6),
+                MinWidth = 60,
+                Tag = ext,
+            };
+            check.Click += FileTypeCheck_Click;
+            _fileTypeChecks[ext] = check;
+            FileTypePanel.Children.Add(check);
+        }
+    }
+
+    private void FileTypeCheck_Click(object sender, RoutedEventArgs e)
+    {
+        if (_loading || sender is not CheckBox { Tag: string ext })
+            return;
+        AppConfig.Write("asmr_filetype", ext, (sender as CheckBox)!.IsChecked == true ? "True" : "False");
     }
 
     private void RetranslateUi()
@@ -50,6 +119,14 @@ public partial class SettingsPage : UserControl
         DownloadGroup.Header = I18n.Tr("下载");
         ProxyGroup.Header = I18n.Tr("代理");
         DebridGroup.Header = I18n.Tr("Debrid-Link 下载中转站");
+        SearchSourceGroup.Header = I18n.Tr("作品类型优先搜索");
+        SearchSourceHint.Text = I18n.Tr("未列出的作品类型归为「其他」，仅使用 anime-sharing");
+        AsmrGroup.Header = "ASMR.ONE";
+        AsmrUserLabel.Text = I18n.Tr("账号");
+        AsmrPassLabel.Text = I18n.Tr("密码");
+        AsmrMirrorLabel.Text = I18n.Tr("镜像站");
+        AsmrFileTypeLabel.Text = I18n.Tr("下载文件类型");
+        AsmrTestButton.Content = I18n.Tr("登录测试");
         OtherGroup.Header = I18n.Tr("下载选项");
         SystemGroup.Header = I18n.Tr("系统");
         PathLabel.Text = I18n.Tr("缓存路径");
@@ -124,6 +201,24 @@ public partial class SettingsPage : UserControl
         };
 
         DebridKeyBox.Text = AppConfig.DebridApiKey;
+
+        foreach (var (code, combo) in _sourceCombos)
+            combo.SelectedIndex = WorkTypes.SupportsAsmr(code) && AppConfig.SouSearchSource != "anime-sharing"
+                ? 0   // SOU 默认 ASMR.ONE
+                : (WorkTypes.SupportsAsmr(code) ? 1 : 0);  // SOU 选了 anime-sharing → 索引1；其余仅 anime-sharing → 索引0
+
+        AsmrUserBox.Text = AppConfig.AsmrUsername;
+        AsmrPassBox.Text = AppConfig.AsmrPassword;
+        AsmrMirrorCombo.SelectedIndex = AppConfig.AsmrMirrorSite switch
+        {
+            "Mirror-1" => 1,
+            "Mirror-2" => 2,
+            "Mirror-3" => 3,
+            _ => 0,
+        };
+        foreach (var (ext, check) in _fileTypeChecks)
+            check.IsChecked = AppConfig.AsmrFileTypeEnabled(ext);
+
         AutoDownloadCombo.SelectedIndex = AppConfig.AutoDownload ? 0 : 1;
         AutoUnzipCombo.SelectedIndex = AppConfig.AutoUnzip ? 0 : 1;
         DownProcBox.Text = AppConfig.DownloadProcesses.ToString();
@@ -227,6 +322,57 @@ public partial class SettingsPage : UserControl
                 I18n.Tr("测试成功"));
         else
             InAppDialog.Warn(this, I18n.Tr("API Key 无效或网络不可用"), I18n.Tr("测试失败"));
+    }
+
+    // ---------- 作品类型优先搜索 ----------
+
+    private void SourceCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loading || sender is not ComboBox { Tag: string code } combo || combo.SelectedIndex < 0)
+            return;
+        // 仅 SOU 有两个选项（索引0=ASMR.ONE / 1=anime-sharing）；其余类型固定 anime-sharing
+        var source = WorkTypes.SupportsAsmr(code) && combo.SelectedIndex == 0 ? "asmr" : "anime-sharing";
+        AppConfig.Write("search", $"{code.ToLowerInvariant()}_source", source);
+    }
+
+    // ---------- ASMR.ONE ----------
+
+    private void AsmrUserBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (_loading)
+            return;
+        AppConfig.Write("asmr", "username", AsmrUserBox.Text.Trim());
+        AppConfig.Write("asmr", "token", "");  // 改账号后清空旧 token，下次按新账号登录
+    }
+
+    private void AsmrPassBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (_loading)
+            return;
+        AppConfig.Write("asmr", "password", AsmrPassBox.Text.Trim());
+        AppConfig.Write("asmr", "token", "");
+    }
+
+    private void AsmrMirrorCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loading || AsmrMirrorCombo.SelectedIndex < 0)
+            return;
+        AppConfig.Write("asmr", "mirror_site",
+            new[] { "Original", "Mirror-1", "Mirror-2", "Mirror-3" }[AsmrMirrorCombo.SelectedIndex]);
+    }
+
+    private async void AsmrTestButton_Click(object sender, RoutedEventArgs e)
+    {
+        // 先保存当前输入，再用其登录
+        AppConfig.Write("asmr", "username", AsmrUserBox.Text.Trim());
+        AppConfig.Write("asmr", "password", AsmrPassBox.Text.Trim());
+        AppConfig.Write("asmr", "token", "");
+        var (ok, error) = await AsmrApi.LoginAsync();
+        if (ok)
+            InAppDialog.Info(this, I18n.Tr("登录成功，token 已保存"), I18n.Tr("测试成功"));
+        else
+            InAppDialog.Warn(this,
+                I18n.Format(I18n.Tr("登录失败：{err}"), ("err", error ?? "")), I18n.Tr("测试失败"));
     }
 
     private void AutoDownloadCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)

@@ -4,6 +4,7 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
@@ -24,8 +25,30 @@
                     Click="BackButton_Click" Content="← 返回结果" />
         </Grid>
 
+        <!-- asmr.one 直链下载横幅（仅 SOU 音声作品显示） -->
+        <Border x:Name="AsmrBanner" Grid.Row="1" Visibility="Collapsed" Margin="0,0,0,10"
+                Background="{StaticResource CardBrush}" CornerRadius="8" Padding="12,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock x:Name="AsmrBannerTitle" Text="asmr.one 直链下载" FontWeight="SemiBold" FontSize="14" />
+                    <TextBlock x:Name="AsmrBannerDesc" Text="该作品为音声(SOU)，可直接从 asmr.one 下载"
+                               Style="{StaticResource CaptionText}" Margin="0,2,0,0" />
+                </StackPanel>
+                <TextBlock x:Name="AsmrBannerStatus" Grid.Column="1" VerticalAlignment="Center" Margin="8,0"
+                           FontWeight="SemiBold" Foreground="{StaticResource CaptionBrush}" />
+                <Button x:Name="AsmrDownloadButton" Grid.Column="2" Content="asmr.one 下载" MinWidth="120"
+                        Style="{StaticResource AccentButton}" VerticalAlignment="Center"
+                        Click="AsmrDownload_Click" />
+            </Grid>
+        </Border>
+
         <!-- 结果列表 / 社团卡片 两页切换 -->
-        <Grid Grid.Row="1">
+        <Grid Grid.Row="2">
             <!-- 搜索结果列表（每个帖子内联展示抓取到的网盘卡片与自动检测状态） -->
             <ListBox x:Name="ResultList" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                      VirtualizingPanel.ScrollUnit="Pixel"

@@ -61,6 +61,44 @@
                 </DockPanel>
             </GroupBox>
 
+            <!-- 作品类型优先搜索 -->
+            <GroupBox x:Name="SearchSourceGroup" Header="作品类型优先搜索">
+                <StackPanel>
+                    <!-- 每个已知作品类型一行（动态生成）：类型名（代码）+ 来源下拉 -->
+                    <WrapPanel x:Name="SearchSourcePanel" />
+                    <TextBlock x:Name="SearchSourceHint" Text="未列出的作品类型归为「其他」，仅使用 anime-sharing"
+                               Style="{StaticResource CaptionText}" Margin="0,6,0,0" />
+                </StackPanel>
+            </GroupBox>
+
+            <!-- ASMR.ONE -->
+            <GroupBox x:Name="AsmrGroup" Header="ASMR.ONE">
+                <StackPanel>
+                    <!-- 账号 + 密码 同一行 -->
+                    <StackPanel Orientation="Horizontal" Margin="0,4">
+                        <TextBlock x:Name="AsmrUserLabel" Text="账号" Style="{StaticResource FieldLabel}" />
+                        <TextBox x:Name="AsmrUserBox" Width="280" VerticalContentAlignment="Center"
+                                 LostFocus="AsmrUserBox_LostFocus" />
+                        <TextBlock x:Name="AsmrPassLabel" Text="密码" Style="{StaticResource FieldLabel}"
+                                   MinWidth="0" Margin="24,0,12,0" />
+                        <TextBox x:Name="AsmrPassBox" Width="280" VerticalContentAlignment="Center"
+                                 LostFocus="AsmrPassBox_LostFocus" />
+                        <Button x:Name="AsmrTestButton" Content="登录测试" Margin="16,0,0,0"
+                                Click="AsmrTestButton_Click" />
+                    </StackPanel>
+                    <!-- 镜像站 + 下载文件类型（两行）同一行 -->
+                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                        <TextBlock x:Name="AsmrMirrorLabel" Text="镜像站" Style="{StaticResource FieldLabel}"
+                                   VerticalAlignment="Top" />
+                        <ComboBox x:Name="AsmrMirrorCombo" Width="160" VerticalAlignment="Top"
+                                  SelectionChanged="AsmrMirrorCombo_SelectionChanged" />
+                        <TextBlock x:Name="AsmrFileTypeLabel" Text="下载文件类型" Style="{StaticResource FieldLabel}"
+                                   MinWidth="0" Margin="24,0,12,0" VerticalAlignment="Top" />
+                        <WrapPanel x:Name="FileTypePanel" MaxWidth="400" VerticalAlignment="Top" />
+                    </StackPanel>
+                </StackPanel>
+            </GroupBox>
+
             <!-- 下载选项 -->
             <GroupBox x:Name="OtherGroup" Header="下载选项">
                 <StackPanel Orientation="Horizontal" Margin="0,4">

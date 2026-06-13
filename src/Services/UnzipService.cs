@@ -243,7 +243,7 @@ public static class UnzipService
                     var transcoded = FixEncoding(folderPath);
                     Logger.Info($"{workId} 解压成功");
                     Logger.Info(transcoded ? $"{workId} 转码成功" : $"{workId} 无需转码");
-                    PostExtract(workId, folderPath);
+                    FinalizeIntoLibrary(workId, folderPath);
                     return;
                 }
                 // 防止无限循环：本轮压缩包集合与上一轮完全相同，说明解压/删除均未推进，中止
@@ -289,10 +289,11 @@ public static class UnzipService
     }
 
     /// <summary>
-    /// 解压成功后：从缓存目录移动到媒体库目标目录，标记为已品悦，
+    /// 下载/解压成功后入库：从缓存目录移动到媒体库目标目录，标记为已品悦，
     /// 关联所属媒体库和文件夹，然后后台补全详细元数据。
+    /// asmr.one 直链下载（无压缩包）也复用此收尾逻辑。
     /// </summary>
-    private static void PostExtract(string workId, string folderPath)
+    internal static void FinalizeIntoLibrary(string workId, string folderPath)
     {
         // 解压完成后把作品从缓存目录移动到媒体库目标目录，后续都用最终目录
         folderPath = DownloadEngine.MoveToTargetFolder(workId, folderPath);

@@ -129,7 +129,9 @@ public static class Db
             [
                 "state", "library", "sell_date", "series", "scenario", "illust",
                 "voice_actor", "genre", "file_size", "cover", "meta_scanned", "folder",
-                "target", "target_lib", "read_flag", "favorite"
+                "target", "target_lib", "read_flag", "favorite",
+                // 数据源区分："anime-sharing"(默认/旧数据) 或 "asmr"；asmr_id 存 asmr.one 的数字作品 id（调 API 用）
+                "source", "asmr_id"
             ];
             foreach (var col in required)
             {
@@ -155,6 +157,17 @@ public static class Db
                 using var cmd = conn.CreateCommand();
                 cmd.CommandText = "ALTER TABLE \"download_list\" ADD COLUMN \"error\" text";
                 cmd.ExecuteNonQuery();
+            }
+            // download_list 补加来源与作品内子目录列：
+            // source="asmr" 时 url 即直链（跳过 debrid 解析）；sub_path 为该文件在作品内的相对子目录（保留 asmr 目录树）
+            foreach (var dlCol in new[] { "source", "sub_path" })
+            {
+                if (!dlColumns.Contains(dlCol))
+                {
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = $"ALTER TABLE \"download_list\" ADD COLUMN \"{dlCol}\" text";
+                    cmd.ExecuteNonQuery();
+                }
             }
             _initialized = true;
         }
