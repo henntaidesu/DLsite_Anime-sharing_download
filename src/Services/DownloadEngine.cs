@@ -57,6 +57,9 @@ public static class DownloadEngine
     private static readonly object UnzipLock = new();
     private static readonly HashSet<string> Unzipping = [];
 
+    // 串行化"移动到媒体库"：一次只移动一个作品，避免多个跨盘移动同时抢占磁盘 IO 互相拖慢
+    private static readonly object MoveLock = new();
+
     // ---------- 作品目录 ----------
 
     /// <summary>由 UI 在入队时设定作品解压完成后要移动到的媒体库目标目录及所属媒体库名（立即落库防重启丢失）。</summary>
@@ -170,50 +173,55 @@ public static class DownloadEngine
                 StringComparison.OrdinalIgnoreCase))
             return cacheFolder;  // 缓存路径就是媒体库目录，无需移动
 
-        // 跨盘移动是复制+删除，用目标目录已写入字节数 / 源目录总字节数估算进度
-        var total = Math.Max(1, FolderSize(cacheFolder));
-        UnzipProgress[workId] = new UnzipProgressInfo { State = "moving", Pct = 0 };
-        using var stop = new ManualResetEventSlim(false);
-        var monitor = new Thread(() =>
+        // 串行化：一次只移动一个作品。等锁期间先显示"等待移动"，避免多个跨盘移动同时抢磁盘 IO。
+        UnzipProgress[workId] = new UnzipProgressInfo { State = "movewait", Pct = 0 };
+        lock (MoveLock)
         {
-            while (!stop.Wait(1000))
+            // 跨盘移动是复制+删除，用目标目录已写入字节数 / 源目录总字节数估算进度
+            var total = Math.Max(1, FolderSize(cacheFolder));
+            UnzipProgress[workId] = new UnzipProgressInfo { State = "moving", Pct = 0 };
+            using var stop = new ManualResetEventSlim(false);
+            var monitor = new Thread(() =>
             {
-                var pct = (int)Math.Min(99, FolderSize(dest) * 100 / total);
-                // 移动若已结束，绝不能再写回进度，否则进度条目被"复活"卡在 99%
-                if (stop.IsSet)
-                    break;
-                UnzipProgress[workId] = new UnzipProgressInfo { State = "moving", Pct = pct };
-            }
-        }) { IsBackground = true, Name = $"move-mon-{workId}" };
-        monitor.Start();
-        try
-        {
-            Directory.CreateDirectory(targetRoot);
-            if (Directory.Exists(dest))
+                while (!stop.Wait(1000))
+                {
+                    var pct = (int)Math.Min(99, FolderSize(dest) * 100 / total);
+                    // 移动若已结束，绝不能再写回进度，否则进度条目被"复活"卡在 99%
+                    if (stop.IsSet)
+                        break;
+                    UnzipProgress[workId] = new UnzipProgressInfo { State = "moving", Pct = pct };
+                }
+            }) { IsBackground = true, Name = $"move-mon-{workId}" };
+            monitor.Start();
+            try
             {
-                Logger.Warning($"{workId} 媒体库已存在同名目录，先删除再移动: {dest}");
-                Directory.Delete(dest, true);
+                Directory.CreateDirectory(targetRoot);
+                if (Directory.Exists(dest))
+                {
+                    Logger.Warning($"{workId} 媒体库已存在同名目录，先删除再移动: {dest}");
+                    Directory.Delete(dest, true);
+                }
+                Logger.Info($"{workId} 开始移动到媒体库: {dest}");
+                MoveDirectory(cacheFolder, dest);
             }
-            Logger.Info($"{workId} 开始移动到媒体库: {dest}");
-            MoveDirectory(cacheFolder, dest);
+            catch (Exception e)
+            {
+                Logger.Error(e, "移动到媒体库");
+                Logger.Error($"{workId} 移动到媒体库失败，保留在缓存目录: {cacheFolder}");
+                return cacheFolder;
+            }
+            finally
+            {
+                stop.Set();
+                monitor.Join();  // 等监控线程退出，确保返回后不会再写 UnzipProgress
+            }
+            // cover 随文件夹一起被移动，数据库里的绝对路径必须同步改写，否则主图无法显示
+            Db.Execute(
+                "UPDATE \"works\" SET \"folder\" = @d, \"cover\" = REPLACE(\"cover\", @s, @d) WHERE \"work_id\" = @w",
+                ("@d", dest), ("@s", cacheFolder), ("@w", workId));
+            Logger.Info($"{workId} 解压完成，已移动到媒体库: {dest}");
+            return dest;
         }
-        catch (Exception e)
-        {
-            Logger.Error(e, "移动到媒体库");
-            Logger.Error($"{workId} 移动到媒体库失败，保留在缓存目录: {cacheFolder}");
-            return cacheFolder;
-        }
-        finally
-        {
-            stop.Set();
-            monitor.Join();  // 等监控线程退出，确保返回后不会再写 UnzipProgress
-        }
-        // cover 随文件夹一起被移动，数据库里的绝对路径必须同步改写，否则主图无法显示
-        Db.Execute(
-            "UPDATE \"works\" SET \"folder\" = @d, \"cover\" = REPLACE(\"cover\", @s, @d) WHERE \"work_id\" = @w",
-            ("@d", dest), ("@s", cacheFolder), ("@w", workId));
-        Logger.Info($"{workId} 解压完成，已移动到媒体库: {dest}");
-        return dest;
     }
 
     /// <summary>跨盘安全的目录移动：同盘直接 Move，跨盘复制后删除源。</summary>
@@ -825,8 +833,9 @@ public static class DownloadEngine
         {
             while (!stop.Wait(1000))
             {
-                if (UnzipProgress.TryGetValue(workId, out var current) && current.State == "moving")
-                    continue;  // 已进入移动阶段，进度改由移动逻辑维护
+                if (UnzipProgress.TryGetValue(workId, out var current)
+                    && current.State is "moving" or "movewait")
+                    continue;  // 已进入等待移动/移动阶段，进度改由移动逻辑维护
                 if (!Directory.Exists(folder))
                     continue;  // 解压完成后已移动到媒体库，保持上次进度直到解压线程收尾
                 var pct = (int)Math.Min(99, UnzipService.ExtractedSize(folder) * 100 / total);

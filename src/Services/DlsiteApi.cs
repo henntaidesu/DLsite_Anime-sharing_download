@@ -23,8 +23,8 @@ public class DlWork
     public string IsAna { get; init; } = "";
 }
 
-/// <summary>搜索输入的类型：作品号（RJ/BJ/VJ）/ 社团号（RG）/ 无法识别。</summary>
-public enum SearchKind { Work, Maker, Invalid }
+/// <summary>搜索输入的类型：作品号（RJ/BJ/VJ）/ 社团号（RG）/ DLsite 搜索筛选列表页（fsr）/ 无法识别。</summary>
+public enum SearchKind { Work, Maker, Catalog, Invalid }
 
 /// <summary>社团作品列表中的一条作品。</summary>
 public class DlMakerWork
@@ -94,16 +94,23 @@ public static class DlsiteApi
     private static readonly Regex UrlWorkRe = new(@"product_id/((?:RJ|BJ|VJ)\d+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private static readonly Regex UrlMakerRe = new(@"maker_id/(RG\d+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+    /// <summary>DLsite 搜索/筛选列表页前缀（必须以此开头才按目录列表整页解析）。</summary>
+    private const string CatalogPrefix = "https://www.dlsite.com/maniax/fsr/";
+
     /// <summary>
-    /// 识别搜索框输入：作品号 / 社团号 / DLsite 链接（从中提取 product_id 或 maker_id）。
-    /// 返回归一化后的大写编号。
+    /// 识别搜索框输入：作品号 / 社团号 / DLsite 搜索筛选列表页（fsr）/ DLsite 链接（从中提取 product_id 或 maker_id）。
+    /// 返回归一化后的大写编号，或（Catalog）原始 fsr URL。
     /// </summary>
     public static (SearchKind Kind, string Id) ParseSearchInput(string raw)
     {
         raw = (raw ?? "").Trim();
         if (raw.Length == 0)
             return (SearchKind.Invalid, "");
-        // 先看是否为 DLsite 链接
+        // DLsite 搜索/筛选列表页（fsr）：整页作为目录列表解析。
+        // 须先于 product_id/maker_id 提取，否则带 maker_id 筛选的 fsr URL 会被误判为社团搜索。
+        if (raw.StartsWith(CatalogPrefix, StringComparison.OrdinalIgnoreCase))
+            return (SearchKind.Catalog, raw);
+        // 再看是否为 DLsite 作品/社团链接
         var m = UrlWorkRe.Match(raw);
         if (m.Success)
             return (SearchKind.Work, m.Groups[1].Value.ToUpperInvariant());
@@ -132,7 +139,6 @@ public static class DlsiteApi
     /// </summary>
     public static async Task<(List<DlMakerWork> Works, bool HasMore)> GetMakerWorksAsync(string makerId, int page)
     {
-        var result = new List<DlMakerWork>();
         try
         {
             using var client = Http.CreateClient(TimeSpan.FromSeconds(20));
@@ -141,62 +147,100 @@ public static class DlsiteApi
                 ? $"https://www.dlsite.com/maniax/circle/profile/=/maker_id/{makerId}.html"
                 : $"https://www.dlsite.com/maniax/circle/profile/=/maker_id/{makerId}/page/{page}.html";
             var html = await client.GetStringAsync(url);
-            var doc = new HtmlDocument();
-            doc.LoadHtml(html);
-
-            // 找所有指向 product_id 的链接，按编号去重并合并标题/缩略图
-            var byId = new Dictionary<string, DlMakerWork>();
-            var order = new List<string>();
-            var anchors = doc.DocumentNode.SelectNodes("//a[contains(@href,'/product_id/')]");
-            if (anchors != null)
-                foreach (var a in anchors)
-                {
-                    var mm = UrlWorkRe.Match(a.GetAttributeValue("href", ""));
-                    if (!mm.Success)
-                        continue;
-                    var id = mm.Groups[1].Value.ToUpperInvariant();
-                    if (!byId.TryGetValue(id, out var work))
-                    {
-                        work = new DlMakerWork { WorkId = id };
-                        byId[id] = work;
-                        order.Add(id);
-                    }
-                    // 缩略图：优先 data-src（懒加载），其次 src
-                    var img = a.SelectSingleNode(".//img");
-                    if (work.Thumb.Length == 0 && img != null)
-                        work.Thumb = NormalizeThumb(
-                            FirstNonEmpty(img.GetAttributeValue("data-src", ""), img.GetAttributeValue("src", "")));
-                    // 标题：title 属性 / img alt / 链接文本
-                    if (work.Title.Length == 0)
-                    {
-                        var title = FirstNonEmpty(
-                            a.GetAttributeValue("title", ""),
-                            img?.GetAttributeValue("alt", "") ?? "",
-                            HtmlEntity.DeEntitize(a.InnerText)?.Trim() ?? "");
-                        work.Title = title;
-                    }
-                }
-            result = order.Select(id => byId[id]).ToList();
-
-            // 缩略图：DLsite 封面图是懒加载，抓 img 标签往往拿到占位图；
-            // 这里按 DLsite 约定的封面路径直接用 RJ 号构造，更可靠（BJ/VJ 保留抓取到的）。
-            foreach (var w in result)
-            {
-                var computed = ThumbFromWorkId(w.WorkId);
-                if (computed.Length > 0)
-                    w.Thumb = computed;
-            }
-
-            // 是否还有下一页：存在指向 page/(page+1) 的分页链接
-            var hasMore = doc.DocumentNode.SelectSingleNode(
-                $"//a[contains(@href,'/page/{page + 1}')]") != null;
-            return (result, hasMore && result.Count > 0);
+            return ParseWorkListHtml(html, page);
         }
         catch (Exception e)
         {
             Logger.Error(e, "DLsite maker works");
-            return (result, false);
+            return ([], false);
         }
+    }
+
+    /// <summary>
+    /// 抓取 DLsite 搜索/筛选列表页（fsr URL）的作品列表，按页返回（page 从 1 开始）。
+    /// 解析方式与社团页完全一致，供搜索页复用同一作品网格展示。
+    /// </summary>
+    public static async Task<(List<DlMakerWork> Works, bool HasMore)> GetCatalogWorksAsync(string searchUrl, int page)
+    {
+        try
+        {
+            using var client = Http.CreateClient(TimeSpan.FromSeconds(20));
+            var html = await client.GetStringAsync(BuildCatalogPageUrl(searchUrl, page));
+            return ParseWorkListHtml(html, page);
+        }
+        catch (Exception e)
+        {
+            Logger.Error(e, "DLsite catalog works");
+            return ([], false);
+        }
+    }
+
+    private static readonly Regex PageSegRe = new(@"/page/\d+", RegexOptions.Compiled);
+
+    /// <summary>把 fsr URL 中的 /page/N 段替换为目标页号；若无该段则在末尾补一个。</summary>
+    private static string BuildCatalogPageUrl(string url, int page)
+    {
+        if (PageSegRe.IsMatch(url))
+            return PageSegRe.Replace(url, $"/page/{page}", 1);
+        return url.TrimEnd('/') + $"/page/{page}";
+    }
+
+    /// <summary>
+    /// 解析作品列表页 HTML（社团页 / fsr 搜索页通用）：找所有 product_id 链接去重，
+    /// 合并标题/缩略图并按 RJ 约定覆盖封面，返回本页作品与是否还有下一页。
+    /// </summary>
+    private static (List<DlMakerWork> Works, bool HasMore) ParseWorkListHtml(string html, int page)
+    {
+        var doc = new HtmlDocument();
+        doc.LoadHtml(html);
+
+        // 找所有指向 product_id 的链接，按编号去重并合并标题/缩略图
+        var byId = new Dictionary<string, DlMakerWork>();
+        var order = new List<string>();
+        var anchors = doc.DocumentNode.SelectNodes("//a[contains(@href,'/product_id/')]");
+        if (anchors != null)
+            foreach (var a in anchors)
+            {
+                var mm = UrlWorkRe.Match(a.GetAttributeValue("href", ""));
+                if (!mm.Success)
+                    continue;
+                var id = mm.Groups[1].Value.ToUpperInvariant();
+                if (!byId.TryGetValue(id, out var work))
+                {
+                    work = new DlMakerWork { WorkId = id };
+                    byId[id] = work;
+                    order.Add(id);
+                }
+                // 缩略图：优先 data-src（懒加载），其次 src
+                var img = a.SelectSingleNode(".//img");
+                if (work.Thumb.Length == 0 && img != null)
+                    work.Thumb = NormalizeThumb(
+                        FirstNonEmpty(img.GetAttributeValue("data-src", ""), img.GetAttributeValue("src", "")));
+                // 标题：title 属性 / img alt / 链接文本
+                if (work.Title.Length == 0)
+                {
+                    var title = FirstNonEmpty(
+                        a.GetAttributeValue("title", ""),
+                        img?.GetAttributeValue("alt", "") ?? "",
+                        HtmlEntity.DeEntitize(a.InnerText)?.Trim() ?? "");
+                    work.Title = title;
+                }
+            }
+        var result = order.Select(id => byId[id]).ToList();
+
+        // 缩略图：DLsite 封面图是懒加载，抓 img 标签往往拿到占位图；
+        // 这里按 DLsite 约定的封面路径直接用 RJ 号构造，更可靠（BJ/VJ 保留抓取到的）。
+        foreach (var w in result)
+        {
+            var computed = ThumbFromWorkId(w.WorkId);
+            if (computed.Length > 0)
+                w.Thumb = computed;
+        }
+
+        // 是否还有下一页：存在指向 page/(page+1) 的分页链接
+        var hasMore = doc.DocumentNode.SelectSingleNode(
+            $"//a[contains(@href,'/page/{page + 1}')]") != null;
+        return (result, hasMore && result.Count > 0);
     }
 
     private static string FirstNonEmpty(params string[] values) =>

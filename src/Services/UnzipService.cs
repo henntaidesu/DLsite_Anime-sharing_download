@@ -68,9 +68,12 @@ public static class UnzipService
             if (File.Exists(BandizipBz))
             {
                 // bz 返回非 0 多为输出文件被杀软/索引器临时占用（0x20 共享冲突），
-                // -aoa 会覆盖已解出的部分，因此可安全重试，等占用释放后再来
+                // -aoa 会覆盖已解出的部分，因此可安全重试，等占用释放后再来。
+                // 但 .exe 多为作品自带可执行文件（仅极少数是自解压包），失败通常是"根本不是压缩包"
+                // 而非占用冲突，没必要长等重试——单次尝试即可，让上层快速判定为普通文件跳过。
+                var maxAttempts = Path.GetExtension(filePath).Equals(".exe", StringComparison.OrdinalIgnoreCase) ? 1 : 3;
                 var lastCode = 0;
-                for (var attempt = 1; attempt <= 3; attempt++)
+                for (var attempt = 1; attempt <= maxAttempts; attempt++)
                 {
                     using var process = Process.Start(new ProcessStartInfo
                     {
@@ -83,9 +86,9 @@ public static class UnzipService
                     if (process.ExitCode == 0)
                         return true;
                     lastCode = process.ExitCode;
-                    if (attempt < 3)
+                    if (attempt < maxAttempts)
                     {
-                        Logger.Warning($"bz.exe 解压返回码 {lastCode}，可能文件被占用，{attempt}/3 次后重试");
+                        Logger.Warning($"bz.exe 解压返回码 {lastCode}，可能文件被占用，{attempt}/{maxAttempts} 次后重试");
                         Thread.Sleep(10000);
                     }
                 }
@@ -234,9 +237,13 @@ public static class UnzipService
             Logger.Info($"{workId} 正在解压");
             string? lastSignature = null;   // 上一轮压缩包集合签名，用于检测"无进展"避免死循环
             var rounds = 0;
+            // 已确认"解压失败、不是自解压包"的 exe（即作品自带的可执行文件）：
+            // 不再当压缩包反复尝试，也绝不删除，否则会卡死整个收尾流程或破坏作品。
+            var skipExe = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             while (true)
             {
-                var archives = GetAllArchiveFiles(folderPath);
+                var archives = GetAllArchiveFiles(folderPath)
+                    .Where(a => !skipExe.Contains(a)).ToList();
                 if (archives.Count == 0)
                 {
                     MoveToRoot(workId, folderPath);
@@ -261,25 +268,52 @@ public static class UnzipService
                     Logger.Error($"{workId} 解压轮次超过上限（100），已中止");
                     return;
                 }
-                var fileName = archives[0];
-                if (Path.GetExtension(fileName).Equals(".exe", StringComparison.OrdinalIgnoreCase)
-                    && archives.Count > 1)
-                    fileName = archives[1];
-                if (!ExtractArchive(fileName, folderPath))
-                    return;
 
-                Thread.Sleep(3000);
-                // 删除所有压缩文件
-                foreach (var archive in archives)
-                    try
+                // 优先解真正的压缩包（zip/rar，含分卷）；只剩 exe 时才逐个试解。
+                var realArchives = archives
+                    .Where(a => !Path.GetExtension(a).Equals(".exe", StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                if (realArchives.Count > 0)
+                {
+                    if (!ExtractArchive(realArchives[0], folderPath))
+                        return;
+                    Thread.Sleep(3000);
+                    // 只删真正的压缩包/分卷，绝不删除解压出来的 exe（作品本体）
+                    foreach (var archive in realArchives)
+                        try
+                        {
+                            if (File.Exists(archive))
+                                File.Delete(archive);
+                        }
+                        catch (Exception e)
+                        {
+                            Logger.Error(e, $"删除压缩包 {archive}");
+                        }
+                }
+                else
+                {
+                    // 只剩 exe：可能是自解压包，也可能是作品自带 exe。试解一次区分：
+                    // 成功 → 是自解压包，删掉它继续；失败 → 是作品文件，跳过保留、继续收尾。
+                    var exe = archives[0];
+                    if (ExtractArchive(exe, folderPath))
                     {
-                        if (File.Exists(archive))
-                            File.Delete(archive);
+                        Thread.Sleep(3000);
+                        try
+                        {
+                            if (File.Exists(exe))
+                                File.Delete(exe);
+                        }
+                        catch (Exception e)
+                        {
+                            Logger.Error(e, $"删除自解压包 {exe}");
+                        }
                     }
-                    catch (Exception e)
+                    else
                     {
-                        Logger.Error(e, $"删除压缩包 {archive}");
+                        Logger.Warning($"{workId} {Path.GetFileName(exe)} 不是自解压压缩包，按作品文件保留");
+                        skipExe.Add(exe);
                     }
+                }
             }
         }
         catch (Exception e)

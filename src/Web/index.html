@@ -9,7 +9,7 @@
   :root {
     --bg: #1b1b1f; --surface: #26262b; --surface2: #2f2f36; --line: #3a3a42;
     --text: #e8e8ea; --muted: #9a9aa3; --accent: #6aa3ff; --accent-dim: #4a78c0;
-    --radius: 10px;
+    --radius: 10px; --nav-w: 210px;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; height: 100%; }
@@ -43,10 +43,39 @@
   }
   input:focus, select:focus { border-color: var(--accent); }
 
-  .tabs { display: flex; gap: 6px; overflow-x: auto; max-width: 1200px; margin: 6px auto 0; padding-bottom: 2px; }
-  .tab { padding: 6px 14px; border-radius: 999px; background: var(--surface);
-         border: 1px solid var(--line); cursor: pointer; white-space: nowrap; font-size: 14px; color: var(--muted); }
-  .tab.active { background: var(--accent-dim); color: #fff; border-color: var(--accent-dim); }
+  /* ===== 左侧导航（对齐 WPF 左侧菜单）/ 移动端抽屉 ===== */
+  .nav { position: fixed; left: 0; top: 0; bottom: 0; width: var(--nav-w); z-index: 40;
+         background: var(--surface); border-right: 1px solid var(--line);
+         display: flex; flex-direction: column; gap: 4px;
+         padding: 12px 10px max(12px, env(safe-area-inset-bottom)); overflow-y: auto; }
+  .nav .brand { font-weight: 700; font-size: 16px; padding: 6px 10px 14px; color: var(--text); }
+  .navitem { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px;
+             cursor: pointer; color: var(--muted); font-size: 14.5px; white-space: nowrap; }
+  .navitem:hover { background: var(--surface2); color: var(--text); }
+  .navitem.active { background: var(--accent-dim); color: #fff; }
+  .navitem .ni { width: 20px; text-align: center; flex: none; }
+  .main-wrap { margin-left: var(--nav-w); min-height: 100%; }
+  .drawer-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 39; display: none; }
+  #menuBtn { display: none; }
+
+  /* 桌面 / 平板（Windows/macOS/iPadOS）：侧栏常驻；底部音频条从侧栏右侧开始 */
+  .layout-desktop .drawer-backdrop { display: none !important; }
+  .layout-desktop #menuBtn { display: none !important; }
+  .layout-desktop .abar { left: var(--nav-w); }
+
+  /* 移动端（iOS/Android 手机）：侧栏改为左侧抽屉，顶部左侧目录键、返回键移到右侧 */
+  .layout-mobile .nav { width: 264px; transform: translateX(-100%);
+                        transition: transform .22s ease; z-index: 60; box-shadow: 2px 0 18px rgba(0,0,0,.55); }
+  .layout-mobile .nav.open { transform: translateX(0); }
+  .layout-mobile .drawer-backdrop { z-index: 59; }
+  .layout-mobile .drawer-backdrop.show { display: block; }
+  .layout-mobile .main-wrap { margin-left: 0; }
+  .layout-mobile #menuBtn { display: inline-block; order: 0; }
+  .layout-mobile .topbar { flex-wrap: wrap; }
+  .layout-mobile #title { order: 1; margin-right: auto; }
+  .layout-mobile #back { order: 2; }
+  .layout-mobile #search { order: 5; flex-basis: 100%; }
+  .layout-mobile #sort { order: 6; }
 
   main { max-width: 1200px; margin: 0 auto; padding: 12px max(12px, env(safe-area-inset-left)) 40px; }
   .count { color: var(--muted); font-size: 13px; margin: 4px 2px 12px; }
@@ -207,10 +236,15 @@
   .icon-btn.on { background: var(--accent-dim); border-color: var(--accent-dim); color: #fff; }
 
   /* 音频弹出层（播放列表 / 睡眠定时） */
-  .apopup { position: fixed; right: 12px; bottom: 150px; z-index: 55; display: none;
+  .apopup { position: fixed; right: 12px; left: 12px; bottom: 150px; z-index: 55; display: none;
             background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
-            padding: 6px; min-width: 220px; max-height: 50vh; overflow-y: auto; box-shadow: 0 6px 24px rgba(0,0,0,.4); }
+            padding: 6px; min-width: 220px; max-width: 420px; margin-left: auto;
+            max-height: calc(100vh - 170px); overflow-y: auto; box-shadow: 0 6px 24px rgba(0,0,0,.4); }
   .apopup.show { display: block; }
+  .sleep-input { display: flex; align-items: center; gap: 6px; padding: 6px 8px 8px; }
+  .sleep-input input { flex: 1; }
+  .sleep-input button { background: var(--accent-dim); border: 1px solid var(--accent-dim); color: #fff;
+                        border-radius: 8px; padding: 7px 12px; cursor: pointer; font-size: 14px; white-space: nowrap; }
   .aprow { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 13.5px; }
   .aprow:hover { background: var(--surface2); }
   .aprow.cur { background: var(--accent-dim); color: #fff; }
@@ -250,19 +284,23 @@
 </style>
 </head>
 <body>
-<header>
-  <div class="topbar">
-    <button id="back" class="icon-btn" hidden>← 返回</button>
-    <span id="title" class="title">搜索</span>
-    <input id="search" class="grow" type="search" placeholder="搜索 RJ号 / 作品名 / 社团" autocomplete="off" hidden>
-    <select id="sort" hidden></select>
-  </div>
-  <div id="tabs" class="tabs"></div>
-</header>
-<main>
-  <div id="count" class="count"></div>
-  <div id="content"></div>
-</main>
+<div id="drawerBackdrop" class="drawer-backdrop" onclick="closeDrawer()"></div>
+<aside id="nav" class="nav"></aside>
+<div class="main-wrap">
+  <header>
+    <div class="topbar">
+      <button id="menuBtn" class="icon-btn" onclick="toggleDrawer()" title="目录" aria-label="目录">☰ 目录</button>
+      <button id="back" class="icon-btn" hidden>← 返回</button>
+      <span id="title" class="title">媒体库</span>
+      <input id="search" class="grow" type="search" placeholder="搜索 RJ号 / 作品名 / 社团" autocomplete="off" hidden>
+      <select id="sort" hidden></select>
+    </div>
+  </header>
+  <main>
+    <div id="count" class="count"></div>
+    <div id="content"></div>
+  </main>
+</div>
 
 <div id="lightbox" class="lightbox">
   <button class="lb-btn lb-close" onclick="LB.close()">✕</button>
@@ -326,13 +364,13 @@ function fallbackCopy(t) {
 }
 
 const SECTIONS = [
-  { key: 'medialib', label: '媒体库', root: 'libs' },
-  { key: 'download', label: '下载' },
-  { key: 'search',   label: '搜索' },
-  { key: 'tag',      label: '标签',   root: 'genres' },
-  { key: 'type',     label: '作品形式', root: 'types' },
-  { key: 'favorite', label: '收藏',   root: 'favorites' },
-  { key: 'settings', label: '设置' },
+  { key: 'medialib', label: '媒体库', root: 'libs',     icon: '📚' },
+  { key: 'download', label: '下载',                     icon: '⬇' },
+  { key: 'search',   label: '搜索',                     icon: '🔍' },
+  { key: 'tag',      label: '标签',   root: 'genres',   icon: '🏷' },
+  { key: 'type',     label: '作品形式', root: 'types',   icon: '🎬' },
+  { key: 'favorite', label: '收藏',   root: 'favorites', icon: '♥' },
+  { key: 'settings', label: '设置',                     icon: '⚙' },
 ];
 const MAKER_SORTS = ['作品数 多→少', '作品数 少→多', '社团名 A→Z'];
 const WORK_SORTS  = ['发售日 新→旧', '发售日 旧→新', 'RJ号 新→旧', 'RJ号 旧→新'];
@@ -369,19 +407,41 @@ async function doLogin() {
 }
 $('pw').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
 
-// ---------- 顶部分区 ----------
+// ---------- 左侧导航（桌面常驻 / 移动抽屉） ----------
 function buildTabs() {
-  const box = $('tabs'); box.innerHTML = '';
+  const box = $('nav'); box.innerHTML = '';
+  box.appendChild(el('div', 'brand', 'DLsite 下载器'));
   SECTIONS.forEach(s => {
-    const b = el('div', 'tab' + (s.key === section ? ' active' : ''), s.label);
+    const b = el('div', 'navitem' + (s.key === section ? ' active' : ''));
+    b.appendChild(el('span', 'ni', s.icon || ''));
+    b.appendChild(el('span', null, s.label));
     b.onclick = () => selectSection(s.key);
     box.appendChild(b);
   });
 }
+// 移动端抽屉开关
+function toggleDrawer() {
+  const open = $('nav').classList.toggle('open');
+  $('drawerBackdrop').classList.toggle('show', open);
+}
+function closeDrawer() {
+  $('nav').classList.remove('open');
+  $('drawerBackdrop').classList.remove('show');
+}
+// 设备/窗口决定布局：iOS/Android 手机或窄窗 → 抽屉；Windows/macOS/iPadOS/平板 → 侧栏常驻
+function applyLayout() {
+  const ua = navigator.userAgent;
+  const phone = /iPhone|iPod|Windows Phone/.test(ua) || (/Android/.test(ua) && /Mobile/.test(ua));
+  const mobile = phone || window.innerWidth <= 700;
+  document.body.classList.toggle('layout-mobile', mobile);
+  document.body.classList.toggle('layout-desktop', !mobile);
+  if (!mobile) closeDrawer();
+}
+window.addEventListener('resize', applyLayout);
 function stopTimers() { if (pollTimer) clearInterval(pollTimer); if (usageTimer) clearInterval(usageTimer); pollTimer = usageTimer = null; }
 
 function selectSection(key) {
-  section = key; stopTimers(); closeVideo(); closeAudio();
+  section = key; stopTimers(); closeVideo(); closeAudio(); closeDrawer();
   const s = SECTIONS.find(x => x.key === key);
   buildTabs();
   $('search').hidden = !s.root;
@@ -423,6 +483,7 @@ async function render() {
   const st = stack[stack.length - 1];
   $('back').hidden = stack.length <= 1;
   $('sort').hidden = true;
+  $('search').hidden = (st.view === 'detail' || st.view === 'files');   // 作品详情/查看作品页不显示搜索框
   $('content').innerHTML = '';
   $('count').textContent = '';
   try {
@@ -1278,7 +1339,10 @@ function closeAudio() {
   $('audioPlaylist').classList.remove('show'); $('sleepMenu').classList.remove('show');
   audioQueue = []; audioIndex = -1; clearSleep();
 }
-$('aplayer').addEventListener('ended', audioNext);   // 自然结束自动续播下一首
+$('aplayer').addEventListener('ended', () => {
+  if (stopAfterCurrent) { stopAfterCurrent = false; clearSleep(); return; }   // 定时到点：本曲放完即停，不续播
+  audioNext();
+});   // 自然结束自动续播下一首
 
 // 播放列表弹窗
 function toggleAudioPlaylist() {
@@ -1300,20 +1364,37 @@ function renderAudioPlaylist() {
   });
 }
 
-// 睡眠定时（预设档位，到点暂停并保留进度）
-const SLEEP_PRESETS = [['关闭定时', 0], ['15 分钟', 15], ['30 分钟', 30], ['45 分钟', 45], ['60 分钟', 60], ['90 分钟', 90]];
-let sleepTimer = null, sleepUntil = 0;
+// 睡眠定时（到点后不打断当前曲：本曲放完即停，不再续播下一条）
+const SLEEP_PRESETS = [['15 分钟', 15], ['30 分钟', 30], ['45 分钟', 45], ['60 分钟', 60], ['90 分钟', 90]];
+let sleepTimer = null, sleepUntil = 0, stopAfterCurrent = false;
 function toggleSleepMenu() {
   const m = $('sleepMenu');
   $('audioPlaylist').classList.remove('show');
   if (m.classList.contains('show')) { m.classList.remove('show'); return; }
   m.innerHTML = '';
-  SLEEP_PRESETS.forEach(([label, mins]) => {
-    const r = el('div', 'aprow'); r.appendChild(el('span', 'apt', label));
-    r.onclick = () => { m.classList.remove('show'); setSleep(mins); };
-    m.appendChild(r);
-  });
+  // 手动输入分钟数
+  const ic = el('div', 'sleep-input');
+  const inp = el('input'); inp.type = 'number'; inp.min = '1'; inp.placeholder = '自定义分钟';
+  inp.onkeydown = e => { if (e.key === 'Enter') confirmManual(); };
+  const ok = el('button', null, '确定'); ok.onclick = confirmManual;
+  function confirmManual() {
+    const v = parseInt(inp.value, 10);
+    if (v > 0) { m.classList.remove('show'); setSleep(v); }
+  }
+  ic.appendChild(inp); ic.appendChild(ok); m.appendChild(ic);
+  // 关闭定时
+  addSleepRow(m, '关闭定时', () => clearSleep());
+  // 播放完当前（本曲放完即停）
+  addSleepRow(m, '播放完当前', () => stopAtCurrentEnd());
+  // 预设档位
+  SLEEP_PRESETS.forEach(([label, mins]) => addSleepRow(m, label, () => setSleep(mins)));
   m.classList.add('show');
+  inp.focus();
+}
+function addSleepRow(m, label, fn) {
+  const r = el('div', 'aprow'); r.appendChild(el('span', 'apt', label));
+  r.onclick = () => { m.classList.remove('show'); fn(); };
+  m.appendChild(r);
 }
 function setSleep(mins) {
   clearSleep();
@@ -1323,8 +1404,17 @@ function setSleep(mins) {
   updateSleepBtn();
 }
 function tickSleep() {
-  if (sleepUntil - Date.now() <= 0) { clearSleep(); $('aplayer').pause(); return; }   // 到点暂停
+  if (sleepUntil - Date.now() <= 0) {        // 到点：不打断当前曲，待其播完即停
+    if (sleepTimer) clearInterval(sleepTimer);
+    sleepTimer = null; sleepUntil = 0;
+    stopAtCurrentEnd();
+    return;
+  }
   updateSleepBtn();
+}
+function stopAtCurrentEnd() {
+  stopAfterCurrent = true;
+  const b = $('asleepBtn'); b.textContent = '⏹'; b.title = '本曲放完即停'; b.classList.add('on');
 }
 function updateSleepBtn() {
   const remain = Math.max(0, sleepUntil - Date.now());
@@ -1333,8 +1423,8 @@ function updateSleepBtn() {
 }
 function clearSleep() {
   if (sleepTimer) clearInterval(sleepTimer);
-  sleepTimer = null; sleepUntil = 0;
-  const b = $('asleepBtn'); b.textContent = '⏱'; b.classList.remove('on');
+  sleepTimer = null; sleepUntil = 0; stopAfterCurrent = false;
+  const b = $('asleepBtn'); b.textContent = '⏱'; b.title = '睡眠定时'; b.classList.remove('on');
 }
 
 // ---------- 灯箱 ----------
@@ -1377,6 +1467,7 @@ $('search').addEventListener('input', () => {
 
 // ---------- 启动 ----------
 async function boot() {
+  applyLayout();
   buildTabs();
   try { const s = await fetch('/api/state').then(r => r.json()); if (s.needLogin) { showLogin(true); return; } } catch (e) {}
   selectSection('medialib');

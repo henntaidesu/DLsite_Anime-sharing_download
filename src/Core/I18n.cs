@@ -103,6 +103,8 @@ public static class I18n
         },
         ["查询"] = new() { ["zh_TW"] = "查詢", ["ja"] = "検索", ["en"] = "Search" },
         ["← 返回结果"] = new() { ["zh_TW"] = "← 返回結果", ["ja"] = "← 結果に戻る", ["en"] = "← Back to results" },
+        ["← 返回作品列表"] = new() { ["zh_TW"] = "← 返回作品列表", ["ja"] = "← 作品一覧に戻る", ["en"] = "← Back to works" },
+        ["未找到匹配的作品"] = new() { ["zh_TW"] = "未找到相符的作品", ["ja"] = "一致する作品が見つかりません", ["en"] = "No matching works found" },
         ["← 下载列表"] = new() { ["zh_TW"] = "← 下載列表", ["ja"] = "← ダウンロード一覧", ["en"] = "← Downloads" },
         ["选择下载位置"] = new() { ["zh_TW"] = "選擇下載位置", ["ja"] = "ダウンロード先を選択", ["en"] = "Choose download location" },
         ["选择下载到哪个媒体库"] = new()
@@ -122,6 +124,7 @@ public static class I18n
             ["en"] = "Checking… {checked}/{total}"
         },
         ["有效"] = new() { ["zh_TW"] = "有效", ["ja"] = "有効", ["en"] = "Valid" },
+        ["已暂停校验"] = new() { ["zh_TW"] = "已暫停校驗", ["ja"] = "検証を一時停止", ["en"] = "Check paused" },
         ["失效"] = new() { ["zh_TW"] = "失效", ["ja"] = "無効", ["en"] = "Invalid" },
         ["部分有效 {valid}/{total}"] = new()
         {
@@ -165,6 +168,7 @@ public static class I18n
         ["下载中"] = new() { ["zh_TW"] = "下載中", ["ja"] = "ダウンロード中", ["en"] = "Downloading" },
         ["已完成"] = new() { ["zh_TW"] = "已完成", ["ja"] = "完了", ["en"] = "Completed" },
         ["待解压"] = new() { ["zh_TW"] = "待解壓", ["ja"] = "解凍待ち", ["en"] = "Pending extract" },
+        ["等待移动"] = new() { ["zh_TW"] = "等待移動", ["ja"] = "移動待ち", ["en"] = "Pending move" },
         ["解压中 {pct}%"] = new() { ["zh_TW"] = "解壓中 {pct}%", ["ja"] = "解凍中 {pct}%", ["en"] = "Extracting {pct}%" },
         ["移动中 {pct}%"] = new() { ["zh_TW"] = "移動中 {pct}%", ["ja"] = "移動中 {pct}%", ["en"] = "Moving {pct}%" },
         ["解析失败"] = new() { ["zh_TW"] = "解析失敗", ["ja"] = "解析失敗", ["en"] = "Parse failed" },

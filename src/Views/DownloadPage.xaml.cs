@@ -367,6 +367,8 @@ public partial class DownloadPage : UserControl
         {
             if (unzip.State == "pending")
                 return (I18n.Tr("待解压"), "#facc15");
+            if (unzip.State == "movewait")
+                return (I18n.Tr("等待移动"), "#facc15");
             if (unzip.State == "moving")
                 return (I18n.Format(I18n.Tr("移动中 {pct}%"), ("pct", unzip.Pct)), "#a78bfa");
             return (I18n.Format(I18n.Tr("解压中 {pct}%"), ("pct", unzip.Pct)), "#60a5fa");

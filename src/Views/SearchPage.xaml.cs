@@ -193,10 +193,14 @@ public partial class SearchPage : UserControl
     private bool _asmrForCurrent;    // 当前作品是否走 asmr.one：SOU + 优先 asmr + asmr.one 确实有该作品
     private int _searchGeneration;   // 作品（AS 帖子）搜索代际：新一轮作品搜索作废旧缩略图/帖子扫描
     private int _makerGeneration;    // 社团（RG）搜索代际：独立于作品搜索，使社团扫描可在后台持续
+    // 用户点击下载后暂停链接校验：已选定下载源，无需再消耗网络去检测其余网盘/帖子。
+    // 新搜索或用户手动点击帖子扫描时解除。
+    private volatile bool _checksPaused;
 
     // 社团（RG）搜索状态
     private bool _fromMaker;         // 当前 AS 结果是否来自社团作品列表（决定返回去向）
     private string? _makerId;
+    private string? _catalogUrl;     // fsr 搜索/筛选列表页 URL（与社团搜索复用同一作品网格与翻页逻辑）
     private int _makerPage;          // 已加载到第几页（0=未加载）
     private bool _makerHasMore;
     private bool _makerLoading;
@@ -260,6 +264,7 @@ public partial class SearchPage : UserControl
         ResultList.Visibility = Visibility.Visible;
         MakerList.Visibility = Visibility.Collapsed;
         BackButton.Visibility = _fromMaker ? Visibility.Visible : Visibility.Collapsed;
+        BackButton.Content = _catalogUrl != null ? I18n.Tr("← 返回作品列表") : I18n.Tr("← 返回社团作品");
         // 仅当当前作品确认走 asmr.one 时，结果页顶部展示 asmr.one 直链下载横幅
         AsmrBanner.Visibility = _asmrForCurrent ? Visibility.Visible : Visibility.Collapsed;
     }
@@ -280,6 +285,9 @@ public partial class SearchPage : UserControl
         {
             case SearchKind.Maker:
                 await RunMakerSearchAsync(id);
+                break;
+            case SearchKind.Catalog:
+                await RunCatalogSearchAsync(id);
                 break;
             case SearchKind.Work:
                 _fromMaker = false;
@@ -303,6 +311,7 @@ public partial class SearchPage : UserControl
     private async Task RunWorkSearchAsync(string workId)
     {
         _searchGeneration++;   // 作废旧的作品缩略图加载与帖子扫描
+        _checksPaused = false;  // 新搜索：解除上次点击下载造成的校验暂停
         _results.Clear();
         _selectId = workId;
 
@@ -402,12 +411,12 @@ public partial class SearchPage : UserControl
     {
         foreach (var post in _results.ToList())
         {
-            if (generation != _searchGeneration)
+            if (ChecksStopped(generation))
                 return;
             if (post.Scanned || post.Scanning)
                 continue;
             var hasValid = await ScanPostAsync(post, generation);
-            if (generation != _searchGeneration)
+            if (ChecksStopped(generation))
                 return;
             if (hasValid)
                 return;   // 已找到含有效下载网盘的帖子，停止继续测试后续帖子
@@ -432,7 +441,7 @@ public partial class SearchPage : UserControl
         {
             urls = [];
         }
-        if (generation != _searchGeneration)
+        if (ChecksStopped(generation))
         {
             post.Scanning = false;
             return false;
@@ -476,9 +485,20 @@ public partial class SearchPage : UserControl
         var anyValid = false;
         foreach (var card in cards)
         {
-            await CheckHostAsync(card, generation);
-            if (generation != _searchGeneration)
+            if (ChecksStopped(generation))
             {
+                if (_checksPaused)
+                    foreach (var c in cards)
+                        MarkCardPaused(c);   // 把本帖剩余未检测的网盘组标为已暂停
+                post.Scanning = false;
+                return false;
+            }
+            await CheckHostAsync(card, generation);
+            if (ChecksStopped(generation))
+            {
+                if (_checksPaused)
+                    foreach (var c in cards)
+                        MarkCardPaused(c);
                 post.Scanning = false;
                 return false;
             }
@@ -503,6 +523,7 @@ public partial class SearchPage : UserControl
         _makerWorks.Clear();
         _scanQueue.Clear();
         _makerId = makerId;
+        _catalogUrl = null;
         _makerPage = 0;
         _makerHasMore = true;
         _fromMaker = false;
@@ -510,10 +531,27 @@ public partial class SearchPage : UserControl
         await LoadMakerPageAsync();
     }
 
-    /// <summary>加载社团作品的下一页（首页显示遮罩，后续页静默追加）。</summary>
+    /// <summary>按 DLsite 搜索/筛选列表页（fsr URL）拉取作品列表，复用社团作品网格展示供用户点选。</summary>
+    private async Task RunCatalogSearchAsync(string searchUrl)
+    {
+        _searchGeneration++;
+        _makerGeneration++;
+        _results.Clear();
+        _makerWorks.Clear();
+        _scanQueue.Clear();
+        _makerId = null;
+        _catalogUrl = searchUrl;
+        _makerPage = 0;
+        _makerHasMore = true;
+        _fromMaker = false;
+        ShowMakerPage();
+        await LoadMakerPageAsync();
+    }
+
+    /// <summary>加载作品列表的下一页（社团或 fsr 搜索；首页显示遮罩，后续页静默追加）。</summary>
     private async Task LoadMakerPageAsync()
     {
-        if (_makerId == null || _makerLoading || !_makerHasMore)
+        if ((_makerId == null && _catalogUrl == null) || _makerLoading || !_makerHasMore)
             return;
         _makerLoading = true;
         var gen = _makerGeneration;
@@ -523,14 +561,16 @@ public partial class SearchPage : UserControl
         (List<DlMakerWork> Works, bool HasMore) page;
         try
         {
-            page = await DlsiteApi.GetMakerWorksAsync(_makerId, _makerPage + 1);
+            page = _catalogUrl != null
+                ? await DlsiteApi.GetCatalogWorksAsync(_catalogUrl, _makerPage + 1)
+                : await DlsiteApi.GetMakerWorksAsync(_makerId!, _makerPage + 1);
         }
         finally
         {
             if (firstPage)
                 LoadingOverlay.Visibility = Visibility.Collapsed;
         }
-        if (gen != _makerGeneration)   // 期间发起了新社团搜索，丢弃本次结果
+        if (gen != _makerGeneration)   // 期间发起了新搜索，丢弃本次结果
         {
             _makerLoading = false;
             return;
@@ -538,7 +578,9 @@ public partial class SearchPage : UserControl
         if (page.Works.Count == 0)
         {
             if (firstPage)
-                InAppDialog.Info(this, I18n.Tr("未找到该社团的作品"), I18n.Tr("提示"));
+                InAppDialog.Info(this,
+                    _catalogUrl != null ? I18n.Tr("未找到匹配的作品") : I18n.Tr("未找到该社团的作品"),
+                    I18n.Tr("提示"));
             _makerHasMore = false;
             _makerLoading = false;
             return;
@@ -842,6 +884,8 @@ public partial class SearchPage : UserControl
         ResultList.SelectedItem = null;
         if (post.Scanning || post.Scanned)
             return;   // 已扫描/扫描中的帖子不重复处理（下载按钮点击也会落到这里，需放行）
+        // 手动点击未扫描的帖子：用户主动要校验该帖，解除之前点击下载造成的暂停
+        _checksPaused = false;
         await ScanPostAsync(post, _searchGeneration);
     }
 
@@ -858,6 +902,18 @@ public partial class SearchPage : UserControl
         }
     }
 
+    /// <summary>校验应否中止：发起了新搜索（代际变化），或用户点击下载后暂停了链接校验。</summary>
+    private bool ChecksStopped(int generation) => generation != _searchGeneration || _checksPaused;
+
+    /// <summary>把仍处于"检测中"的网盘卡片标为已暂停校验（已判定有效/失效/已加入下载的卡片不动）。</summary>
+    private void MarkCardPaused(HostCardItem card)
+    {
+        if (card.Status is not null)
+            return;
+        card.StatusText = I18n.Tr("已暂停校验");
+        card.StatusBrush = (Brush)FindResource("CaptionBrush");
+    }
+
     /// <summary>检测某网盘组下所有链接是否直连有效（不经过中转站）；全部有效则允许下载。</summary>
     private async Task CheckHostAsync(HostCardItem card, int generation)
     {
@@ -865,12 +921,22 @@ public partial class SearchPage : UserControl
         int valid = 0, checkedCount = 0;
         foreach (var url in card.Urls)
         {
+            if (ChecksStopped(generation))
+            {
+                if (_checksPaused)
+                    MarkCardPaused(card);
+                return;
+            }
             var ok = await LinkChecker.CheckUrlAsync(url, client);
             checkedCount++;
             if (ok)
                 valid++;
-            if (generation != _searchGeneration)
+            if (ChecksStopped(generation))
+            {
+                if (_checksPaused)
+                    MarkCardPaused(card);
                 return;
+            }
             if (checkedCount < card.Urls.Count)
                 card.StatusText = I18n.Format(I18n.Tr("检测中… {checked}/{total}"),
                     ("checked", checkedCount), ("total", card.Urls.Count));
@@ -905,6 +971,9 @@ public partial class SearchPage : UserControl
     {
         if ((sender as FrameworkElement)?.DataContext is not HostCardItem card || !card.CanDownload)
             return;
+
+        // 用户已选定下载源：暂停其余网盘/帖子的链接校验，不再消耗网络去检测
+        _checksPaused = true;
 
         // 有媒体库配置时弹窗选择下载目标
         string? targetFolder = null, targetLib = null;
